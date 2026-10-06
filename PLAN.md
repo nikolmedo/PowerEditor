@@ -75,7 +75,7 @@ FFmpeg final pass: rebuilt voice track + two-pass loudnorm → export
 - **Types:** Pydantic models in `backend/powereditor/models.py` are the source of truth → JSON Schema (`packages/composition/schema/project.schema.json`) → generated TS types (`packages/composition/src/types.generated.ts`). Both generators have a `--check` mode.
 - The Remotion composition lives in a shared package: the UI imports it for the Player and the backend runs `packages/composition/scripts/render.mjs` with the project as input props.
 - **Timeline contract:** a clip lasts `round((outSec - inSec) / speed * fps)` frames, rounding half to even, in both `backend/powereditor/timeline.py` and `packages/composition/src/timeline.ts`.
-- **Audio:** Remotion only changes volume at video-frame boundaries, which clicks at cuts. The backend rebuilds the voice with ffmpeg (`atrim`/`atempo`/`afade`/`concat`, batches of 40 clips through filter script files to stay under the Windows command-line limit) and muxes it with the muted video.
+- **Audio:** Remotion only changes volume at video-frame boundaries, which clicks at cuts. The backend rebuilds the voice with ffmpeg (`atrim`/`atempo`/`afade`/`concat`, batches of 40 clips through filter script files to stay under the Windows command-line limit), mixes the music under it with a sample-accurate ducking envelope, and muxes the result with the muted video.
 - **Shell:** v1 runs as a local web app (FastAPI serves the React build). Phase 10 wraps it in Electron, which already carries the Node runtime Remotion needs.
 
 ### Runtime data and configuration
@@ -339,6 +339,7 @@ interface Project {
   subtitles: { style: SubtitleStyle; words: TimelineWord[] };
   overlays: Overlay[];
   colorGrade: ColorGrade;        // global; clips can override
+  normalizeSources?: boolean;    // match source loudness before mixing
 }
 
 interface Source {
@@ -349,6 +350,7 @@ interface Source {
   displayColor: string;          // timeline color showing which source is used when
   loudnessLufs: number;
   colorStats: { meanLuma: number; meanR: number; meanG: number; meanB: number };
+  colorCorrection?: { redGain: number; greenGain: number; blueGain: number } | null; // auto match
 }
 
 interface Clip {
@@ -371,7 +373,8 @@ interface AudioTrack {
   kind: "voice" | "music" | "sfx";
   sourcePath?: string;           // music/sfx file
   volume: number;
-  duckingEnabled: boolean;       // music ducks under voice (computed from VAD)
+  duckingEnabled: boolean;       // music ducks under speech (timeline words)
+  duckingDb?: number;            // how far it drops, default 12
 }
 
 interface TimelineWord { text: string; startFrame: number; endFrame: number; clipId: string }
@@ -541,6 +544,9 @@ The deterministic heuristic engine stays the default and the always-available fa
 ### Phase 8: Audio and color
 
 - Volume per track/clip, ducking, normalization, color matching, presets and sliders.
+- **Status:** done. Audio is mixed by ffmpeg (Remotion renders muted): the voice graph multiplies each clip's volume by the voice track's volume and, with `normalizeSources`, a per-source gain toward the mean source loudness (±12 dB cap). A music track (uploaded with `POST /api/projects/{id}/music` into `media/`) is looped, trimmed to the exact voice length, faded in and out and ducked under speech by a deterministic envelope (timeline words merged across short gaps, 0.15 s attack, 0.4 s release, `duckingDb` deep), then mixed with `amix=normalize=0`; the final pass normalizes the mix. Color is one `feColorMatrix` per clip in the composition (source correction, then the global grade with the clip override), so Player and render match; the draft builder stores per-source `colorCorrection` gains that move each source's mean RGB to the project mean. Audio and Color panels with undoable edits; the Player plays the music with the same envelope per frame. Phase 7 follow-ups fixed: "keep mine" reports a failed reload, number fields accept partial input and clamp on blur, a manual take switch sets confidence 1.
+- **Measured** (synthetic two-source project, 7.93 s, 660 Hz music tone under 220 Hz voice tones, warm preset): the music sits 12.0 dB lower relative to the voice with ducking than without (11.9–12.5 dB across windows); audio and video both 7.933333 s; −14.0 LUFS. Warm vs natural on the same frames: red +0.022 and blue −0.022 (mean, 0–1) on the darker source, +0.001 and −0.010 on the brighter one, whose saturated pixels clip.
+- **Limits:** the preview changes volume once per video frame (the export is sample-accurate); ducking needs transcribed words (a project without words never ducks); color matching is first order on gamma-encoded means and cannot fix uneven light within a frame; sfx tracks are not mixed yet.
 
 ### Phase 9: Graphics
 
@@ -569,7 +575,7 @@ The deterministic heuristic engine stays the default and the always-available fa
 - [x] OpenAI transcription API file size limit: 25 MB, handled by splitting at silences.
 - [x] Clicks at cuts: fixed by rebuilding audio with ffmpeg.
 - [x] `playbackRate` pitch and per-frame volume in Remotion: moot for export (ffmpeg `atempo` and filters own the audio); still relevant for Player preview.
-- [ ] Per-frame volume API in Remotion for preview ducking.
+- [x] Per-frame volume API in Remotion for preview ducking: `<Audio volume={(frame) => ...}>` drives the preview envelope; exports never depend on it because ffmpeg builds their audio.
 - [ ] TypeSafe SDK environment variable name and `Choice`/`Score` signatures.
 - [ ] Jev quality in Spanish.
 - [ ] CUDA/cuDNN setup for faster-whisper on Windows (no GPU host available).
