@@ -64,7 +64,9 @@ def start_analyze(
     def work(progress: ProgressCallback) -> dict[str, object]:
         return pipelines.analyze(layout, service, meta, progress)
 
-    return _submit(jobs, "analyze", project_id, project_id, work)
+    # Under the project lock, so it cannot start between a save's check and its write.
+    with store.locked(project_id):
+        return _submit(jobs, "analyze", project_id, project_id, work)
 
 
 @router.post("/projects/{project_id}/render", status_code=status.HTTP_202_ACCEPTED)

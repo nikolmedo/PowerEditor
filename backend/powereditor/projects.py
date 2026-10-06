@@ -4,7 +4,8 @@ import hashlib
 import secrets
 import shutil
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -66,12 +67,19 @@ class ProjectStore:
 
     def __init__(self, paths: AppPaths) -> None:
         self.paths = paths
-        self._locks: dict[str, threading.Lock] = {}
+        self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
 
-    def _lock(self, project_id: str) -> threading.Lock:
+    def _lock(self, project_id: str) -> threading.RLock:
         with self._locks_guard:
-            return self._locks.setdefault(project_id, threading.Lock())
+            return self._locks.setdefault(project_id, threading.RLock())
+
+    @contextmanager
+    def locked(self, project_id: str) -> Iterator[None]:
+        """Hold the project's write lock so a check and the action it allows are atomic,
+        for example "no analysis is running" and a save. Re-entrant within one thread."""
+        with self._lock(project_id):
+            yield
 
     def layout(self, project_id: str) -> ProjectLayout:
         """The layout of an existing project; unknown or malformed ids are not found."""

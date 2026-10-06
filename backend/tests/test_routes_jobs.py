@@ -201,3 +201,53 @@ def test_events_of_an_unknown_job_close_with_4404(tmp_path: Path) -> None:
         socket.receive_json()
 
     assert closed.value.code == 4404
+
+
+def test_analyze_start_waits_for_a_save_in_progress(tmp_path: Path) -> None:
+    """A save checks "not analyzing" and writes under the project lock; an analyze that
+    starts meanwhile must wait for it instead of slipping between the check and the write."""
+    data = tmp_path / "data"
+    pipelines = GatedPipelines()
+    pipelines.release.set()
+    layout = stored_project(data)
+    with make_client(data, pipelines=pipelines) as client:
+        store = client.app.state.project_store  # type: ignore[attr-defined]
+        responses: list[int] = []
+        with store.locked(layout.project_id):
+            starter = threading.Thread(
+                target=lambda: responses.append(
+                    client.post(f"/api/projects/{layout.project_id}/analyze").status_code
+                )
+            )
+            starter.start()
+            starter.join(0.5)
+            assert responses == []
+            assert not pipelines.started.is_set()
+        starter.join(TIMEOUT)
+
+    assert responses == [202]
+
+
+def test_project_list_reports_the_active_job_kind_and_last_error(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    failing = GatedPipelines(error=RenderTimeoutError("render timed out"))
+    failing.release.set()
+    layout = stored_project(data)
+    with make_client(data, pipelines=failing) as client:
+        job = client.post(f"/api/projects/{layout.project_id}/render").json()
+        wait_for_job(client, job["id"])
+        failed = client.get("/api/projects").json()[0]
+
+    gated = GatedPipelines()
+    with make_client(data, pipelines=gated) as client:
+        job = client.post(f"/api/projects/{layout.project_id}/analyze").json()
+        assert gated.started.wait(TIMEOUT)
+        running = client.get("/api/projects").json()[0]
+        gated.release.set()
+        wait_for_job(client, job["id"])
+        finished = client.get("/api/projects").json()[0]
+
+    assert failed["activeJobKind"] is None
+    assert failed["lastError"] == {"code": "render_timeout", "message": "render timed out"}
+    assert (running["activeJobId"], running["activeJobKind"]) == (job["id"], "analyze")
+    assert finished["lastError"] is None

@@ -8,6 +8,7 @@ from pydantic import Field
 
 from powereditor.api.services import JobsDep, StoreDep, http_error, project_layout
 from powereditor.export.subtitles import edit_subtitle_text, rebuild_subtitles
+from powereditor.jobs import JobError, JobKind
 from powereditor.models import CamelModel, Project, ProjectPreset
 from powereditor.projects import (
     ProjectMeta,
@@ -37,6 +38,9 @@ class CreatedProject(CamelModel):
 class ProjectListItem(ProjectSummary):
     thumbnail_url: str | None
     active_job_id: str | None
+    active_job_kind: JobKind | None
+    last_error: JobError | None
+    """The error of the project's most recent job, if it failed (since the server started)."""
 
 
 class SubtitleTextEdit(CamelModel):
@@ -137,6 +141,7 @@ def list_projects(store: StoreDep, jobs: JobsDep) -> list[ProjectListItem]:
     items = []
     for summary in store.list():
         active = jobs.active_job(summary.id)
+        latest = jobs.latest_job(summary.id)
         items.append(
             ProjectListItem(
                 **summary.model_dump(),
@@ -144,6 +149,8 @@ def list_projects(store: StoreDep, jobs: JobsDep) -> list[ProjectListItem]:
                 if summary.proxy_file
                 else None,
                 active_job_id=active.id if active else None,
+                active_job_kind=active.kind if active else None,
+                last_error=latest.error if latest and latest.status == "failed" else None,
             )
         )
     return items
@@ -174,8 +181,9 @@ def save_project(
     _read(store, project_id)
     if if_match is None:
         raise http_error(428, ValueError("send the project's ETag in If-Match"), "etag_required")
-    _ensure_not_analyzing(jobs, project_id)
-    etag = _save(store, project_id, project, if_match)
+    with store.locked(project_id):
+        _ensure_not_analyzing(jobs, project_id)
+        etag = _save(store, project_id, project, if_match)
     return _project_response(response, project, etag)
 
 
@@ -193,10 +201,12 @@ def rebuild_project_subtitles(
     project_id: str, store: StoreDep, jobs: JobsDep, response: Response
 ) -> Project:
     """Recompute the timeline words from the clips, as after any clip edit."""
-    project, etag = _read(store, project_id)
-    _ensure_not_analyzing(jobs, project_id)
-    rebuilt = rebuild_subtitles(project)
-    return _project_response(response, rebuilt, _save(store, project_id, rebuilt, etag))
+    with store.locked(project_id):
+        project, etag = _read(store, project_id)
+        _ensure_not_analyzing(jobs, project_id)
+        rebuilt = rebuild_subtitles(project)
+        saved = _save(store, project_id, rebuilt, etag)
+    return _project_response(response, rebuilt, saved)
 
 
 @router.put("/projects/{project_id}/subtitles/text")
@@ -204,13 +214,15 @@ def edit_project_subtitle_text(
     project_id: str, body: SubtitleTextEdit, store: StoreDep, jobs: JobsDep, response: Response
 ) -> Project:
     """Replace the text of `subtitles.words[fromIndex:toIndex]`, keeping the timing."""
-    project, etag = _read(store, project_id)
-    _ensure_not_analyzing(jobs, project_id)
-    line = project.subtitles.words[body.from_index : body.to_index]
-    try:
-        if not line:
-            raise ValueError("the word range is empty")
-        edited = edit_subtitle_text(project, line, body.text)
-    except ValueError as exc:
-        raise http_error(422, exc, code="invalid_subtitle_edit") from exc
-    return _project_response(response, edited, _save(store, project_id, edited, etag))
+    with store.locked(project_id):
+        project, etag = _read(store, project_id)
+        _ensure_not_analyzing(jobs, project_id)
+        line = project.subtitles.words[body.from_index : body.to_index]
+        try:
+            if not line:
+                raise ValueError("the word range is empty")
+            edited = edit_subtitle_text(project, line, body.text)
+        except ValueError as exc:
+            raise http_error(422, exc, code="invalid_subtitle_edit") from exc
+        saved = _save(store, project_id, edited, etag)
+    return _project_response(response, edited, saved)

@@ -8,6 +8,7 @@ or Remotion runs stop at once.
 
 import logging
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -25,6 +26,7 @@ JobKind = Literal["analyze", "render", "export_subtitles", "whisper_model"]
 JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 TERMINAL_STATUSES: frozenset[JobStatus] = frozenset({"succeeded", "failed", "cancelled"})
 MIN_FRACTION_STEP = 0.01
+SHUTDOWN_TIMEOUT_S = 10.0
 
 type JobResult = dict[str, Any] | None
 type JobWork = Callable[[ProgressCallback], JobResult]
@@ -89,6 +91,7 @@ class _Job:
     work: JobWork
     scope: ProcessScope = field(default_factory=ProcessScope)
     listeners: list[JobListener] = field(default_factory=list)
+    done: threading.Event = field(default_factory=threading.Event)
 
     def event(self) -> JobEvent:
         info = self.info
@@ -174,12 +177,26 @@ class JobManager:
 
         return snapshot, unsubscribe
 
-    def shutdown(self) -> None:
+    def latest_job(self, key: str) -> JobInfo | None:
+        """The most recently submitted job for `key`, active or finished."""
+        with self._lock:
+            for job in reversed(self._jobs.values()):  # insertion order is submission order
+                if job.key == key:
+                    return job.info.model_copy()
+            return None
+
+    def shutdown(self, timeout: float = SHUTDOWN_TIMEOUT_S) -> None:
+        """Cancel running jobs and wait up to `timeout` seconds for them to stop. A job that
+        never reports progress cannot be interrupted; it is logged and left behind."""
         with self._lock:
             running = [job for job in self._jobs.values() if job.info.status == "running"]
         for job in running:
             job.scope.cancel()
-        self._executor.shutdown(wait=True, cancel_futures=True)
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        deadline = time.monotonic() + timeout
+        for job in running:
+            if not job.done.wait(max(0.0, deadline - time.monotonic())):
+                logger.warning("job %s did not stop within %.1f s", job.info.id, timeout)
 
     def _publish(self, job: _Job) -> None:
         """Send the job's state to its listeners; call with `self._lock` held."""
@@ -198,6 +215,7 @@ class JobManager:
         if self._active.get(job.key) == job.info.id:
             del self._active[job.key]
         self._publish(job)
+        job.done.set()
 
     def _progress(self, job: _Job) -> ProgressCallback:
         def report(stage: str, fraction: float, message: str) -> None:

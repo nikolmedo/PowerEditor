@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -166,3 +167,22 @@ def test_cancel_a_queued_job() -> None:
 def test_unknown_job(manager: JobManager) -> None:
     with pytest.raises(JobNotFoundError):
         manager.get("missing")
+
+
+def test_shutdown_does_not_wait_forever_for_a_job_that_ignores_cancel() -> None:
+    manager = JobManager()
+    release = threading.Event()
+    started = threading.Event()
+
+    def stubborn(_: ProgressCallback) -> None:
+        started.set()
+        release.wait(TIMEOUT)  # never reports progress, so a cancel cannot stop it
+
+    manager.submit("render", "p1", "p1", stubborn)
+    assert started.wait(TIMEOUT)
+    began = time.monotonic()
+    manager.shutdown(timeout=0.2)
+    elapsed = time.monotonic() - began
+    release.set()
+
+    assert elapsed < 2
