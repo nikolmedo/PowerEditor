@@ -17,6 +17,7 @@ import type {
   SettingsResponse,
   SetupStatus,
   SubtitleFormat,
+  UpdateStatus,
   UserSettings,
 } from "./types";
 
@@ -61,6 +62,9 @@ async function saveProject(
 
 export const api = {
   health: () => request<HealthStatus>("GET", "/api/health"),
+  /** `force` asks GitHub now, past the six-hour cache and the `checkForUpdates` setting. */
+  updates: (force = false) =>
+    request<UpdateStatus>("GET", force ? "/api/updates?force=true" : "/api/updates"),
   setup: () => request<SetupStatus>("GET", "/api/setup"),
   downloadWhisperModel: () => request<JobInfo>("POST", "/api/setup/whisper-model"),
   installRuntime: (name: string) =>

@@ -6,5 +6,10 @@
   "error.spawn": "The editing engine could not be started: {message}",
   "error.webMissing": "The web app is not built. Run: corepack pnpm --filter @powereditor/web build",
   "error.logHint": "Details are in the log folder: {path}",
-  "menu.help": "Help"
+  "menu.help": "Help",
+  "error.stopped": "The editing engine stopped while PowerEditor was open (exit code {code}). Restart PowerEditor to keep working.",
+  "action.restart": "Restart",
+  "action.quit": "Quit",
+  "update.installTitle": "The update could not be installed",
+  "update.installFailed": "The installer could not be started: {message}"
 }

@@ -1,3 +1,4 @@
+import tempfile
 import wave
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
@@ -8,8 +9,14 @@ from numpy.typing import NDArray
 
 from powereditor.config import WhisperDevice
 from powereditor.models import TranscriberProvider, Transcript
+from powereditor.pipeline.ffmpeg import run_ffmpeg
 from powereditor.pipeline.vad import read_wav
-from powereditor.transcribe.base import RawWord, audio_duration, filler_prompt, normalize_words
+from powereditor.transcribe.base import (
+    RawWord,
+    TranscriptionError,
+    filler_prompt,
+    normalize_words,
+)
 
 
 class WhisperWordLike(Protocol):
@@ -36,7 +43,7 @@ class WhisperInfoLike(Protocol):
     def language(self) -> str: ...
 
 
-WhisperAudio = str | NDArray[np.float32]
+WhisperAudio = NDArray[np.float32]
 
 
 class WhisperModelLike(Protocol):
@@ -45,20 +52,36 @@ class WhisperModelLike(Protocol):
     ) -> tuple[Iterable[WhisperSegmentLike], WhisperInfoLike]: ...
 
 
-def whisper_audio(path: Path) -> WhisperAudio:
-    """Samples of a 16 kHz PCM WAV (what ingest writes), else the path for faster-whisper.
-
-    Decoding here keeps transcription independent of PyAV: faster-whisper 1.2.1 passes
-    `metadata_errors` to `av.open`, which PyAV 19 no longer accepts.
-    """
+def _is_whisper_wav(path: Path) -> bool:
     try:
         with wave.open(str(path), "rb") as handle:
-            readable = handle.getframerate() == WHISPER_SAMPLE_RATE and handle.getsampwidth() == 2
+            return handle.getframerate() == WHISPER_SAMPLE_RATE and handle.getsampwidth() == 2
     except (wave.Error, EOFError, OSError):
-        return str(path)
-    if not readable:
-        return str(path)
-    samples, _ = read_wav(path)
+        return False
+
+
+def whisper_audio(path: Path, ffmpeg: str | None) -> WhisperAudio:
+    """Samples for faster-whisper, decoded here and never by faster-whisper itself.
+
+    faster-whisper decodes paths with PyAV, which the frozen build leaves out (its wheel
+    carries GPL x264/x265 libraries). A 16 kHz PCM WAV (what ingest writes) is read
+    directly; anything else is converted to one with ffmpeg first.
+    """
+    if _is_whisper_wav(path):
+        samples, _ = read_wav(path)
+        return samples.astype(np.float32)
+    if ffmpeg is None:
+        raise TranscriptionError("missing_ffmpeg", f"ffmpeg is needed to read {path.name}")
+    with tempfile.TemporaryDirectory(prefix="powereditor-whisper-") as folder:
+        wav = Path(folder) / "audio.wav"
+        run_ffmpeg(
+            ffmpeg,
+            [
+                "-i", str(path), "-map", "0:a:0", "-vn",
+                "-ac", "1", "-ar", str(WHISPER_SAMPLE_RATE), "-c:a", "pcm_s16le", str(wav),
+            ],
+        )  # fmt: skip
+        samples, _ = read_wav(wav)
     return samples.astype(np.float32)
 
 
@@ -115,9 +138,11 @@ class LocalWhisperTranscriber:
         models_dir: Path,
         *,
         cuda_available: bool,
+        ffmpeg: str | None = None,
         loader: ModelLoader = load_faster_whisper,
     ) -> None:
         self._model_name = model_name
+        self._ffmpeg = ffmpeg
         self._device, self._compute_type = resolve_device(device, cuda_available)
         self._models_dir = models_dir
         self._loader = loader
@@ -139,8 +164,9 @@ class LocalWhisperTranscriber:
         return self._loaded
 
     def transcribe(self, audio_path: Path, language: str | None) -> Transcript:
+        samples = whisper_audio(audio_path, self._ffmpeg)
         segments, info = self._whisper().transcribe(
-            whisper_audio(audio_path),
+            samples,
             language=language,
             initial_prompt=filler_prompt(language),
             word_timestamps=True,
@@ -153,7 +179,7 @@ class LocalWhisperTranscriber:
         ]
         return Transcript(
             language=language or info.language,
-            words=normalize_words(raw, audio_duration(audio_path)),
+            words=normalize_words(raw, len(samples) / WHISPER_SAMPLE_RATE),
             provider="local",
             model=self._model_name,
         )

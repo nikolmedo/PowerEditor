@@ -1,6 +1,7 @@
 import json
 import shutil
 import subprocess
+import sys
 import wave
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,14 @@ import pytest
 
 from powereditor.paths import AppPaths
 from powereditor.pipeline import ingest as ingest_module
-from powereditor.pipeline.ffmpeg import FfmpegError, MediaTools, parse_progress_seconds
+from powereditor.pipeline.ffmpeg import (
+    FfmpegError,
+    MediaTools,
+    encoder_works,
+    list_encoders,
+    parse_progress_seconds,
+    run_ffmpeg,
+)
 from powereditor.pipeline.ingest import (
     IngestedSource,
     ProbeResult,
@@ -20,6 +28,7 @@ from powereditor.pipeline.ingest import (
     probe_media,
     proxy_args,
     select_video_encoder,
+    software_encoder,
     source_id_for,
     target_fps,
 )
@@ -35,6 +44,7 @@ LGPL_LISTING = (
     " V....D libopenh264  OpenH264 H.264\n V....D h264_mf  H264 via MediaFoundation\n"
     " V....D h264_nvenc  NVIDIA NVENC H.264 encoder\n"
 )
+OPENH264_ONLY_LISTING = " V....D libopenh264  OpenH264 H.264\n"
 NVENC_LISTING = " V....D libx264  libx264 H.264\n V....D h264_nvenc  NVIDIA NVENC H.264 encoder\n"
 
 
@@ -60,12 +70,25 @@ def _probe(**overrides: Any) -> ProbeResult:
         (NVENC_LISTING, False, "libx264"),
         (NVENC_LISTING, True, "h264_nvenc"),
         (" V....D libx264  libx264 H.264\n", True, "libx264"),
-        (LGPL_LISTING, False, "libopenh264"),
+        (LGPL_LISTING, False, "h264_mf"),
         (LGPL_LISTING, True, "h264_nvenc"),
+        (OPENH264_ONLY_LISTING, False, "libopenh264"),
+        (" V....D libx264  libx264 H.264\n" + LGPL_LISTING, False, "libx264"),
     ],
 )
 def test_select_video_encoder(listing: str, cuda: bool, expected: str) -> None:
     assert select_video_encoder(listing, cuda) == expected
+
+
+def test_media_foundation_that_cannot_encode_falls_back_to_openh264() -> None:
+    probed: list[str] = []
+
+    def works(encoder: str) -> bool:
+        probed.append(encoder)
+        return encoder != "h264_mf"
+
+    assert software_encoder(LGPL_LISTING, works) == "libopenh264"
+    assert probed == ["h264_mf"]
 
 
 @pytest.mark.parametrize(
@@ -234,9 +257,11 @@ class FakeFfmpeg:
 
     def __init__(self, fail_on: str | None = None) -> None:
         self.outputs: list[Path] = []
+        self.calls: list[list[str]] = []
         self.fail_on = fail_on
 
     def __call__(self, ffmpeg: str, args: list[str], *rest: object) -> None:
+        self.calls.append(list(args))
         output = Path(args[-1])
         self.outputs.append(output)
         if output.suffix == ".wav":
@@ -256,6 +281,7 @@ def fake_media(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any
     state: dict[str, Any] = {"listing": " V....D libx264  libx264 H.264\n", "ffmpeg": FakeFfmpeg()}
     monkeypatch.setattr(ingest_module, "probe_media", lambda ffprobe, path: _probe())
     monkeypatch.setattr(ingest_module, "list_encoders", lambda ffmpeg: state["listing"])
+    monkeypatch.setattr(ingest_module, "encoder_works", lambda ffmpeg, encoder: True)
     monkeypatch.setattr(ingest_module, "run_ffmpeg", lambda *args: state["ffmpeg"](*args))
     source = tmp_path / "clip.mp4"
     source.write_bytes(b"source")
@@ -325,3 +351,69 @@ def test_an_lgpl_ffmpeg_encodes_with_openh264_at_a_fixed_bitrate(tmp_path: Path)
     assert proxy[proxy.index("-c:v") + 1 :][:3] == ["libopenh264", "-b:v", "2M"]
     assert "-crf" not in mezzanine and "-crf" not in proxy
     assert default_proxy[default_proxy.index("-c:v") + 1] == "libx264"
+
+
+def test_media_foundation_encodes_at_a_fixed_bitrate_with_the_high_profile(tmp_path: Path) -> None:
+    source, out = tmp_path / "in.mov", tmp_path / "out.mp4"
+
+    mezzanine = mezzanine_args(source, out, 30, "h264_mf")
+    proxy = proxy_args(source, out, 30, encoder="h264_mf")
+
+    codec = ["h264_mf", "-rate_control", "u_vbr", "-b:v", "20M", "-profile:v", "100"]
+    assert mezzanine[mezzanine.index("-c:v") + 1 :][:7] == codec
+    assert proxy[proxy.index("-c:v") + 1 :][:5] == [
+        "h264_mf",
+        "-rate_control",
+        "u_vbr",
+        "-b:v",
+        "2M",
+    ]
+    assert "-crf" not in mezzanine and "-crf" not in proxy
+
+
+def test_ingest_with_an_lgpl_ffmpeg_uses_media_foundation_for_both_files(
+    fake_media: dict[str, Any],
+) -> None:
+    fake_media["listing"] = LGPL_LISTING
+
+    entry = _ingest(fake_media)
+
+    assert entry.video_encoder == "h264_mf"
+    codecs = [args[args.index("-c:v") + 1] for args in fake_media["ffmpeg"].calls if "-c:v" in args]
+    assert codecs == ["h264_mf", "h264_mf"]
+
+
+def _media_foundation_listed() -> bool:
+    return FFMPEG is not None and "h264_mf" in list_encoders(FFMPEG)
+
+
+@pytest.mark.ffmpeg
+@needs_ffmpeg
+def test_encoder_probe_rejects_an_encoder_ffmpeg_does_not_have() -> None:
+    assert FFMPEG is not None
+    assert encoder_works(FFMPEG, "powereditor_no_such_encoder") is False
+
+
+@pytest.mark.ffmpeg
+@needs_ffmpeg
+@pytest.mark.skipif(sys.platform != "win32", reason="Media Foundation is Windows only")
+def test_media_foundation_writes_high_profile_mezzanine_and_proxy(
+    clips: dict[str, Path], tmp_path: Path
+) -> None:
+    if not _media_foundation_listed():
+        pytest.skip("this ffmpeg has no h264_mf")
+    assert FFMPEG is not None
+    assert encoder_works(FFMPEG, "h264_mf") is True
+    mezzanine, proxy = tmp_path / "m.mp4", tmp_path / "p.mp4"
+
+    run_ffmpeg(FFMPEG, mezzanine_args(clips["accented"], mezzanine, 24, "h264_mf"))
+    run_ffmpeg(FFMPEG, proxy_args(clips["accented"], proxy, 24, "h264_mf"))
+
+    for path, height in ((mezzanine, 240), (proxy, 540)):
+        stream = _stream(path)
+        assert (stream["codec_name"], stream["profile"], stream["height"]) == (
+            "h264",
+            "High",
+            height,
+        )
+        assert stream["format_duration"] == pytest.approx(2.0, abs=0.1)

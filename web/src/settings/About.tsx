@@ -1,11 +1,13 @@
-import { useCallback, useId } from "react";
+import { useCallback, useId, useState } from "react";
 import { api } from "../api/endpoints";
-import { useT } from "../i18n";
+import type { UpdateStatus } from "../api/types";
+import { useT, type Translate } from "../i18n";
+import { useAppStore } from "../store/app";
 import { AUTHOR_URL, LICENSE_URL, NOTICES_URL } from "../ui/projectLinks";
 import { useResource } from "../ui/useResource";
 
-/** App name, engine version, copyright and license. The version comes from the engine, so
- * it is left out while the engine cannot be reached. */
+/** App name, engine version, update status, copyright and license. The version comes from
+ * the engine, so it is left out while the engine cannot be reached. */
 export function About() {
   const t = useT();
   const headingId = useId();
@@ -19,6 +21,7 @@ export function About() {
           <span className="meta"> {t("about.version", { version: health.data.version })}</span>
         )}
       </p>
+      <UpdateCheck />
       <p>
         <a href={AUTHOR_URL} target="_blank" rel="noreferrer">
           {t("about.copyright")}
@@ -34,5 +37,53 @@ export function About() {
         </a>
       </p>
     </section>
+  );
+}
+
+function updateSummary(update: UpdateStatus, t: Translate): string {
+  if (update.error) return t("error.update_check_failed");
+  if (update.updateAvailable && update.latest)
+    return t("updates.available", { version: update.latest });
+  if (update.latest) return t("about.upToDate");
+  if (update.checkedAt) return t("about.noRelease");
+  return t("about.updatesOff");
+}
+
+/** The last answer of the update check, with "Check now" (which asks GitHub even when
+ * automatic checks are off). */
+function UpdateCheck() {
+  const t = useT();
+  const language = useAppStore((state) => state.language);
+  const [checks, setChecks] = useState(0);
+  const updates = useResource(useCallback(() => api.updates(checks > 0), [checks]));
+  const update = updates.data;
+  return (
+    <div className="row" role="group" aria-label={t("about.updates")}>
+      <span role="status">
+        {updates.loading
+          ? t("about.checking")
+          : update
+            ? updateSummary(update, t)
+            : t("error.update_check_failed")}
+      </span>
+      {update?.updateAvailable && update.releaseUrl && (
+        <a href={update.releaseUrl} target="_blank" rel="noreferrer">
+          {t("updates.whatsNew")}
+        </a>
+      )}
+      {update?.checkedAt && (
+        <span className="meta">
+          {t("about.lastCheck", { time: new Date(update.checkedAt).toLocaleString(language) })}
+        </span>
+      )}
+      <button
+        type="button"
+        className="quiet"
+        disabled={updates.loading}
+        onClick={() => setChecks((count) => count + 1)}
+      >
+        {t("about.checkNow")}
+      </button>
+    </div>
   );
 }

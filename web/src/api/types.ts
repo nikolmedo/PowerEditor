@@ -6,6 +6,21 @@ export interface HealthStatus {
   version: string;
 }
 
+/** `GET /api/updates`: the newest published release against the running version. */
+export interface UpdateStatus {
+  current: string;
+  latest: string | null;
+  updateAvailable: boolean;
+  releaseUrl: string | null;
+  installerUrl: string | null;
+  sha256Url: string | null;
+  notes: string | null;
+  checkedAt: string | null;
+  /** False when the `checkForUpdates` setting is off. */
+  enabled: boolean;
+  error: "update_check_failed" | null;
+}
+
 export type Transport = "api" | "local_cli";
 export type Transcriber = "local" | "openai";
 export type WhisperDevice = "auto" | "cuda" | "cpu";
@@ -44,6 +59,8 @@ export interface UserSettings {
   ffprobePath: string | null;
   nodePath: string | null;
   uiLanguage: string;
+  /** Ask GitHub Releases for a newer version (at most every six hours). */
+  checkForUpdates: boolean;
 }
 
 export interface SecretStatus {

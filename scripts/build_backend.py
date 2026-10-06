@@ -6,7 +6,8 @@ Usage (from the repo root, any Python 3.12+; it only drives other tools):
 
 Steps: build the web app, bundle the Remotion composition ahead of time, stage the
 standalone renderer (`build/composition`), run PyInstaller through `uv run --with pyinstaller`
-(so PyInstaller never becomes a project dependency), then copy the renderer into the build.
+(so PyInstaller never becomes a project dependency), check that no GPL library or PyAV
+reached the build, then copy the renderer into the build.
 `--smoke` starts the built sidecar on a free port and checks `/api/health` and `/`.
 """
 
@@ -32,6 +33,13 @@ PYINSTALLER = "pyinstaller==6.22.3"
 READY_PREFIX = "POWEREDITOR_READY"
 TOKEN_HEADER = "X-PowerEditor-Token"
 SMOKE_TIMEOUT_S = 120
+# GPL-licensed libraries that must not ship inside the engine (PyAV's wheel carries x264 and
+# x265; postproc only exists in GPL FFmpeg builds), and PyAV itself, which the spec excludes.
+GPL_FILE_PREFIXES = ("libx264", "libx265", "postproc")
+PYAV_FOLDERS = ("av", "av.libs")
+# Remotion's renderer: a separate program whose GPL FFmpeg is noticed with a source offer
+# in THIRD_PARTY_NOTICES.md.
+NOTICED_GPL_FOLDER = "composition"
 
 
 def tool(name: str) -> str:
@@ -50,6 +58,18 @@ def folder_size(folder: Path) -> int:
     return sum(p.stat().st_size for p in folder.rglob("*") if p.is_file())
 
 
+def gpl_findings(internal: Path) -> list[str]:
+    """Paths under `internal` (the build's `_internal`) that must not ship, sorted."""
+    found = [name for name in PYAV_FOLDERS if (internal / name).exists()]
+    for path in internal.rglob("*"):
+        relative = path.relative_to(internal)
+        if relative.parts[0] == NOTICED_GPL_FOLDER:
+            continue
+        if path.is_file() and path.name.lower().startswith(GPL_FILE_PREFIXES):
+            found.append(relative.as_posix())
+    return sorted(found)
+
+
 def build(skip_web: bool, skip_bundle: bool) -> Path:
     node, corepack, uv = tool("node"), tool("corepack"), tool("uv")
     if not skip_web:
@@ -65,6 +85,10 @@ def build(skip_web: bool, skip_bundle: bool) -> Path:
     ]  # fmt: skip
     run(pyinstaller, BACKEND, env)
     app = DIST / "powereditor"
+    findings = gpl_findings(app / "_internal")
+    if findings:
+        sys.exit(f"the build contains GPL libraries or PyAV: {', '.join(findings)}")
+    print("licensing check: no GPL library or PyAV in the engine")
     # Copied as is (see powereditor.spec): Resources.composition_dir() reads it from here.
     target = app / "_internal" / "composition"
     shutil.rmtree(target, ignore_errors=True)

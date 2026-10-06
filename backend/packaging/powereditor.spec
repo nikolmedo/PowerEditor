@@ -36,6 +36,10 @@ hiddenimports = [
 ]
 # Optional extras stay out even when installed in the build environment.
 excludes = ["cv2", "sentence_transformers", "torch", "opentimelineio", "tkinter", "pytest"]
+# PyAV stays out too: its wheel bundles GPL x264/x265 DLLs, and PowerEditor never decodes
+# through it. The runtime hook lets faster-whisper import without it (powereditor/pyav_stub.py).
+excludes += ["av"]
+hiddenimports += ["powereditor.pyav_stub"]
 
 a = Analysis(  # noqa: F821
     [str(SPEC_DIR / "entry.py")],
@@ -43,6 +47,7 @@ a = Analysis(  # noqa: F821
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=excludes,
+    runtime_hooks=[str(SPEC_DIR / "rthook_pyav.py")],
     noarchive=False,
 )
 pyz = PYZ(a.pure)  # noqa: F821

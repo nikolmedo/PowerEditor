@@ -1,0 +1,115 @@
+name: Release
+
+# A version tag builds the Windows installer and creates a DRAFT GitHub Release with it.
+# A maintainer reviews the draft and publishes it by hand; the app's update check only
+# sees published releases (`releases/latest` never returns drafts).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, e.g. v0.2.0"
+        required: true
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build installer and draft release
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0 # release notes need the previous tag
+
+      # The scripts below need Python 3.10+; do not depend on the image's default.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tag matches VERSION
+        run: python scripts/version.py check --tag "$TAG"
+
+      - name: Install ffmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Locate the pnpm store
+        id: pnpm-store
+        run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          (cd backend && uv sync --locked)
+          corepack pnpm install --frozen-lockfile
+
+      # CI runs on pull requests and main only, so the release job runs the suites itself.
+      - name: Backend tests
+        working-directory: backend
+        run: uv run pytest -q -m "not slow"
+
+      - name: Composition, web and desktop tests
+        run: corepack pnpm -r test
+
+      - name: Build the installer
+        run: python scripts/build_installer.py --smoke
+
+      - name: Stage release files
+        run: |
+          version="${TAG#v}"
+          mkdir -p dist/release
+          cp "dist/installer/PowerEditor-Setup-${version}-x64.exe" LICENSE THIRD_PARTY_NOTICES.md dist/release/
+          python scripts/checksums.py --output dist/release/SHA256SUMS.txt dist/release/PowerEditor-Setup-* dist/release/LICENSE dist/release/THIRD_PARTY_NOTICES.md
+          python scripts/release_notes.py --until "$TAG" --version "$version" --output dist/release-notes.md
+
+      # Safe to re-run: a draft left by a failed run gets its files replaced (`--clobber`) and
+      # its notes updated instead of a second release; a published release is never touched.
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="PowerEditor ${TAG#v}"
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != "true" ]; then
+              echo "::error::Release $TAG is already published; refusing to change it."
+              exit 1
+            fi
+            gh release upload "$TAG" dist/release/* --clobber
+            gh release edit "$TAG" --draft --title "$title" --notes-file dist/release-notes.md
+          else
+            gh release create "$TAG" --draft --verify-tag --title "$title" \
+              --notes-file dist/release-notes.md dist/release/*
+          fi

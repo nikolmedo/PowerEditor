@@ -127,3 +127,24 @@ def run_ffmpeg_stderr(ffmpeg: str, args: Sequence[str]) -> str:
 @cache
 def list_encoders(ffmpeg: str) -> str:
     return run_capture([ffmpeg, "-hide_banner", "-encoders"])
+
+
+ENCODER_PROBE_TIMEOUT_S = 30.0
+
+
+@cache
+def encoder_works(ffmpeg: str, encoder: str) -> bool:
+    """Whether `encoder` can encode one frame here: an encoder can be listed and still fail,
+    such as Media Foundation on Windows editions without the media features."""
+    command = [
+        ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+        "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
+        "-frames:v", "1", "-pix_fmt", "yuv420p", "-c:v", encoder, "-f", "null", "-",
+    ]  # fmt: skip
+    try:
+        result = subprocess.run(
+            command, capture_output=True, timeout=ENCODER_PROBE_TIMEOUT_S, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0

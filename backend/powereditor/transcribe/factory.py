@@ -31,4 +31,5 @@ def create_transcriber(
         settings.whisper_device,
         service.paths.models_dir,
         cuda_available=service.cuda_available(),
+        ffmpeg=service.locate_executable("ffmpeg"),
     )

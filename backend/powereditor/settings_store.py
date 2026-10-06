@@ -97,6 +97,8 @@ class UserSettings(CamelModel):
     ffprobe_path: str | None = None
     node_path: str | None = None
     ui_language: str = "es"
+    check_for_updates: bool = True
+    """Ask GitHub Releases for a newer version (at most every six hours)."""
     providers: list[ProviderConfig] = Field(default_factory=list)
     feature_models: dict[FeatureId, ModelRef | None] = Field(default_factory=dict)
     """Unassigned features (missing or None) use the heuristic engine."""

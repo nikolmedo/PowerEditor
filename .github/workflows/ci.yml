@@ -53,6 +53,10 @@ jobs:
       - name: Mypy
         run: uv run mypy powereditor tests
 
+      - name: Versions agree with VERSION
+        working-directory: ${{ github.workspace }}
+        run: uv run --no-project python scripts/version.py check
+
       - name: JSON Schema is up to date
         run: uv run python -m powereditor.schema_gen --check
 

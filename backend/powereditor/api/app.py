@@ -1,7 +1,6 @@
 import os
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from importlib.metadata import version
 from pathlib import Path
 from typing import cast
 
@@ -11,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from powereditor import doctor, settings_store
+from powereditor import app_version, doctor, settings_store
 from powereditor.api.origin_guard import LocalOriginGuard
 from powereditor.api.routes_audio import router as audio_router
 from powereditor.api.routes_jobs import router as jobs_router
@@ -23,6 +22,7 @@ from powereditor.api.routes_providers import router as providers_router
 from powereditor.api.routes_settings import get_service
 from powereditor.api.routes_settings import router as settings_router
 from powereditor.api.routes_setup import router as setup_router
+from powereditor.api.routes_updates import router as updates_router
 from powereditor.api.services import Pipelines, Revealer, default_revealer
 from powereditor.api.session_token import SessionTokenGuard
 from powereditor.jobs import JobManager
@@ -94,6 +94,7 @@ def create_app(
     runtime_downloads: Sequence[RuntimeDownload] | None = None,
     runtime_transport: httpx.BaseTransport | None = None,
     session_token: str | None = None,
+    update_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     if settings_service is None:
         settings_service = SettingsService(
@@ -108,7 +109,7 @@ def create_app(
         yield
         jobs.shutdown()
 
-    app = FastAPI(title="PowerEditor", version=version("powereditor"), lifespan=lifespan)
+    app = FastAPI(title="PowerEditor", version=app_version(), lifespan=lifespan)
     dev = dev_cors if dev_cors is not None else dev_cors_enabled()
     if dev:
         app.add_middleware(
@@ -132,6 +133,7 @@ def create_app(
     app.state.provider_transport = provider_transport
     app.state.runtime_downloads = runtime_downloads
     app.state.runtime_transport = runtime_transport
+    app.state.update_transport = update_transport
     app.state.project_store = ProjectStore(settings_service.paths)
     app.state.jobs = jobs
     app.state.pipelines = pipelines or Pipelines()
@@ -140,7 +142,7 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": version("powereditor")}
+        return {"status": "ok", "version": app_version()}
 
     @app.get("/api/doctor")
     def run_doctor(request: Request) -> doctor.DoctorReport:
@@ -158,5 +160,6 @@ def create_app(
     app.include_router(audio_router)
     app.include_router(overlays_router)
     app.include_router(setup_router)
+    app.include_router(updates_router)
     _mount_web_app(app, web_dir or resolve_web_dir())
     return app

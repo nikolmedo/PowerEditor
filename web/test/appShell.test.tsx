@@ -4,7 +4,12 @@ import { translate, type MessageKey } from "../src/i18n";
 import { AppShell } from "../src/shell/AppShell";
 import { useAppStore } from "../src/store/app";
 
-vi.mock("../src/api/endpoints", () => ({ api: { updateSettings: vi.fn() } }));
+vi.mock("../src/api/endpoints", () => ({
+  api: {
+    updateSettings: vi.fn(),
+    updates: vi.fn(() => Promise.resolve({ updateAvailable: false, enabled: true })),
+  },
+}));
 
 const t = (key: MessageKey) => translate("es", key);
 
