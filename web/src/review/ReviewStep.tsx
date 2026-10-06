@@ -1,69 +1,96 @@
-import { videoMetadata, type Clip, type Project } from "@powereditor/composition";
+import { videoMetadata, type Project } from "@powereditor/composition";
 import { Player, type CallbackListener, type PlayerRef } from "@remotion/player";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "zustand";
 import { ApiError } from "../api/client";
 import { api } from "../api/endpoints";
-import { useT } from "../i18n";
+import { setRemoved, swapTake, trimClip } from "../edit/operations";
+import { useT, type MessageKey } from "../i18n";
 import { stepPath } from "../routes";
 import { Link } from "../shell/AppShell";
 import { useProjectStore } from "../store/project";
-import { ErrorNotice } from "../ui/primitives";
+import { ErrorNotice, Status } from "../ui/primitives";
 import { useResource } from "../ui/useResource";
+import { ClipPanel } from "./ClipPanel";
+import { editorCommand, ownsKeys } from "./editorKeys";
 import { PreviewVideo, projectMediaBase } from "./PreviewVideo";
+import { SubtitlesPanel } from "./SubtitlesPanel";
 import { Timeline } from "./Timeline";
-import { buildTimeline, fileLabel, type TimelineClip } from "./timelineModel";
+import { buildTimeline, neighbourClip, type TimelineClip } from "./timelineModel";
+import { TransitionsPanel } from "./TransitionsPanel";
+import { useAutosave, type AutosaveState } from "./useAutosave";
 
 /** Defaults of the user settings, used until (or if) the settings cannot be read. */
 const PREVIEW_DEFAULTS = { audioCrossfadeMs: 15, punchInScale: 1.1, modelMinConfidence: 0.8 };
+const PANELS = ["clip", "transitions", "subtitles"] as const;
+type PanelName = (typeof PANELS)[number];
 
-function ClipPanel({ project, clip }: { project: Project; clip: Clip | null }) {
+const SAVE_LABELS: Record<AutosaveState["status"], [MessageKey, boolean | null]> = {
+  saved: ["save.saved", true],
+  pending: ["save.pending", null],
+  saving: ["save.saving", null],
+  conflict: ["save.conflict", false],
+  error: ["save.error", false],
+};
+
+function Toolbar({ save }: { save: AutosaveState }) {
   const t = useT();
-  if (!clip) {
+  const { undo, redo } = useProjectStore();
+  const canUndo = useStore(useProjectStore.temporal, (state) => state.pastStates.length > 0);
+  const canRedo = useStore(useProjectStore.temporal, (state) => state.futureStates.length > 0);
+  const [label, ok] = SAVE_LABELS[save.status];
+  return (
+    <div className="row toolbar">
+      <button type="button" className="quiet" disabled={!canUndo} onClick={undo}>
+        {t("edit.undo")}
+      </button>
+      <button type="button" className="quiet" disabled={!canRedo} onClick={redo}>
+        {t("edit.redo")}
+      </button>
+      <span role="status">
+        <Status ok={ok}>{t(label)}</Status>
+      </span>
+    </div>
+  );
+}
+
+function SaveProblem({ save, onReload }: { save: AutosaveState; onReload: () => void }) {
+  const t = useT();
+  if (save.status === "conflict") {
     return (
-      <aside className="side-panel">
-        <h2>{t("review.clip")}</h2>
-        <p className="meta">{t("review.selectHint")}</p>
-      </aside>
+      <div className="notice notice-warn" role="alert">
+        <p>{t("save.conflictHint")}</p>
+        <div className="row">
+          <button type="button" onClick={onReload}>
+            {t("save.reload")}
+          </button>
+          <button type="button" className="quiet" onClick={() => void save.keepMine()}>
+            {t("save.keepMine")}
+          </button>
+        </div>
+      </div>
     );
   }
-  const source = project.sources.find((candidate) => candidate.id === clip.sourceId);
-  const rows: [string, string][] = [
-    [t("review.source"), source ? fileLabel(source.originalPath) : clip.sourceId],
-    [t("review.in"), `${clip.inSec.toFixed(2)} s`],
-    [t("review.out"), `${clip.outSec.toFixed(2)} s`],
-    [t("review.speed"), `${clip.speed}×`],
-    [t("review.transition"), t(`transition.${clip.transitionIn.type}`)],
-    [
-      t("review.confidence"),
-      clip.decisionConfidence == null ? "—" : `${Math.round(clip.decisionConfidence * 100)} %`,
-    ],
-    [t("review.takeCount"), String(clip.alternativeTakeIds.length + 1)],
-  ];
+  if (save.status !== "error") return null;
   return (
-    <aside className="side-panel" aria-label={t("review.clip")}>
-      <h2 className="row">
-        <span className="swatch" style={{ background: source?.displayColor }} aria-hidden="true" />
-        {t("review.clip")}
-      </h2>
-      <dl className="details">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd className="mono">{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="meta">{t("review.readOnly")}</p>
-    </aside>
+    <div className="row">
+      <ErrorNotice error={save.error} />
+      <button type="button" onClick={save.flush}>
+        {t("save.retry")}
+      </button>
+    </div>
   );
 }
 
 function Editor({ projectId, project }: { projectId: string; project: Project }) {
+  const t = useT();
   const settings = useResource(useCallback(() => api.settings(), []));
   const preview = settings.data?.settings ?? PREVIEW_DEFAULTS;
+  const { edit, undo, redo } = useProjectStore();
   const playerRef = useRef<PlayerRef>(null);
   const [frame, setFrame] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panel, setPanel] = useState<PanelName>("clip");
 
   const metadata = videoMetadata(project);
   const model = useMemo(
@@ -88,15 +115,55 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
     return () => player.removeEventListener("frameupdate", update);
   }, []);
 
-  const seek = (target: number) => {
+  const seek = useCallback((target: number) => {
     playerRef.current?.seekTo(target);
     setFrame(target);
-  };
-  const select = (clip: TimelineClip) => {
-    setSelectedId(clip.clipId);
-    seek(clip.startFrame);
-  };
+  }, []);
+  const select = useCallback(
+    (clip: TimelineClip) => {
+      setSelectedId(clip.clipId);
+      seek(clip.startFrame);
+    },
+    [seek],
+  );
   const selected = project.clips.find((clip) => clip.id === selectedId) ?? null;
+
+  const swapNext = (clip: TimelineClip) => {
+    const kept = project.clips.find((candidate) => candidate.id === clip.clipId);
+    const next = kept?.alternativeTakeIds.at(-1);
+    if (!next) return;
+    edit((current) => swapTake(current, clip.clipId, next));
+    setSelectedId(next);
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || ownsKeys(event.target)) return;
+      const command = editorCommand(event);
+      if (!command) return;
+      event.preventDefault();
+      if (command.type === "undo") return undo();
+      if (command.type === "redo") return redo();
+      if (command.type === "move") {
+        const target = neighbourClip(model, selectedId, command.step);
+        if (target) select(target);
+        return;
+      }
+      if (!selectedId) return;
+      if (command.type === "toggleRemoved") {
+        const removed = project.clips.find((clip) => clip.id === selectedId)?.removed ?? false;
+        edit((current) => setRemoved(current, selectedId, !removed));
+      } else {
+        const { edge, deltaSec } = command;
+        edit(
+          (current) => trimClip(current, selectedId, edge, deltaSec),
+          `trim:${selectedId}:${edge}`,
+        );
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [edit, undo, redo, model, project, selectedId, select]);
 
   return (
     <div className="editor">
@@ -105,7 +172,7 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
           ref={playerRef}
           component={PreviewVideo}
           inputProps={inputProps}
-          durationInFrames={metadata.durationInFrames}
+          durationInFrames={Math.max(1, metadata.durationInFrames)}
           fps={metadata.fps}
           compositionWidth={metadata.width}
           compositionHeight={metadata.height}
@@ -113,14 +180,39 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
           controls
         />
       </div>
-      <ClipPanel project={project} clip={selected} />
+      <aside className="side-panel" aria-label={t(`panel.${panel}`)}>
+        <div className="segmented" role="tablist" aria-label={t("panel.label")}>
+          {PANELS.map((name) => (
+            <button
+              key={name}
+              type="button"
+              role="tab"
+              aria-selected={panel === name}
+              onClick={() => setPanel(name)}
+            >
+              {t(`panel.${name}`)}
+            </button>
+          ))}
+        </div>
+        {panel === "clip" && (
+          <ClipPanel project={project} clip={selected} onSelect={setSelectedId} />
+        )}
+        {panel === "transitions" && <TransitionsPanel clip={selected} />}
+        {panel === "subtitles" && <SubtitlesPanel project={project} />}
+      </aside>
       <Timeline
         model={model}
         frame={frame}
         selectedId={selectedId}
         onSeek={seek}
         onSelect={select}
+        onSwapNext={swapNext}
+        onOpenTakes={(clip) => {
+          select(clip);
+          setPanel("clip");
+        }}
       />
+      <p className="meta shortcuts">{t("edit.shortcuts")}</p>
     </div>
   );
 }
@@ -128,11 +220,15 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
 export function ReviewStep({ projectId }: { projectId: string }) {
   const t = useT();
   const loadIntoStore = useProjectStore((state) => state.load);
+  const project = useProjectStore((state) =>
+    state.projectId === projectId ? state.project : null,
+  );
   const loaded = useResource(useCallback(() => api.project(projectId), [projectId]));
+  const save = useAutosave(projectId);
 
   useEffect(() => {
-    if (loaded.data) loadIntoStore(loaded.data.project, loaded.data.etag);
-  }, [loaded.data, loadIntoStore]);
+    if (loaded.data) loadIntoStore(projectId, loaded.data.project, loaded.data.etag);
+  }, [loaded.data, loadIntoStore, projectId]);
 
   const notAnalyzed =
     loaded.error instanceof ApiError && loaded.error.code === "project_not_analyzed";
@@ -140,10 +236,13 @@ export function ReviewStep({ projectId }: { projectId: string }) {
     <section className="screen wide">
       <div className="screen-head">
         <h1>{t("review.title")}</h1>
-        {loaded.data && (
-          <Link to={stepPath("export", projectId) as string} className="button primary">
-            {t("review.toExport")}
-          </Link>
+        {project && (
+          <div className="row">
+            <Toolbar save={save} />
+            <Link to={stepPath("export", projectId) as string} className="button primary">
+              {t("review.toExport")}
+            </Link>
+          </div>
         )}
       </div>
       {notAnalyzed ? (
@@ -156,8 +255,9 @@ export function ReviewStep({ projectId }: { projectId: string }) {
       ) : (
         <ErrorNotice error={loaded.error} />
       )}
-      {loaded.loading && !loaded.data && <p className="lede">{t("common.loading")}</p>}
-      {loaded.data && <Editor projectId={projectId} project={loaded.data.project} />}
+      <SaveProblem save={save} onReload={() => void loaded.reload()} />
+      {loaded.loading && !project && <p className="lede">{t("common.loading")}</p>}
+      {project && <Editor projectId={projectId} project={project} />}
     </section>
   );
 }

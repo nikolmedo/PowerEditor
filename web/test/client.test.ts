@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, errorMessage, request } from "../src/api/client";
+import { api } from "../src/api/endpoints";
+import { PROJECT } from "./fixtures/reviewProject";
 import { translate } from "../src/i18n";
 
 const t = (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) =>
@@ -101,5 +103,29 @@ describe("request with a non-JSON body", () => {
     respondText(200, "<html>");
     const error = await failure();
     expect([error.status, error.code]).toEqual([200, "bad_response"]);
+  });
+});
+
+describe("saveProject", () => {
+  it("sends the ETag in If-Match and returns the new one", async () => {
+    const response = new Response(JSON.stringify(PROJECT), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ETag: '"e2"' },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    expect(await api.saveProject("p 1", PROJECT, '"e1"', { keepalive: true })).toBe('"e2"');
+    const [path, init] = vi.mocked(fetch).mock.calls[0] ?? [];
+    expect(path).toBe("/api/projects/p%201");
+    expect(init?.method).toBe("PUT");
+    expect(init?.keepalive).toBe(true);
+    expect(new Headers(init?.headers).get("If-Match")).toBe('"e1"');
+  });
+
+  it("reports a stale ETag as a revision conflict", async () => {
+    respond(409, { detail: { code: "revision_conflict", message: "changed" } });
+    const error = await api.saveProject("p1", PROJECT, '"old"').catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe("revision_conflict");
   });
 });
