@@ -84,7 +84,7 @@ FFmpeg final pass: rebuilt voice track + two-pass loudnorm → export
 - Users set everything from the UI (today through the settings API). Settings are layered: code defaults ← `.env` (development only) ← user `settings.json`. The user file wins.
 - API keys live in the OS keyring (service `PowerEditor`), never in plain files. The API reports whether a key is set and where it comes from, never its value.
 - `.env` (read from the repo root or the working directory) is a developer override, never the user path.
-- ffmpeg, ffprobe and Node paths are settings, auto-detected (configured path → `<data dir>/bin` → `PATH`), later bundled or downloaded at first run.
+- ffmpeg, ffprobe and Node paths are settings, auto-detected (configured path → `<data dir>/bin/<name>-<version>/` downloaded at first run → `<app>/runtime/` shipped with the app → `PATH`), see `resources.py` and `runtime/`.
 - Whisper default depends on the runtime: GPU → `large-v3-turbo`, CPU → `small`.
 
 ## Repository layout
@@ -574,6 +574,7 @@ Design ideas from [HyperFrames](https://github.com/heygen-com/hyperframes) (Apac
 - Clear error messages when the render browser times out or runs out of memory, with a per-render memory ceiling.
 - A project `LICENSE` and a `THIRD_PARTY_NOTICES` file before the first public build.
 - **Acceptance:** a user without Python, Node or ffmpeg installs the app, finishes onboarding and exports a video.
+- **Status (10a, standalone backend): done.** `resources.py` resolves the web build, the Remotion composition (prebuilt bundle) and tools from source or frozen. `runtime/` downloads pinned runtimes with SHA-256 checks into `<data dir>/bin/<name>-<version>/`: LGPL FFmpeg 8.1.3 (BtbN month-end autobuild), Node 24.21.0 x64 (nodejs.org) and Remotion's Chrome Headless Shell (`ensure-browser.mjs`); `GET /api/setup` lists them, `POST /api/setup/runtime/{name}` and `powereditor runtime install` install them. Ingest falls back to OpenH264 when FFmpeg has no libx264. `scripts/bundle.mjs` bundles the composition once (renders skip webpack), `stage-renderer.mjs` stages `@remotion/renderer` with only the x64 compositor. `scripts/build_backend.py` builds a PyInstaller onedir with a console and a windowed exe. `serve --port 0 --parent-pid` prints `POWEREDITOR_READY {"port", "token"}` for the shell (token not enforced yet). Next: 10b Electron shell, onboarding UI, installer.
 
 ### Phase 11: Docs, CI/CD, releases and auto-update
 
@@ -606,5 +607,5 @@ Design ideas from [HyperFrames](https://github.com/heygen-com/hyperframes) (Apac
 - [ ] MediaPipe availability on Windows ARM64.
 - [ ] Proxy playback in the browser (served with range requests).
 - [ ] Remotion license for public distribution.
-- [ ] FFmpeg build licensing for distribution (LGPL build or first-run download).
+- [x] FFmpeg build licensing for distribution → first-run download of a pinned LGPL build (BtbN `win64-lgpl`); no libx264, so ingest uses OpenH264. Still to check: OpenH264 patent terms for a source-built (not Cisco binary) encoder, and LGPL notices in `THIRD_PARTY_NOTICES`.
 - [ ] Terms of use and output stability of local CLI clients (Phase 4).
