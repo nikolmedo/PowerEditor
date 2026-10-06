@@ -44,8 +44,9 @@ Reviewed boundary: `f35332a` (phase-0).
 ### Slice 3 — `feat/phase-3-takes`
 - [ ] 3a Clustering, deterministic features, HeuristicEngine, synthetic benchmark (clearly labelled synthetic) + eval script.
 
-### Slice 4 — `feat/phase-4-jev`
-- [ ] 4a JevEngine with confidence gating and double-order Choice (from TypeSafe docs).
+### Slice 4 — `feat/phase-4-providers`
+- [ ] 4a Provider registry (`ModelProvider`, transports `api` / `local_cli`): OpenAI (API + Codex CLI), Gemini (API + Gemini CLI), Claude (API + Claude Code CLI), DeepSeek (API), Jev; per-feature model assignment with heuristic fallback; settings/API for providers and feature mapping.
+- [ ] 4b LLM decision engine (structured JSON + Pydantic, double-order choice, confidence gating, token/cost tracking) wired into take/segment/transition decisions.
 
 ### Slice 5 — `feat/phase-5-subtitles`
 - [ ] 5a Word remap to timeline, subtitle presets, topic transitions, SRT/ASS + OTIO export.
@@ -57,6 +58,11 @@ Reviewed boundary: `f35332a` (phase-0).
 - [ ] 7a Editing: change take, trim, remove/restore, transitions, subtitle edit, undo/redo.
 - [ ] 8a Audio & color panels.
 - [ ] 9a Overlay templates + auto CTA.
+
+### Slice 11 — docs, CI/CD, releases, auto-update
+- [x] 11a PLAN.md rewritten in English with new Phases 4 and 11; README.md (humans + agents); CLAUDE.md/AGENTS.md pointers; `.github/workflows/ci.yml` (windows + ubuntu). Branch `docs/plan-readme`.
+- [ ] 11b Release workflow on `v*` tags (build installer, GitHub Release), single version source, in-app update check (GitHub latest release API) — after packaging.
+- [ ] 11c Screenshots in README once the UI lands; README kept current every phase.
 
 ### Slice 10 — `feat/phase-10-packaging`
 - [ ] 10a Electron shell + PyInstaller backend sidecar, first-run onboarding (ffmpeg, Whisper model download, API key), installer.
@@ -97,5 +103,8 @@ Reviewed boundary: `f35332a` (phase-0).
 - 2c done (delegated): `render/audio_mix.py` rebuilds voice audio sample-accurately (atrim/atempo/afade/apad/concat, cumulative frame→sample boundaries, anullsrc for silent sources); Remotion renders muted; final pass muxes video copy + rebuilt voice with two-pass loudnorm (skips silent audio). 2b follow-ups fixed: empty_timeline error, atomic export (.part + cleanup), composition id single source (composition.json), renderer tests with fake node + timeout (taskkill tree), pnpm-workspace comments. Evidence: pytest 201 passed, vitest 15 passed (parent re-run). Click test: cut jump 0.96–0.99x steady (was up to 3.4x); A/V 2.666667 s both; -14.0 LUFS. Phase 2 acceptance now met.
 - Note: Player preview still uses frame-level fades (can click in preview only).
 
+- User requests (2026-10-06): all docs in English; tidy readable code; README for humans (marketing, screenshots) and agents (token-saving guide); release workflow + in-app update check; multi-provider AI (API or local subscription CLIs: OpenAI, Gemini, Claude; DeepSeek API only), extensible registry, Providers screen + Features screen for per-feature model choice. Added to PLAN.md as Phase 4 (providers, absorbs Jev) and Phase 11 (docs/CI/release/update).
+- Follow-up: `.env.example` lacks `FFMPEG_PATH`/`FFPROBE_PATH` (present in `config.py`).
+
 ## Next step
-Update PLAN.md with new user requirements (docs/CI/releases/auto-update; multi-provider models), then slice 3.
+Slice 3 (takes heuristic) on a branch stacked on `docs/plan-readme`.
