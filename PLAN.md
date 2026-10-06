@@ -105,9 +105,10 @@ PowerEditor/
       api/
         app.py               # FastAPI app: /api/health, /api/doctor
         routes_settings.py   # /api/settings, /api/secrets/{name}, key test
-        routes_projects.py   # planned (Phase 6)
-        routes_jobs.py       # planned: WebSocket progress
-        routes_media.py      # planned: range-request serving for proxies
+        routes_projects.py   # projects, ETag saves, subtitle rebuild and text edit
+        routes_jobs.py       # analyze/render/subtitle jobs, WebSocket progress, cancel
+        routes_media.py      # range-request serving for proxies and exports, reveal
+        routes_setup.py      # first-run checklist, Whisper model download
       pipeline/
         runner.py            # stage orchestration + cache
         ffmpeg.py            # tool resolution and subprocess helpers
@@ -530,6 +531,7 @@ The deterministic heuristic engine stays the default and the always-available fa
 - Steps 1 and 3 + step 2 with player and read-only timeline (source colors, badges).
 - Settings screen (keys + test connection), first-run setup check, Providers and Features screens, jobs WebSocket, media range serving.
 - **Acceptance:** full flow load → process → view → export without the CLI; no setting requires editing a file.
+- **Status:** 6a (backend API for the UI) done: projects (create from paths or uploads, list, ETag-guarded save, delete, subtitle rebuild and text edit), job manager with WebSocket progress and cancel, media Range serving, exports list and reveal, first-run setup with a Whisper download job, web app serving with SPA fallback, `serve --open`. Render quality is not wired yet: the Remotion render script has no quality option. Next: 6b, the React UI.
 
 ### Phase 7: Editing
 

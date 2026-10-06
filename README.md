@@ -116,8 +116,11 @@ Dense reference for coding agents. Read this before exploring; it should save mo
 
 | Path                                           | Responsibility                                                                                                                                                                                                             |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/powereditor/cli.py`                   | Typer CLI: `doctor`, `serve`, `ingest`, `transcribe`, `analyze`, `render`, `export-subtitles`, `eval-takes`, `providers list`, `features`                                                                                  |
-| `backend/powereditor/api/`                     | FastAPI app (`app.py`: `/api/health`, `/api/doctor`), settings/secrets routes (`routes_settings.py`), providers and feature models (`routes_providers.py`)                                                                 |
+| `backend/powereditor/cli.py`                   | Typer CLI: `doctor`, `serve` (`--open`, `--dev`), `ingest`, `transcribe`, `analyze`, `render`, `export-subtitles`, `eval-takes`, `providers list`, `features`                                                              |
+| `backend/powereditor/api/`                     | FastAPI app (`app.py`: health, doctor, web app with SPA fallback, dev CORS); routes for settings/secrets, providers, projects, jobs (+ WebSocket), media, setup; `services.py` holds the injectable pipelines              |
+| `backend/powereditor/projects.py`              | `ProjectStore`: project folders, `meta.json`, status, ETag-guarded `project.json` writes                                                                                                                                   |
+| `backend/powereditor/jobs.py`                  | `JobManager`: thread-pool jobs, one active per project, throttled progress events, cooperative cancel                                                                                                                      |
+| `backend/powereditor/process.py`               | `kill_tree`, `ProcessScope` / `tracked()`: a cancelled job kills its ffmpeg and Remotion process trees                                                                                                                     |
 | `backend/powereditor/models.py`                | Pydantic models, single source of truth for `project.json` and stage results                                                                                                                                               |
 | `backend/powereditor/schema_gen.py`            | Writes `packages/composition/schema/project.schema.json` from `Project`                                                                                                                                                    |
 | `backend/powereditor/config.py`                | `.env` developer overrides (pydantic-settings), `REPO_ROOT`                                                                                                                                                                |
@@ -141,7 +144,7 @@ Dense reference for coding agents. Read this before exploring; it should save mo
 | `PLAN.md`                                      | Product plan, architecture, phases                                                                                                                                                                                         |
 | `odd/tasks/powereditor-app.md`                 | Progress log, decisions, measurements, review history                                                                                                                                                                      |
 
-Not yet present: `web/` (UI).
+Not yet present: `web/` (UI, Phase 6b).
 
 ### Data flow
 
@@ -153,7 +156,7 @@ project.json → render/job.py:
    → final_pass (mux + two-pass loudnorm) → exports/<name>.mp4
 ```
 
-Per-project layout (`ProjectLayout` in `pipeline/runner.py`): `media/`, `cache/<stage>.json`, `cache/model_usage.json` (model calls and tokens per feature of the last takes computation that called a model), `project.json`, `exports/`.
+Per-project layout (`ProjectLayout` in `pipeline/runner.py`): `meta.json` (name, creation time, source paths, analyze options), `sources/` (uploaded originals; files added by path are read where they are), `media/`, `cache/<stage>.json`, `cache/model_usage.json` (model calls and tokens per feature of the last takes computation that called a model), `project.json`, `exports/`.
 
 ### Source of truth and generated files
 
@@ -163,6 +166,31 @@ Per-project layout (`ProjectLayout` in `pipeline/runner.py`): `media/`, `cache/<
 4. Check freshness with `uv run python -m powereditor.schema_gen --check` and `corepack pnpm -r check:types`.
 
 Never hand-edit the schema or `types.generated.ts`. Both are in `.prettierignore`.
+
+### Local API
+
+`powereditor serve` listens on `127.0.0.1:8765`. The API is under `/api`; the built web app (`web/dist`, or `POWEREDITOR_WEB_DIR`) is served at `/` with an `index.html` fallback for client routes. `--dev` (env `POWEREDITOR_DEV_CORS=1`) allows CORS from the Vite dev server `http://localhost:5173` only. Route errors carry `detail: {code, message}`.
+
+| Route                                                                                                | Purpose                                                                                                                |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`, `GET /api/doctor`                                                                 | Version; dependency probes                                                                                             |
+| `GET /api/setup`, `POST /api/setup/whisper-model`                                                    | First-run checklist (doctor, transcriber ready, model downloaded, OpenAI key set); download the Whisper model as a job |
+| `GET/PATCH /api/settings`, `PUT/DELETE /api/secrets/{name}`                                          | Settings and secrets (see Configuration)                                                                               |
+| `/api/providers*`, `/api/features/models`                                                            | Model providers and per-feature assignment                                                                             |
+| `POST /api/projects` `{paths, name?, preset?, language?, script?}`                                   | Create from local files, read in place; `201 {id}`                                                                     |
+| `POST /api/projects/upload` (multipart `files` plus the same options as form fields)                 | Create from uploads, copied in chunks to `sources/`                                                                    |
+| `GET /api/projects`                                                                                  | List with status (`created`, `ingested`, `analyzed`), duration, `thumbnailUrl` (first proxy), `activeJobId`            |
+| `GET /api/projects/{id}`, `GET /api/projects/{id}/meta`                                              | `project.json` with an `ETag` (409 before analysis); creation metadata                                                 |
+| `PUT /api/projects/{id}` with `If-Match: <ETag>`                                                     | Save an edited project; 409 on a stale ETag or during analysis, 428 without `If-Match`                                 |
+| `DELETE /api/projects/{id}`                                                                          | Delete; 409 while a job runs                                                                                           |
+| `POST .../subtitles/rebuild`, `PUT .../subtitles/text` `{fromIndex, toIndex, text}`                  | `rebuild_subtitles` after clip edits; `edit_subtitle_text` on `subtitles.words[fromIndex:toIndex]`                     |
+| `POST .../analyze`, `POST .../render` `{exportName?}`, `POST .../export/subtitles` `{format, name?}` | Start a job, `202` with the job; 409 `job_active` when the project already runs one                                    |
+| `GET /api/jobs/{jobId}`, `POST /api/jobs/{jobId}/cancel`                                             | Job state (`queued`, `running`, `succeeded`, `failed`, `cancelled`; `error.code`, `result`); cancel                    |
+| `WS /api/jobs/{jobId}/events`                                                                        | The current state, then `{jobId, stage, fraction, message, status, error, result}` until a terminal status             |
+| `GET/HEAD /api/projects/{id}/media/{file}`                                                           | Files of `media/`, then `exports/`, with HTTP Range (206, 416); hidden and `.part.` files are never served             |
+| `GET .../exports`, `POST .../exports/{file}/reveal`                                                  | Export list; show the file in Explorer (501 on other systems)                                                          |
+
+Jobs run on a two-thread pool (`jobs.py`) and fail with the pipeline's error codes (`missing_openai_key`, `ffmpeg_failed`, `empty_timeline`, `render_timeout`, ...). Cancel is cooperative: the next progress report raises, and `ProcessScope` kills the ffmpeg and Remotion trees registered with `tracked()`. Wrap any new long-running subprocess the same way. Tests inject `Pipelines` (fake analyze, render and Whisper downloader) and a revealer into `create_app`.
 
 ### Key contracts
 
