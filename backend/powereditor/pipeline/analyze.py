@@ -156,13 +156,17 @@ def analyze_project(
     preset: ProjectPreset | None = None,
     engine: DecisionEngine | None = None,
     script: str | None = None,
+    language: str | None = None,
     progress: ProgressCallback = no_progress,
 ) -> AnalyzeResult:
     """Ingest `files` (or reuse every ingested source) and write a draft `project.json`.
 
-    Every stage is cached, so re-running only recomputes what changed.
+    `language` overrides the language setting for this project. Every stage is cached,
+    so re-running only recomputes what changed.
     """
     settings = service.get_effective()
+    if language is not None:
+        settings = settings.model_copy(update={"language": language})
     tools = MediaTools.from_settings(service)
     layout.ensure()
     entries = _select_sources(layout, files, tools, service, progress)
