@@ -1,20 +1,37 @@
+import json
+import sys
+import time
 import urllib.request
 from pathlib import Path
 
 import pytest
 
+from powereditor.models import Project
 from powereditor.pipeline.ffmpeg import run_capture, run_ffmpeg_stderr
 from powereditor.pipeline.loudness import parse_integrated_lufs
+from powereditor.render.base import RenderSettings
 from powereditor.render.final_pass import (
     LoudnormMeasurement,
-    apply_loudnorm_args,
-    normalize_loudness,
+    finalize_export,
+    loudnorm_filter,
+    mux_args,
     parse_loudnorm_json,
+    should_normalize,
 )
 from powereditor.render.media_server import serve_directory
 from powereditor.render.node_runtime import NodeRuntimeError, resolve_render_node
-from powereditor.render.remotion_render import RenderEvent, parse_render_event
+from powereditor.render.remotion_render import (
+    RemotionRenderer,
+    RenderError,
+    RenderEvent,
+    parse_render_event,
+    render_timeout_s,
+)
 from tests.media import FFMPEG, FFPROBE, ffmpeg_lavfi, needs_ffmpeg
+
+FIXTURE = (
+    Path(__file__).parents[2] / "packages" / "composition" / "test" / "fixtures" / "project.json"
+)
 
 LOUDNORM_STDERR = """
 [Parsed_loudnorm_0 @ 000001]
@@ -67,54 +84,95 @@ def test_parse_loudnorm_json_uses_the_last_block_and_rejects_missing_output() ->
         parse_loudnorm_json("no json here")
 
 
-def test_apply_args_feed_the_measurement_back_in_linear_mode() -> None:
+def test_loudnorm_filter_feeds_the_measurement_back_in_linear_mode() -> None:
     measurement = parse_loudnorm_json(LOUDNORM_STDERR)
 
-    args = apply_loudnorm_args(Path("in.mp4"), Path("out.mp4"), measurement, target_lufs=-14.0)
-
-    audio_filter = args[args.index("-af") + 1]
-    assert audio_filter == (
+    assert loudnorm_filter(measurement, target_lufs=-14.0) == (
         "loudnorm=I=-14.0:TP=-1.0:LRA=11.0:measured_I=-27.47:measured_TP=-4.47"
         ":measured_LRA=0.0:measured_thresh=-37.47:offset=0.09:linear=true:print_format=summary"
     )
+
+
+def test_mux_args_copy_remotion_video_and_encode_the_rebuilt_voice() -> None:
+    args = mux_args(Path("v.mp4"), Path("voice.wav"), Path("out.mp4"), "loudnorm=I=-14")
+
+    assert args[:4] == ["-i", "v.mp4", "-i", "voice.wav"]
+    first_map = args.index("-map")
+    assert args[first_map : first_map + 4] == ["-map", "0:v:0", "-map", "1:a:0"]
     assert args[args.index("-c:v") + 1] == "copy"
+    assert args[args.index("-af") + 1] == "loudnorm=I=-14"
     assert args[args.index("-b:a") + 1] == "192k"
     assert args[args.index("-ar") + 1] == "48000"
     assert args[args.index("-movflags") + 1] == "+faststart"
     assert args[-1] == "out.mp4"
+    assert "-af" not in mux_args(Path("v.mp4"), Path("voice.wav"), Path("out.mp4"), None)
+
+
+@pytest.mark.parametrize(
+    ("input_i", "expected"),
+    [(-27.47, True), (-69.0, True), (-75.0, False), (float("-inf"), False)],
+)
+def test_silent_or_near_silent_voice_is_not_normalized(input_i: float, expected: bool) -> None:
+    measurement = LoudnormMeasurement(input_i, -4.0, 0.0, -37.0, 0.1)
+
+    assert should_normalize(measurement) is expected
+
+
+def _video_only(path: Path, seconds: float) -> Path:
+    return ffmpeg_lavfi(
+        path,
+        "-f", "lavfi", "-i", f"testsrc2=size=160x120:rate=30:duration={seconds}",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+    )  # fmt: skip
+
+
+def _wav(path: Path, source: str) -> Path:
+    return ffmpeg_lavfi(path, "-f", "lavfi", "-i", source, "-c:a", "pcm_f32le", "-ac", "2")
+
+
+def _stream_durations(path: Path) -> dict[str, float]:
+    assert FFPROBE is not None
+    rows = run_capture(
+        [FFPROBE, "-v", "error", "-show_entries", "stream=codec_name,duration",
+         "-of", "csv=p=0", str(path)]
+    ).split()  # fmt: skip
+    return {name: float(value) for name, value in (row.split(",") for row in rows)}
 
 
 @pytest.mark.ffmpeg
 @needs_ffmpeg
-def test_normalize_loudness_reaches_the_target_and_copies_video(tmp_path: Path) -> None:
-    assert FFMPEG is not None and FFPROBE is not None
-    quiet = ffmpeg_lavfi(
-        tmp_path / "quiet.mp4",
-        "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=30:duration=6",
-        "-f", "lavfi", "-i", "sine=frequency=330:duration=6,volume=0.05",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
-    )  # fmt: skip
+def test_finalize_export_normalizes_the_voice_and_keeps_av_in_sync(tmp_path: Path) -> None:
+    assert FFMPEG is not None
+    video = _video_only(tmp_path / "video.mp4", 6)
+    voice = _wav(
+        tmp_path / "voice.wav", "sine=frequency=330:duration=6:sample_rate=48000,volume=0.05"
+    )
     output = tmp_path / "final.mp4"
 
-    normalize_loudness(FFMPEG, quiet, output, target_lufs=-14.0)
+    result = finalize_export(FFMPEG, video, voice, output, target_lufs=-14.0)
 
+    assert result.normalized is True
     measured = parse_integrated_lufs(
         run_ffmpeg_stderr(FFMPEG, ["-i", str(output), "-af", "ebur128", "-f", "null", "-"])
     )
     assert abs(measured - -14.0) <= 1.0
-    codecs = run_capture(
-        [
-            FFPROBE,
-            "-v",
-            "error",
-            "-show_entries",
-            "stream=codec_name",
-            "-of",
-            "csv=p=0",
-            str(output),
-        ]
-    ).split()
-    assert codecs == ["h264", "aac"]
+    durations = _stream_durations(output)
+    assert list(durations) == ["h264", "aac"]
+    assert abs(durations["h264"] - durations["aac"]) <= 1 / 30
+
+
+@pytest.mark.ffmpeg
+@needs_ffmpeg
+def test_finalize_export_passes_silent_voice_through_without_loudnorm(tmp_path: Path) -> None:
+    assert FFMPEG is not None
+    video = _video_only(tmp_path / "video.mp4", 3)
+    voice = _wav(tmp_path / "voice.wav", "anullsrc=r=48000:cl=stereo:d=3")
+    output = tmp_path / "final.mp4"
+
+    result = finalize_export(FFMPEG, video, voice, output, target_lufs=-14.0)
+
+    assert result.normalized is False
+    assert list(_stream_durations(output)) == ["h264", "aac"]
 
 
 # --- render events --------------------------------------------------------------------
@@ -191,3 +249,97 @@ def test_media_server_serves_files_from_the_directory(tmp_path: Path) -> None:
             body: bytes = response.read()
 
     assert body == b"video-bytes"
+
+
+# --- remotion renderer (fake Node process) --------------------------------------------
+
+FAKE_RENDER_SCRIPT = r"""
+import json, os, sys, time
+
+def emit(event):
+    print(json.dumps(event), flush=True)
+
+args = sys.argv[1:]
+props = json.loads(open(args[args.index("--props") + 1], encoding="utf-8").read())
+mode = os.environ["FAKE_RENDER_MODE"]
+emit({"event": "bundled", "ms": 10})
+if mode == "ok":
+    print("Chrome noise", flush=True)
+    for fraction in (0.25, 0.5, 1.5):
+        emit({"event": "progress", "fraction": fraction})
+    with open(args[args.index("--output") + 1], "w", encoding="utf-8") as out:
+        json.dump(props, out)
+    emit({"event": "done", "ms": 20, "frames": 3})
+elif mode == "error-event":
+    emit({"event": "error", "message": "composition ProjectVideo crashed"})
+    sys.exit(1)
+elif mode == "exit":
+    sys.stderr.write("node: fatal crash\n")
+    sys.exit(3)
+else:
+    time.sleep(60)
+"""
+
+
+def _fake_renderer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, timeout_s: float = 30.0
+) -> tuple[RemotionRenderer, Project, Path]:
+    monkeypatch.setenv("FAKE_RENDER_MODE", mode)
+    script = tmp_path / "fake_render.py"
+    script.write_text(FAKE_RENDER_SCRIPT, encoding="utf-8")
+    media = tmp_path / "media"
+    _file(media / "s1.mezzanine.mp4")
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    renderer = RemotionRenderer(sys.executable, script=script, timeout_s=timeout_s)
+    return renderer, Project.model_validate(fixture["project"]), media
+
+
+def test_remotion_renderer_forwards_clamped_progress_and_passes_props(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    renderer, project, media = _fake_renderer(tmp_path, monkeypatch, "ok")
+    output = tmp_path / "out" / "video.mp4"
+    fractions: list[float] = []
+
+    timing = renderer.render(project, media, output, RenderSettings(15), fractions.append)
+
+    assert fractions == [0.25, 0.5, 1.0]
+    props = json.loads(output.read_text(encoding="utf-8"))
+    assert props["audioCrossfadeMs"] == 15
+    assert props["mediaBaseUrl"].startswith("http://127.0.0.1:")
+    assert props["project"]["clips"][0]["id"] == "c1"
+    assert sorted(p.name for p in output.parent.iterdir()) == ["video.mp4"]
+    assert timing.setup_s >= 0 and timing.render_s >= 0
+
+
+@pytest.mark.parametrize(
+    ("mode", "message"),
+    [("error-event", "composition ProjectVideo crashed"), ("exit", "code 3: node: fatal crash")],
+)
+def test_remotion_renderer_reports_failures_with_their_cause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, message: str
+) -> None:
+    renderer, project, media = _fake_renderer(tmp_path, monkeypatch, mode)
+
+    with pytest.raises(RenderError, match=message) as excinfo:
+        renderer.render(project, media, tmp_path / "video.mp4", RenderSettings(15))
+
+    assert excinfo.value.code == "render_failed"
+
+
+def test_remotion_renderer_kills_a_hung_render_after_the_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    renderer, project, media = _fake_renderer(tmp_path, monkeypatch, "hang", timeout_s=1.0)
+    started = time.perf_counter()
+
+    with pytest.raises(RenderError, match="timed out") as excinfo:
+        renderer.render(project, media, tmp_path / "video.mp4", RenderSettings(15))
+
+    assert excinfo.value.code == "render_timeout"
+    assert time.perf_counter() - started < 30
+
+
+def test_default_render_timeout_grows_with_the_timeline() -> None:
+    assert render_timeout_s(0) == 600.0
+    assert render_timeout_s(1800) == 600.0 + 1800 * 2.0

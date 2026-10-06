@@ -1,11 +1,10 @@
 import { Composition } from "remotion";
 
 import fixture from "../test/fixtures/project.json";
+import { COMPOSITION_ID } from "./compositionId";
 import { videoMetadata } from "./metadata";
 import { ProjectVideo, type ProjectVideoProps } from "./ProjectVideo";
 import type { Project } from "./types";
-
-export const COMPOSITION_ID = "ProjectVideo";
 
 const defaultProps: ProjectVideoProps = {
   project: fixture.project as Project,

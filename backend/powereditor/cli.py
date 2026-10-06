@@ -39,6 +39,7 @@ PIPELINE_ERRORS = (
     NodeRuntimeError,
     RenderError,
     render_job.ProjectNotFoundError,
+    render_job.EmptyTimelineError,
 )
 
 

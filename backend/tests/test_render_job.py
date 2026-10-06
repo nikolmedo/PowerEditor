@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -7,13 +8,14 @@ from typer.testing import CliRunner
 from powereditor import cli
 from powereditor.models import Project, save_project
 from powereditor.paths import AppPaths
-from powereditor.pipeline.ffmpeg import FractionCallback
+from powereditor.pipeline.ffmpeg import FfmpegError, FractionCallback
 from powereditor.pipeline.runner import ProjectLayout
 from powereditor.render import job as job_module
 from powereditor.render.base import RenderSettings, RenderTiming
-from powereditor.render.job import render_project
+from powereditor.render.job import EmptyTimelineError, render_project
+from powereditor.render.remotion_render import RenderError
 from powereditor.settings_store import SettingsService
-from tests.media import ffmpeg_lavfi, needs_ffmpeg
+from tests.media import FFPROBE, ffmpeg_lavfi, needs_ffmpeg
 
 pytestmark = [pytest.mark.ffmpeg, needs_ffmpeg]
 
@@ -23,10 +25,13 @@ FIXTURE = (
 
 
 class FakeRenderer:
-    """Writes a lavfi clip as long as the timeline instead of running Remotion."""
+    """Writes a silent lavfi clip as long as the timeline instead of running Remotion."""
 
-    def __init__(self) -> None:
+    def __init__(self, fail: bool = False, garbage: bool = False) -> None:
         self.settings: RenderSettings | None = None
+        self.calls = 0
+        self.fail = fail
+        self.garbage = garbage
 
     def render(
         self,
@@ -37,24 +42,50 @@ class FakeRenderer:
         on_progress: FractionCallback | None = None,
     ) -> RenderTiming:
         self.settings = settings
+        self.calls += 1
+        if self.fail:
+            raise RenderError("Remotion render exited with code 1: boom")
         output.parent.mkdir(parents=True, exist_ok=True)
+        if self.garbage:
+            output.write_bytes(b"not a video")
+            return RenderTiming(setup_s=0.0, render_s=0.0)
         ffmpeg_lavfi(
             output,
             "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=30:duration=5.3333",
-            "-f", "lavfi", "-i", "sine=frequency=330:duration=5.3333,volume=0.1",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+            "-frames:v", "160", "-c:v", "libx264", "-pix_fmt", "yuv420p",
         )  # fmt: skip
         if on_progress is not None:
             on_progress(1.0)
         return RenderTiming(setup_s=0.5, render_s=1.0)
 
 
-def _project_layout(data_dir: Path) -> ProjectLayout:
+def _project_layout(data_dir: Path, remove_all: bool = False) -> ProjectLayout:
     layout = ProjectLayout.for_project(AppPaths(data_dir=data_dir), "demo")
     layout.ensure()
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    save_project(Project.model_validate(fixture["project"]), layout.project_file)
+    project = Project.model_validate(fixture["project"])
+    if remove_all:
+        project = project.model_copy(
+            update={"clips": [c.model_copy(update={"removed": True}) for c in project.clips]}
+        )
+    save_project(project, layout.project_file)
+    # The fixture's clips reach 9.3 s into s1; the voice is rebuilt from this mezzanine.
+    ffmpeg_lavfi(
+        layout.media_dir / "s1.mezzanine.mp4",
+        "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=30:duration=10",
+        "-f", "lavfi", "-i", "sine=frequency=330:duration=10,volume=0.1",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+    )  # fmt: skip
     return layout
+
+
+def _durations(path: Path) -> list[float]:
+    assert FFPROBE is not None
+    rows = subprocess.run(
+        [FFPROBE, "-v", "error", "-show_entries", "stream=duration", "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()  # fmt: skip
+    return [float(row) for row in rows]
 
 
 def test_render_project_writes_the_normalized_export_and_reports_speed(tmp_path: Path) -> None:
@@ -62,14 +93,13 @@ def test_render_project_writes_the_normalized_export_and_reports_speed(tmp_path:
     service = SettingsService.default()
     renderer = FakeRenderer()
     fractions: list[float] = []
+    stages: list[str] = []
 
-    result = render_project(
-        layout,
-        service,
-        renderer=renderer,
-        name="final",
-        progress=lambda stage, fraction, message: fractions.append(fraction),
-    )
+    def progress(stage: str, fraction: float, message: str) -> None:
+        stages.append(stage)
+        fractions.append(fraction)
+
+    result = render_project(layout, service, renderer=renderer, name="final", progress=progress)
 
     assert result.output == layout.root / "exports" / "final.mp4"
     assert result.output.is_file()
@@ -79,6 +109,37 @@ def test_render_project_writes_the_normalized_export_and_reports_speed(tmp_path:
     assert result.timing == RenderTiming(setup_s=0.5, render_s=1.0)
     assert renderer.settings == RenderSettings(audio_crossfade_ms=15)
     assert fractions[-1] == 1.0
+    assert list(dict.fromkeys(stages)) == ["audio", "render", "final-pass"]
+    video_s, audio_s = _durations(result.output)
+    assert video_s == pytest.approx(160 / 30, abs=1 / 30)
+    assert audio_s == pytest.approx(video_s, abs=1 / 30)
+
+
+def test_render_project_refuses_an_empty_timeline_before_rendering(tmp_path: Path) -> None:
+    layout = _project_layout(tmp_path, remove_all=True)
+    renderer = FakeRenderer()
+
+    with pytest.raises(EmptyTimelineError) as excinfo:
+        render_project(layout, SettingsService.default(), renderer=renderer)
+
+    assert excinfo.value.code == "empty_timeline"
+    assert renderer.calls == 0
+
+
+@pytest.mark.parametrize("renderer", [FakeRenderer(fail=True), FakeRenderer(garbage=True)])
+def test_failed_render_keeps_the_previous_export_and_leaves_no_temp_files(
+    tmp_path: Path, renderer: FakeRenderer
+) -> None:
+    layout = _project_layout(tmp_path)
+    exports = layout.root / "exports"
+    exports.mkdir()
+    (exports / "final.mp4").write_bytes(b"previous export")
+
+    with pytest.raises((RenderError, FfmpegError)):
+        render_project(layout, SettingsService.default(), renderer=renderer)
+
+    assert sorted(p.name for p in exports.iterdir()) == ["final.mp4"]
+    assert (exports / "final.mp4").read_bytes() == b"previous export"
 
 
 def test_render_cli_prints_output_and_render_speed(
@@ -100,3 +161,12 @@ def test_render_cli_rejects_a_project_without_project_file(isolated_environment:
 
     assert result.exit_code == 1
     assert "project_not_found" in result.output
+
+
+def test_render_cli_reports_an_empty_timeline(isolated_environment: Path) -> None:
+    _project_layout(isolated_environment, remove_all=True)
+
+    result = CliRunner().invoke(cli.app, ["render", "demo"])
+
+    assert result.exit_code == 1
+    assert "empty_timeline" in result.output

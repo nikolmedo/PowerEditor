@@ -1,11 +1,14 @@
-"""Final pass over a rendered video: two-pass EBU R128 loudness normalization.
+"""Final pass: mux the Remotion video with the rebuilt voice and normalize loudness.
 
-Pass one measures with `loudnorm`, pass two feeds the measurement back with
-`linear=true` so the whole programme gets one gain instead of dynamic compression.
-The video stream is copied untouched.
+Two-pass EBU R128: pass one measures the voice with `loudnorm`, pass two feeds the
+measurement back with `linear=true` so the whole programme gets one gain instead
+of dynamic compression. The video stream is copied untouched. A silent voice
+(no measurable loudness) is muxed without normalization: there is nothing to
+bring up and loudnorm cannot work from a -inf measurement.
 """
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +20,9 @@ LOUDNESS_RANGE = 11.0
 OUTPUT_SAMPLE_RATE = "48000"
 AUDIO_BITRATE = "192k"
 
+# Below the EBU R128 absolute gate (-70 LUFS) integrated loudness is undefined.
+SILENCE_FLOOR_LUFS = -70.0
+
 _JSON_BLOCK = re.compile(r"\{[^{}]*\}")
 
 
@@ -27,6 +33,12 @@ class LoudnormMeasurement:
     input_lra: float
     input_thresh: float
     target_offset: float
+
+
+@dataclass(frozen=True)
+class FinalPassResult:
+    measurement: LoudnormMeasurement
+    normalized: bool
 
 
 def parse_loudnorm_json(stderr: str) -> LoudnormMeasurement:
@@ -46,6 +58,11 @@ def parse_loudnorm_json(stderr: str) -> LoudnormMeasurement:
     raise ValueError("ffmpeg loudnorm printed no measurement")
 
 
+def should_normalize(measurement: LoudnormMeasurement) -> bool:
+    """False for silent or near-silent audio, which loudnorm cannot bring to a target."""
+    return math.isfinite(measurement.input_i) and measurement.input_i > SILENCE_FLOOR_LUFS
+
+
 def _loudnorm_target(target_lufs: float) -> str:
     return f"loudnorm=I={target_lufs}:TP={TRUE_PEAK_DB}:LRA={LOUDNESS_RANGE}"
 
@@ -55,20 +72,22 @@ def measure_args(source: Path, target_lufs: float) -> list[str]:
     return ["-i", str(source), "-vn", "-af", f"{target}:print_format=json", "-f", "null", "-"]
 
 
-def apply_loudnorm_args(
-    source: Path, output: Path, measurement: LoudnormMeasurement, target_lufs: float
-) -> list[str]:
-    audio_filter = (
+def loudnorm_filter(measurement: LoudnormMeasurement, target_lufs: float) -> str:
+    return (
         f"{_loudnorm_target(target_lufs)}"
         f":measured_I={measurement.input_i}:measured_TP={measurement.input_tp}"
         f":measured_LRA={measurement.input_lra}:measured_thresh={measurement.input_thresh}"
         f":offset={measurement.target_offset}:linear=true:print_format=summary"
     )
+
+
+def mux_args(video: Path, voice: Path, output: Path, audio_filter: str | None) -> list[str]:
+    """Copy the video of `video`, encode `voice` (optionally filtered) as AAC."""
     return [
-        "-i", str(source),
-        "-map", "0:v:0?", "-map", "0:a:0",
+        "-i", str(video), "-i", str(voice),
+        "-map", "0:v:0", "-map", "1:a:0",
         "-c:v", "copy",
-        "-af", audio_filter,
+        *(["-af", audio_filter] if audio_filter else []),
         # loudnorm resamples to 192 kHz internally; bring it back to a delivery rate.
         "-ar", OUTPUT_SAMPLE_RATE,
         "-c:a", "aac", "-b:a", AUDIO_BITRATE,
@@ -77,20 +96,23 @@ def apply_loudnorm_args(
     ]  # fmt: skip
 
 
-def normalize_loudness(
+def finalize_export(
     ffmpeg: str,
-    source: Path,
+    video: Path,
+    voice: Path,
     output: Path,
     target_lufs: float,
     duration: float | None = None,
     on_progress: FractionCallback | None = None,
-) -> LoudnormMeasurement:
-    """Write `source` to `output` with its audio normalized to `target_lufs`."""
-    measurement = parse_loudnorm_json(run_ffmpeg_stderr(ffmpeg, measure_args(source, target_lufs)))
+) -> FinalPassResult:
+    """Write `output`: `video`'s picture plus `voice` normalized to `target_lufs`."""
+    measurement = parse_loudnorm_json(run_ffmpeg_stderr(ffmpeg, measure_args(voice, target_lufs)))
+    normalized = should_normalize(measurement)
+    audio_filter = loudnorm_filter(measurement, target_lufs) if normalized else None
     run_ffmpeg(
         ffmpeg,
-        apply_loudnorm_args(source, output, measurement, target_lufs),
+        mux_args(video, voice, output, audio_filter),
         duration=duration,
         on_progress=on_progress,
     )
-    return measurement
+    return FinalPassResult(measurement=measurement, normalized=normalized)
