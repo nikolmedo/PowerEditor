@@ -18,3 +18,18 @@ export {
   timelineWords,
   type SubtitleLine,
 } from "./subtitles";
+export {
+  DEFAULT_DUCKING_DB,
+  musicGain,
+  sourceGainsDb,
+  speechIntervals,
+  voiceGains,
+  type Interval,
+} from "./audio/ducking";
+export {
+  clipColorMatrix,
+  gradeMatrix,
+  PRESET_VALUES,
+  resolveGrade,
+  type GradeValues,
+} from "./color";

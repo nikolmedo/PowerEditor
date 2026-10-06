@@ -1,4 +1,4 @@
-"""Render a project end to end: voice rebuild -> video render -> final pass -> export.
+"""Render a project end to end: voice rebuild -> music mix -> video render -> final pass -> export.
 
 Every intermediate lives next to the export (same filesystem) and the export is
 written as `<name>.part.mp4`, then moved into place only once the final pass
@@ -10,13 +10,15 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from powereditor.models import Project, load_project
+from powereditor.models import AudioTrack, Project, load_project
 from powereditor.pipeline.ffmpeg import MediaTools
 from powereditor.pipeline.ingest import probe_media
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress
 from powereditor.render.audio_mix import VoiceGraph, build_voice_filtergraph, render_voice
 from powereditor.render.base import Renderer, RenderSettings, RenderTiming
+from powereditor.render.ducking import project_speech
 from powereditor.render.final_pass import finalize_export
+from powereditor.render.music_mix import render_mix
 from powereditor.render.node_runtime import resolve_render_node
 from powereditor.render.remotion_render import RemotionRenderer
 from powereditor.settings_store import SettingsService
@@ -31,6 +33,10 @@ class ProjectNotFoundError(FileNotFoundError):
 
 class EmptyTimelineError(ValueError):
     code = "empty_timeline"
+
+
+class MusicNotFoundError(FileNotFoundError):
+    code = "music_not_found"
 
 
 @dataclass(frozen=True)
@@ -62,6 +68,17 @@ def _voice_graph(project: Project, media_dir: Path, ffprobe: str, crossfade_ms: 
     return build_voice_filtergraph(project, crossfade_ms, media, silent_sources=silent)
 
 
+def music_track(project: Project, media_dir: Path) -> tuple[AudioTrack, Path] | None:
+    """The project's music track and its file in `media_dir`, if it has one."""
+    track = next((t for t in project.audio_tracks if t.kind == "music" and t.source_path), None)
+    if track is None or track.source_path is None:
+        return None
+    path = media_dir / Path(track.source_path).name
+    if not path.is_file():
+        raise MusicNotFoundError(f"music file {path.name} is not in {media_dir}")
+    return track, path
+
+
 def render_project(
     layout: ProjectLayout,
     service: SettingsService,
@@ -80,6 +97,7 @@ def render_project(
     if frames == 0:
         raise EmptyTimelineError(f"project {layout.project_id!r} has no clips left to render")
     video_seconds = frames / project.fps
+    music = music_track(project, layout.media_dir)
     settings = service.get_effective()
     tools = MediaTools.from_settings(service)
     renderer = renderer or create_renderer(service)
@@ -89,6 +107,7 @@ def render_project(
     partial = exports / f"{name}.part.mp4"
     video = exports / f".{name}.video.mp4"
     voice = exports / f".{name}.voice.wav"
+    mix = exports / f".{name}.mix.wav"
 
     started = time.perf_counter()
     try:
@@ -100,6 +119,19 @@ def render_project(
             voice,
             on_progress=lambda fraction: progress("audio", fraction, "voice"),
         )
+        if music is not None:
+            track, music_file = music
+            render_mix(
+                tools.ffmpeg,
+                voice,
+                music_file,
+                track,
+                project_speech(project),
+                graph.total_samples,
+                mix,
+                graph.sample_rate,
+                on_progress=lambda fraction: progress("audio", fraction, "music"),
+            )
         timing = renderer.render(
             project,
             layout.media_dir,
@@ -114,7 +146,7 @@ def render_project(
         finalize_export(
             tools.ffmpeg,
             video,
-            voice,
+            mix if music is not None else voice,
             partial,
             settings.target_lufs,
             duration=video_seconds,
@@ -122,7 +154,7 @@ def render_project(
         )
         partial.replace(output)
     finally:
-        for temporary in (video, voice, partial):
+        for temporary in (video, voice, mix, partial):
             temporary.unlink(missing_ok=True)
     return RenderResult(
         output=output,

@@ -1,9 +1,9 @@
-import type { Clip, TransitionType } from "@powereditor/composition";
+import { clipFrames, type Clip, type TransitionType } from "@powereditor/composition";
 import { useState } from "react";
 import { applyTransitionPreset, setTransition, TRANSITION_TYPES } from "../edit/operations";
 import { useT } from "../i18n";
 import { useProjectStore } from "../store/project";
-import { Field, SelectField } from "../ui/primitives";
+import { NumberField, SelectField } from "../ui/primitives";
 
 const INSTANT: readonly TransitionType[] = ["cut", "punch_in"];
 
@@ -11,6 +11,7 @@ const INSTANT: readonly TransitionType[] = ["cut", "punch_in"];
 export function TransitionsPanel({ clip }: { clip: Clip | null }) {
   const t = useT();
   const edit = useProjectStore((state) => state.edit);
+  const fps = useProjectStore((state) => state.project?.fps ?? 0);
   const [preset, setPreset] = useState<TransitionType>("fade");
   const options = TRANSITION_TYPES.map((type) => ({ value: type, label: t(`transition.${type}`) }));
   const current = clip?.transitionIn;
@@ -26,25 +27,17 @@ export function TransitionsPanel({ clip }: { clip: Clip | null }) {
             options={options}
             onChange={(type) => edit((p) => setTransition(p, clip.id, type as TransitionType))}
           />
-          <Field label={t("edit.durationFrames")} hint={t("edit.durationFrames.hint")}>
-            {(id, describedBy) => (
-              <input
-                id={id}
-                type="number"
-                min={0}
-                className="mono"
-                aria-describedby={describedBy}
-                disabled={INSTANT.includes(current.type)}
-                value={current.durationFrames}
-                onChange={(event) =>
-                  edit(
-                    (p) => setTransition(p, clip.id, current.type, Number(event.target.value)),
-                    `transition:${clip.id}`,
-                  )
-                }
-              />
-            )}
-          </Field>
+          <NumberField
+            label={t("edit.durationFrames")}
+            hint={t("edit.durationFrames.hint")}
+            value={current.durationFrames}
+            min={0}
+            max={clipFrames(clip, fps)}
+            disabled={INSTANT.includes(current.type)}
+            onChange={(frames) =>
+              edit((p) => setTransition(p, clip.id, current.type, frames), `transition:${clip.id}`)
+            }
+          />
         </>
       ) : (
         <p className="meta">{t("edit.selectCut")}</p>

@@ -11,36 +11,8 @@ import {
 } from "../edit/operations";
 import { useT } from "../i18n";
 import { useProjectStore } from "../store/project";
+import { Slider } from "../ui/primitives";
 import { fileLabel } from "./timelineModel";
-
-interface SliderProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  /** Speed reads as a factor (1.50×), volume as a percentage. */
-  format: (value: number) => string;
-  onChange: (value: number) => void;
-}
-
-function Slider({ label, value, min, max, format, onChange }: SliderProps) {
-  return (
-    <label className="slider">
-      <span className="row spread">
-        {label}
-        <span className="mono">{format(value)}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={0.05}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </label>
-  );
-}
 
 function TrimRow({ clip, edge }: { clip: Clip; edge: Edge }) {
   const t = useT();

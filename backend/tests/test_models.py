@@ -83,7 +83,12 @@ def test_project_round_trips_with_camel_case_keys() -> None:
     assert project.clips[0].color_override.brightness == 0.1
     assert project.clips[0].color_override.contrast is None
     dumped = project.model_dump(by_alias=True, mode="json", exclude_none=True)
-    assert dumped == payload
+    # Fields added later have defaults, so older project files still load.
+    defaults = {
+        "normalizeSources": False,
+        "audioTracks": [track | {"duckingDb": 12.0} for track in payload["audioTracks"]],
+    }
+    assert dumped == payload | defaults
 
 
 def test_models_accept_python_field_names() -> None:

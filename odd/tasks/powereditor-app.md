@@ -56,7 +56,7 @@ Reviewed boundary: `f35332a` (phase-0).
 
 ### Slice 7–9 — `feat/phase-7-editing`, `feat/phase-8-audio-color`, `feat/phase-9-graphics`
 - [x] 7a Editing: change take, trim, remove/restore, transitions, subtitle edit, undo/redo.
-- [ ] 8a Audio & color panels.
+- [x] 8a Audio & color panels.
 - [ ] 9a Overlay templates + auto CTA.
 
 ### Slice 11 — docs, CI/CD, releases, auto-update
@@ -139,5 +139,9 @@ Reviewed boundary: `f35332a` (phase-0).
 - Phase 7 done (delegated): pure edit ops (`web/src/edit/operations.ts`: swapTake, trimClip ±0.1 s, setRemoved, speed/volume, transitions + preset, subtitle edits/style), TS `retimeWords`/`editSubtitleText` mirrored with shared fixture, zundo undo/redo (100 steps, grouped trims, Ctrl+Z/Shift+Z/Y), debounced autosave with ETag + 409 conflict banner, Clip/Transitions/Subtitles panels, timeline keys. Follow-ups from 6b-2 fixed (LoadStep failures, upload tests). Evidence: pytest 482, vitest 142 (parent re-run); Phase 5 sync acceptance re-asserted after UI edits; manual API + Chrome check.
 - Commits 71e3887, a01ac22, f532972, a70a0bb (all approved), 4cd1408 docs. Follow-ups: keepalive 64 KiB limit on page-close save; "keep mine" error handling (useAutosave.ts:42-45); number inputs clamp while typing; overlay drag deferred to Phase 9; swap keeps old decision confidence.
 
+- PR #10 (phase 7) merged after green CI.
+- Phase 8 done (delegated): music track (upload route, looped/trimmed, faded, deterministic ducking envelope driven by subtitle words, `amix`), per-source loudness matching (`Project.normalizeSources`, ±12 dB toward the mean), `AudioTrack.duckingDb`; color grade feColorMatrix per clip (presets natural/warm/cool/bw + 4 sliders, clip overrides), automatic source color match stored in `Source.colorCorrection`; Player preview music mirrors the ducking (shared fixture); Audio and Color panels; Phase 7 follow-ups (NumberField, swap confidence, keep-mine errors). Evidence: pytest 517, vitest 184 (parent re-run); manual render: ducking 12.0 dB, -14.0 LUFS, exact 7.933 s, warm shifts red +0.022 / blue -0.022.
+- Commits 8c35a82, fa148ed, c2b23d1, 9745e4d (approved), e511c63 docs. Follow-ups: model bounds on color fields may reject old projects (models.py:57-72); mix with short voice (music_mix.py:36-44); music file without audio stream message (ingest.py:117-124); music upload race (AudioPanel.tsx:73-86); orphaned replaced music files; no re-match action for pre-phase-8 projects; sfx not mixed; `error.music_not_found` i18n key.
+
 ## Next step
-PR for phase 7, then Phase 8 (audio & color).
+PR for phase 8, then Phase 9 (graphics).

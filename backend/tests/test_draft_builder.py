@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -150,6 +151,18 @@ def test_build_draft_creates_cut_only_timeline() -> None:
     assert [t.kind for t in project.audio_tracks] == ["voice"]
     assert project.overlays == []
     assert project.color_grade.preset == "natural"
+
+
+def test_build_draft_matches_source_colors() -> None:
+    sources = _draft_sources(1080, 1920)
+    sources[0] = replace(
+        sources[0], color_stats=ColorStats(mean_luma=0.5, mean_r=0.6, mean_g=0.5, mean_b=0.4)
+    )
+
+    project = build_draft(sources, padding_s=0.1)
+
+    corrections = [source.color_correction for source in project.sources]
+    assert [c.red_gain if c else None for c in corrections] == [0.9167, 1.1]
 
 
 def test_build_draft_preset_follows_aspect_or_override() -> None:

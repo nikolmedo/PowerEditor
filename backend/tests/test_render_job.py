@@ -6,13 +6,13 @@ import pytest
 from typer.testing import CliRunner
 
 from powereditor import cli
-from powereditor.models import Project, save_project
+from powereditor.models import AudioTrack, Project, load_project, save_project
 from powereditor.paths import AppPaths
 from powereditor.pipeline.ffmpeg import FfmpegError, FractionCallback
 from powereditor.pipeline.runner import ProjectLayout
 from powereditor.render import job as job_module
 from powereditor.render.base import RenderSettings, RenderTiming
-from powereditor.render.job import EmptyTimelineError, render_project
+from powereditor.render.job import EmptyTimelineError, MusicNotFoundError, render_project
 from powereditor.render.remotion_render import RenderError
 from powereditor.settings_store import SettingsService
 from tests.media import FFPROBE, ffmpeg_lavfi, needs_ffmpeg
@@ -113,6 +113,51 @@ def test_render_project_writes_the_normalized_export_and_reports_speed(tmp_path:
     video_s, audio_s = _durations(result.output)
     assert video_s == pytest.approx(160 / 30, abs=1 / 30)
     assert audio_s == pytest.approx(video_s, abs=1 / 30)
+
+
+def _add_music(layout: ProjectLayout, file_name: str = "music.wav") -> None:
+    project = load_project(layout.project_file)
+    music = AudioTrack(
+        id="music", kind="music", source_path=file_name, volume=0.5, ducking_enabled=True
+    )
+    save_project(
+        project.model_copy(update={"audio_tracks": [*project.audio_tracks, music]}),
+        layout.project_file,
+    )
+
+
+def test_render_project_mixes_the_music_track_under_the_voice(tmp_path: Path) -> None:
+    layout = _project_layout(tmp_path)
+    _add_music(layout)
+    ffmpeg_lavfi(
+        layout.media_dir / "music.wav",
+        "-f", "lavfi", "-i", "sine=frequency=220:duration=2",
+    )  # fmt: skip
+    messages: list[str] = []
+
+    result = render_project(
+        layout,
+        SettingsService.default(),
+        renderer=FakeRenderer(),
+        progress=lambda stage, fraction, message: messages.append(message),
+    )
+
+    assert "music" in messages
+    assert sorted(p.name for p in result.output.parent.iterdir()) == ["final.mp4"]
+    video_s, audio_s = _durations(result.output)
+    assert audio_s == pytest.approx(video_s, abs=1 / 30)
+
+
+def test_render_project_refuses_a_missing_music_file_before_rendering(tmp_path: Path) -> None:
+    layout = _project_layout(tmp_path)
+    _add_music(layout, "gone.mp3")
+    renderer = FakeRenderer()
+
+    with pytest.raises(MusicNotFoundError) as excinfo:
+        render_project(layout, SettingsService.default(), renderer=renderer)
+
+    assert excinfo.value.code == "music_not_found"
+    assert renderer.calls == 0
 
 
 def test_render_project_refuses_an_empty_timeline_before_rendering(tmp_path: Path) -> None:

@@ -51,6 +51,7 @@ PIPELINE_ERRORS = (
     RenderError,
     render_job.ProjectNotFoundError,
     render_job.EmptyTimelineError,
+    render_job.MusicNotFoundError,
 )
 
 

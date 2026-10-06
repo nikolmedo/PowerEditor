@@ -8,7 +8,7 @@ import { useState, type KeyboardEvent } from "react";
 import { editSubtitles, setSubtitleStyle } from "../edit/operations";
 import { useT } from "../i18n";
 import { useProjectStore } from "../store/project";
-import { Field, SelectField } from "../ui/primitives";
+import { Field, NumberField, SelectField } from "../ui/primitives";
 
 const PRESETS: readonly SubtitleStyle["preset"][] = [
   "karaoke_highlight",
@@ -90,19 +90,13 @@ export function SubtitlesPanel({ project }: { project: Project }) {
     edit((p) => setSubtitleStyle(p, changes), group);
   const editable = Object.keys(project.subtitles.sourceWords ?? {}).length > 0;
   const number = (key: "fontSize" | "maxWordsPerLine", min: number, max: number) => (
-    <Field label={t(`edit.${key}`)}>
-      {(id) => (
-        <input
-          id={id}
-          type="number"
-          className="mono"
-          min={min}
-          max={max}
-          value={style[key]}
-          onChange={(event) => restyle({ [key]: Number(event.target.value) }, `style:${key}`)}
-        />
-      )}
-    </Field>
+    <NumberField
+      label={t(`edit.${key}`)}
+      value={style[key]}
+      min={min}
+      max={max}
+      onChange={(value) => restyle({ [key]: value }, `style:${key}`)}
+    />
   );
 
   return (

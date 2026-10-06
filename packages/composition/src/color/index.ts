@@ -1,2 +1,11 @@
-// color rendering lands in Phase 5+; the composition currently ignores this part of the project.
-export {};
+export { ColorGraded } from "./ColorGraded";
+export {
+  clipColorMatrix,
+  compose,
+  gradeMatrix,
+  IDENTITY,
+  PRESET_VALUES,
+  resolveGrade,
+  type GradeValues,
+  type Matrix,
+} from "./matrix";

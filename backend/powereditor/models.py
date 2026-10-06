@@ -28,6 +28,14 @@ class ColorStats(CamelModel):
     mean_b: float
 
 
+class ColorCorrection(CamelModel):
+    """Per-channel gains that match a source's color to the project, applied before the grade."""
+
+    red_gain: float = Field(ge=0.5, le=2.0)
+    green_gain: float = Field(ge=0.5, le=2.0)
+    blue_gain: float = Field(ge=0.5, le=2.0)
+
+
 class Source(CamelModel):
     id: str
     original_path: str
@@ -36,6 +44,8 @@ class Source(CamelModel):
     display_color: str
     loudness_lufs: float
     color_stats: ColorStats
+    color_correction: ColorCorrection | None = None
+    """Automatic match to the other sources (None = unchanged), computed when the draft is built."""
 
 
 class TransitionIn(CamelModel):
@@ -44,19 +54,22 @@ class TransitionIn(CamelModel):
 
 
 class ColorGrade(CamelModel):
+    """Brightness, contrast and saturation are factors (1 = unchanged); temperature runs from
+    -1 (cool) to 1 (warm). The preset names the values it last set."""
+
     preset: ColorPreset
-    brightness: float
-    contrast: float
-    saturation: float
-    temperature: float
+    brightness: float = Field(ge=0.0, le=2.0)
+    contrast: float = Field(ge=0.0, le=2.0)
+    saturation: float = Field(ge=0.0, le=2.0)
+    temperature: float = Field(ge=-1.0, le=1.0)
 
 
 class ColorGradeOverride(CamelModel):
     preset: ColorPreset | None = None
-    brightness: float | None = None
-    contrast: float | None = None
-    saturation: float | None = None
-    temperature: float | None = None
+    brightness: float | None = Field(default=None, ge=0.0, le=2.0)
+    contrast: float | None = Field(default=None, ge=0.0, le=2.0)
+    saturation: float | None = Field(default=None, ge=0.0, le=2.0)
+    temperature: float | None = Field(default=None, ge=-1.0, le=1.0)
 
 
 class Clip(CamelModel):
@@ -80,6 +93,8 @@ class AudioTrack(CamelModel):
     source_path: str | None = None
     volume: float = Field(ge=0.0, le=2.0)
     ducking_enabled: bool
+    ducking_db: float = Field(default=12.0, ge=0.0, le=30.0)
+    """How far a ducked track drops under speech."""
 
 
 class TimelineWord(CamelModel):
@@ -134,6 +149,8 @@ class Project(CamelModel):
     subtitles: Subtitles
     overlays: list[Overlay]
     color_grade: ColorGrade
+    normalize_sources: bool = False
+    """Bring every source to the same loudness before mixing (see `render.audio_mix`)."""
 
 
 class Word(CamelModel):

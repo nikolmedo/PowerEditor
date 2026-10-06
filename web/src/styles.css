@@ -801,13 +801,15 @@ textarea {
 
 .side-panel .segmented {
   display: flex;
+  flex-wrap: wrap;
   margin-bottom: 14px;
 }
 
+/* Five panels do not fit one row of a 280 px column in every language: tabs wrap by width. */
 .side-panel .segmented button {
-  flex: 1;
+  flex: 1 1 auto;
   justify-content: center;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .panel-body {
@@ -839,6 +841,58 @@ textarea {
 .slider {
   display: grid;
   gap: 2px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.preset-row button {
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.preset-row button[aria-pressed="true"] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+  border-color: var(--muted);
+}
+
+.track-file {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-match {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.source-match li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.source-match li > .meta {
+  grid-column: 2;
+}
+
+.source-match li > button {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  padding: 0 8px;
 }
 
 .slider input {

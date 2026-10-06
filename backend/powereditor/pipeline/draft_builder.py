@@ -8,6 +8,7 @@ from powereditor.export.subtitles import remap_words
 from powereditor.models import (
     AudioTrack,
     Clip,
+    ColorCorrection,
     ColorGrade,
     ColorStats,
     Project,
@@ -21,6 +22,7 @@ from powereditor.models import (
     Word,
     save_project,
 )
+from powereditor.pipeline.color_match import match_colors
 from powereditor.pipeline.ingest import IngestedSource
 from powereditor.pipeline.runner import ProjectLayout
 from powereditor.pipeline.takes import TakeEntry
@@ -68,7 +70,7 @@ def _preset_for(source: IngestedSource) -> ProjectPreset:
     return "reel_9x16" if portrait else "landscape_16x9"
 
 
-def _source(index: int, draft: DraftSource) -> Source:
+def _source(index: int, draft: DraftSource, correction: ColorCorrection | None) -> Source:
     entry = draft.ingested
     return Source(
         id=entry.source_id,
@@ -78,6 +80,7 @@ def _source(index: int, draft: DraftSource) -> Source:
         display_color=PALETTE[index % len(PALETTE)],
         loudness_lufs=draft.loudness_lufs,
         color_stats=draft.color_stats,
+        color_correction=correction,
     )
 
 
@@ -160,11 +163,15 @@ def build_draft(
         ]
         for draft in sources
     }
+    corrections = match_colors({d.ingested.source_id: d.color_stats for d in sources})
     return Project(
         version=1,
         preset=preset or _preset_for(sources[0].ingested),
         fps=fps,
-        sources=[_source(index, draft) for index, draft in enumerate(sources)],
+        sources=[
+            _source(index, draft, corrections[draft.ingested.source_id])
+            for index, draft in enumerate(sources)
+        ],
         clips=clips,
         audio_tracks=[AudioTrack(id="voice", kind="voice", volume=1.0, ducking_enabled=False)],
         subtitles=Subtitles(
