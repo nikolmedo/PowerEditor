@@ -8,9 +8,11 @@ from numpy.typing import NDArray
 
 from powereditor.models import Project
 from powereditor.pipeline.ffmpeg import run_capture, run_capture_bytes
+from powereditor.render import audio_mix
 from powereditor.render.audio_mix import (
     VoiceSegment,
     atempo_chain,
+    batch_graph,
     build_voice_filtergraph,
     render_voice,
 )
@@ -237,3 +239,37 @@ def test_rendered_voice_length_matches_the_timeline_with_speed_and_silence(
     assert int(stream["duration_ts"]) == graph.total_samples == (18 + 33 + 21) * 1600
     tail = _decode_mono(voice)[-(21 * 1600) :]
     assert int(np.abs(tail).max()) == 0
+
+
+def test_batch_graph_renumbers_inputs_and_keeps_silence_without_inputs() -> None:
+    project = _project([("c1", "s1", 0.0, 1.0, 1.0), ("c2", "mute", 0.0, 1.0, 1.0)] * 2)
+    media = {"s1": Path("s1.wav"), "mute": Path("mute.mp4")}
+    graph = build_voice_filtergraph(project, 15, media, silent_sources={"mute"})
+
+    inputs, filter_complex = batch_graph(graph, 1, 4)
+
+    assert inputs == [Path("s1.wav")]
+    assert filter_complex.startswith("anullsrc=")
+    assert "[0:a:0]" in filter_complex and "[1:a:0]" not in filter_complex
+    assert filter_complex.endswith("[a0][a1][a2]concat=n=3:v=0:a=1[voice]")
+
+
+@pytest.mark.ffmpeg
+@needs_ffmpeg
+def test_many_clips_render_in_batches_with_exact_length(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert FFMPEG is not None and FFPROBE is not None
+    monkeypatch.setattr(audio_mix, "BATCH_CLIPS", 3)
+    tone = _tone(tmp_path / "a b's.wav", "0.5*sin(2*PI*330*t)")
+    project = _project([(f"c{i}", "a", 0.1 * i, 0.1 * i + 0.3, 1.0) for i in range(8)])
+    graph = build_voice_filtergraph(project, 15, {"a": tone})
+
+    voice = render_voice(FFMPEG, graph, tmp_path / "voice.wav")
+
+    probe = run_capture(
+        [FFPROBE, "-v", "error", "-count_packets", "-show_entries",
+         "stream=duration_ts", "-of", "json", str(voice)]
+    )  # fmt: skip
+    assert int(json.loads(probe)["streams"][0]["duration_ts"]) == graph.total_samples
+    assert not list(tmp_path.glob(".voice-*"))
