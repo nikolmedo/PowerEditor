@@ -555,11 +555,22 @@ The deterministic heuristic engine stays the default and the always-available fa
 - **Measured** (landscape test project, 238 frames): title, lower third (above the bottom subtitles), CTA, progress bar and logo added through the API, rendered with `powereditor render`; every graphic shows at its time in the extracted frames and the export stays 238 frames / 7.933 s.
 - **Limits:** centered subtitles reserve no band, so a centered graphic can sit behind them (subtitles stay on top); text does not shrink to fit, so very long titles wrap; the Player preview of a drag updates on release; overlays keep absolute frames, so trimming or removing clips before one (an automatic CTA included) leaves it where it was.
 
+### Phase 9b: More looks (inspired by HyperFrames)
+
+Design ideas from [HyperFrames](https://github.com/heygen-com/hyperframes) (Apache-2.0), ported to Remotion components as designs, not copied code. Any copied file keeps its Apache-2.0 header, is marked as modified and is listed in `THIRD_PARTY_NOTICES`.
+
+- Overlay variants from its registry: lower thirds (clean bar, kicker + name, mask reveal, soft pill), CTA lockup and close, count-up number, progress ring, headline slam.
+- Subtitle presets: pill karaoke, kinetic slam, emoji pop, editorial emphasis (one emphasized word per line, never every line).
+- Export quality presets: draft, standard, high (resolution, CRF and render concurrency).
+- RAM-aware render concurrency: workers = min(CPU cores - 2, 50% of free RAM / per-browser budget, frames-based cap), passed to Remotion's `concurrency`.
+
 ### Phase 10: Packaging
 
 - Electron shell with the Python backend as a PyInstaller sidecar and an x64 Node for Remotion.
 - First-run onboarding: ffmpeg (LGPL build or download), Whisper model download, providers.
 - Windows installer.
+- Clear error messages when the render browser times out or runs out of memory, with a per-render memory ceiling.
+- A project `LICENSE` and a `THIRD_PARTY_NOTICES` file before the first public build.
 - **Acceptance:** a user without Python, Node or ffmpeg installs the app, finishes onboarding and exports a video.
 
 ### Phase 11: Docs, CI/CD, releases and auto-update
@@ -570,6 +581,14 @@ The deterministic heuristic engine stays the default and the always-available fa
 - **Versioning:** semantic versioning with a single version source that feeds the backend package, the npm packages and the installer.
 - **Auto-update:** the app checks the GitHub Releases "latest release" API, notifies the user of a newer version, and offers download and install.
 - **Acceptance:** pushing a tag produces a GitHub Release with an installer; an older installed build detects it and updates.
+
+### Backlog (after v1)
+
+- **Render speed:** render only the graphics and subtitle layer as transparent video and composite it over the source clips with ffmpeg, instead of decoding every video frame in the browser (the pattern behind HyperFrames' `videoFrameInjector`). Expected to be the largest speed-up on slow machines.
+- **Transcription:** optional NVIDIA Parakeet with Whisper as the fallback, plus language detection.
+- **Audio:** "carve" ducking that removes only the voice's frequency bands from the music instead of lowering it whole.
+- **Transitions:** WebGL shader transitions (need overlapping clips, so the duration contract has to change first).
+- **Captions behind the speaker:** need person segmentation; single-subject only.
 
 ## Risks and items to verify
 
