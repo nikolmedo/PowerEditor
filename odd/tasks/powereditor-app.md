@@ -174,5 +174,12 @@ Reviewed boundary: `f35332a` (phase-0).
 - License slice done (delegated): LICENSE (byte-exact PolyForm text), THIRD_PARTY_NOTICES.md, package metadata, About section + footer in the web app, Electron About panel, `--version`, NSIS license page (BOM+CRLF generated file), README banner/License/footer.
 - **Licensing findings (open, need a decision before any public build):** BtbN LGPL FFmpeg is LGPL-3.0-or-later (manifest fixed); Remotion's compositor ships a GPL FFmpeg (`--enable-gpl --enable-libx264`) inside the installer; PyAV 19 wheel bundles GPL libx264/libx265 DLLs loaded in-process by the frozen backend; OpenH264 built from source by BtbN is not covered by Cisco's patent license.
 
+- PR #16 (10b + license) merged.
+- 11a done: PyAV excluded from the frozen engine (stub `av` via runtime hook; build fails on GPL DLLs), h264_mf preferred over OpenH264, Remotion compositor GPL notice + GPL-2.0 text + 3-year written source offer (wording pending user confirmation), desktop start-timeout/exit handling, onboarding stall/skip fixes, frozen version fallback, MAX_PATH browser relocation. Commits a1514d2..e5242e8 (approved; accumulated 11a range also approved).
+- 11b done: `VERSION` + `scripts/version.py` (CI check), `release.yml` (v* tag → tests, installer, SHA256SUMS, notes, **draft** release), `/api/updates` (GitHub latest release, 6 h cache, setting `checkForUpdates`), update banner + About status, desktop download/verify/install flow via typed preload IPC. Commits e63e9d3..af33c22 (approved).
+- 11c done: review hardening — restart ordering, stall timer, redirect allowlist via `net.request` manual redirects (R1: blind redirects let a redirect target control both installer and SHA256SUMS), download overall/idle timeouts, installer spawn race, idempotent draft release, semver previous tag, forced update check at most once a minute, banner failure state, atomic version set.
+- [x] 11b Release workflow, single version source, update check.
+- Pending user decisions before first public release: Remotion compositor GPL FFmpeg aggregation; written source offer wording; fdk-aac-free claim unverified; unsigned installer (SmartScreen); manual test of the update download against real GitHub redirects on a packaged build.
+
 ## Next step
-PR for 10b + license, then Phase 11 (release workflow as draft releases until licensing findings are resolved, update check).
+PR for Phase 11, merge after green CI. All PLAN phases then complete; remaining items are the user's decisions above and the backlog.
