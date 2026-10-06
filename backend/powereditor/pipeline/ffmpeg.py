@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import cache
 from typing import IO
 
+from powereditor.process import tracked
 from powereditor.settings_store import SettingsService
 
 FractionCallback = Callable[[float], None]
@@ -63,14 +64,17 @@ def run_ffmpeg(
     command = [ffmpeg, "-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-y"]
     command += ["-progress", "pipe:1", *args]
     errors: list[str] = []
-    with subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    ) as process:
+    with (
+        subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        ) as process,
+        tracked(process),
+    ):
         assert process.stdout is not None and process.stderr is not None
         drainer = threading.Thread(target=_drain, args=(process.stderr, errors), daemon=True)
         drainer.start()

@@ -19,7 +19,7 @@ from typing import IO
 
 from powereditor.models import Project
 from powereditor.pipeline.ffmpeg import FractionCallback
-from powereditor.process import kill_tree
+from powereditor.process import kill_tree, tracked
 from powereditor.render.base import RenderSettings, RenderTiming
 from powereditor.render.media_server import serve_directory
 from powereditor.timeline import timeline_layout
@@ -131,15 +131,18 @@ class RemotionRenderer:
                     "--props", str(props_file),
                     "--output", str(output),
                 ]  # fmt: skip
-                with subprocess.Popen(
-                    command,
-                    cwd=self.composition_dir,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                ) as process:
+                with (
+                    subprocess.Popen(
+                        command,
+                        cwd=self.composition_dir,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                    ) as process,
+                    tracked(process),
+                ):
                     assert process.stdout is not None and process.stderr is not None
                     drainer = threading.Thread(
                         target=_drain, args=(process.stderr, errors), daemon=True
