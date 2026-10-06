@@ -1,7 +1,9 @@
 import json
 import logging
+import threading
 from collections.abc import Callable, Mapping
 from functools import cache
+from pathlib import Path
 from typing import Any, Literal, Protocol, get_args
 
 import keyring
@@ -24,6 +26,15 @@ SECRET_NAMES: tuple[SecretName, ...] = get_args(SecretName)
 SecretSource = Literal["env", "keyring"]
 
 _ENV_FIELD_TO_SETTING = {"whisper_language": "language"}
+
+_FILE_LOCKS: dict[str, threading.Lock] = {}
+_FILE_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    key = str(path.resolve())
+    with _FILE_LOCKS_GUARD:
+        return _FILE_LOCKS.setdefault(key, threading.Lock())
 
 
 class UserSettings(CamelModel):
@@ -147,21 +158,29 @@ class SettingsService:
         changes = validated_partial.model_dump(
             by_alias=True, mode="json", include=set(validated_partial.model_fields_set)
         )
-        stored = {**self._normalized_file_overrides(), **changes}
-        effective = self._merge(stored)
-        write_text_atomic(
-            self.paths.settings_file, json.dumps(stored, indent=2, sort_keys=True) + "\n"
-        )
+        with _lock_for(self.paths.settings_file):
+            stored = {**self._normalized_file_overrides(), **changes}
+            effective = self._merge(stored)
+            write_text_atomic(
+                self.paths.settings_file, json.dumps(stored, indent=2, sort_keys=True) + "\n"
+            )
         return effective
 
+    def cuda_available(self) -> bool:
+        return self._cuda_available()
+
     def _normalized_file_overrides(self) -> dict[str, Any]:
-        raw = self._file_overrides()
-        try:
-            parsed = UserSettings.model_validate(raw)
-        except ValidationError as exc:
-            logger.warning("Ignoring settings file with %d invalid values", exc.error_count())
-            return {}
-        return parsed.model_dump(by_alias=True, mode="json", include=set(parsed.model_fields_set))
+        normalized: dict[str, Any] = {}
+        for key, value in self._file_overrides().items():
+            try:
+                parsed = UserSettings.model_validate({key: value})
+            except ValidationError:
+                logger.warning("Ignoring invalid settings file entry %r", key)
+                continue
+            normalized.update(
+                parsed.model_dump(by_alias=True, mode="json", include=set(parsed.model_fields_set))
+            )
+        return normalized
 
     def resolved_whisper_model(self) -> str:
         configured = self.get_effective().whisper_model

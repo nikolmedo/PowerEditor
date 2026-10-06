@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 from pathlib import Path
 
 import keyring.errors
@@ -204,3 +206,43 @@ def test_unavailable_keyring_reads_as_unset(tmp_path: Path) -> None:
 
     assert service.get_secret("openai_api_key") is None
     assert not service.has_secret("openai_api_key")
+
+
+def test_update_keeps_valid_overrides_when_file_has_bad_keys(tmp_path: Path) -> None:
+    (tmp_path / "settings.json").write_text(
+        json.dumps({"silencePaddingMs": 300, "notASetting": 1, "jevMinConfidence": 7}),
+        encoding="utf-8",
+    )
+    service = _service(tmp_path)
+
+    assert service.get_effective().silence_padding_ms == 300
+
+    service.update({"whisperDevice": "cpu"})
+
+    stored = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    assert stored == {"silencePaddingMs": 300, "whisperDevice": "cpu"}
+
+
+def test_concurrent_updates_do_not_lose_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = _service(tmp_path)
+    original = SettingsService._file_overrides
+
+    def slow_read(self: SettingsService) -> dict[str, object]:
+        data = original(self)
+        time.sleep(0.05)
+        return data
+
+    monkeypatch.setattr(SettingsService, "_file_overrides", slow_read)
+    threads = [
+        threading.Thread(target=service.update, args=({"silencePaddingMs": 250},)),
+        threading.Thread(target=service.update, args=({"audioCrossfadeMs": 30},)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    stored = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    assert stored == {"audioCrossfadeMs": 30, "silencePaddingMs": 250}
