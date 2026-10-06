@@ -99,6 +99,25 @@ describe("watchJob", () => {
     expect([events[0]?.status, events[0]?.error?.code]).toEqual(["failed", "job_not_found"]);
   });
 
+  it("polls when the socket goes silent without ever closing", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", FakeSocket);
+    const fetchJob = vi
+      .fn()
+      .mockResolvedValue(job({ status: "succeeded", fraction: 1, result: { file: "a.mp4" } }));
+    const events: JobEvent[] = [];
+    watchJob("j1", (event) => events.push(event), { pollMs: 100, stallMs: 1000, fetchJob });
+
+    FakeSocket.last?.emit({ jobId: "j1", status: "running", stage: "render", fraction: 0.2 });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(fetchJob).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(events.map((event) => event.status)).toEqual(["running", "succeeded"]);
+    expect(FakeSocket.last?.closed).toBe(true);
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+  });
+
   it("stops without polling once the caller stops listening", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", FakeSocket);

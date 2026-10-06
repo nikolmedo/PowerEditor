@@ -83,11 +83,6 @@ function RuntimesStep({ status, reload, next }: StepProps) {
     );
     await reload();
   };
-  const skip = () => {
-    skipOnboarding();
-    next();
-  };
-
   return (
     <>
       <h2>{t("onboarding.runtimes.title")}</h2>
@@ -140,7 +135,7 @@ function RuntimesStep({ status, reload, next }: StepProps) {
             {t("onboarding.runtimes.installAll")}
           </button>
           {total > 0 && <span className="mono meta">{formatMegabytes(total)}</span>}
-          <button type="button" className="quiet" disabled={!!runner.label} onClick={skip}>
+          <button type="button" className="quiet" disabled={!!runner.label} onClick={next}>
             {t("onboarding.skipStep")}
           </button>
         </div>

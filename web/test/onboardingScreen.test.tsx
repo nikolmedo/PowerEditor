@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../src/api/client";
 import { api } from "../src/api/endpoints";
 import { watchJob } from "../src/api/jobs";
 import type { JobEvent, JobInfo, RuntimeStatus, SetupStatus } from "../src/api/types";
@@ -125,6 +126,46 @@ describe("OnboardingScreen", () => {
 
     expect(localStorage.getItem("powereditor.onboardingSkipped")).toBe("1");
     expect(useAppStore.getState().path).toBe("/");
+  });
+
+  it("skipping one step moves on without skipping the whole setup", async () => {
+    vi.mocked(api.setup).mockResolvedValue(status(false));
+    render(<OnboardingScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: t("onboarding.skipStep") }));
+
+    expect(screen.getByRole("heading", { name: t("onboarding.transcription.title") })).toBeTruthy();
+    expect(localStorage.getItem("powereditor.onboardingSkipped")).toBeNull();
+  });
+
+  it("shows why the OpenAI key could not be saved", async () => {
+    vi.mocked(api.setup).mockResolvedValue(status(true));
+    vi.mocked(api.storeOpenAiKey).mockRejectedValue(
+      new ApiError(503, "secret_store_unavailable", "keyring locked"),
+    );
+    render(<OnboardingScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: t("onboarding.next") }));
+    await userEvent.type(screen.getByLabelText(t("settings.openaiKey")), "sk-test");
+    await userEvent.click(screen.getByRole("button", { name: t("secret.save") }));
+
+    expect(await screen.findByText(/keyring locked/)).toBeTruthy();
+    expect(api.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("shows why the transcriber could not switch after the key was saved", async () => {
+    vi.mocked(api.setup).mockResolvedValue(status(true));
+    vi.mocked(api.storeOpenAiKey).mockResolvedValue({ set: true, source: "keyring" });
+    vi.mocked(api.updateSettings).mockRejectedValue(
+      new ApiError(500, null, "settings write failed"),
+    );
+    render(<OnboardingScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: t("onboarding.next") }));
+    await userEvent.type(screen.getByLabelText(t("settings.openaiKey")), "sk-test");
+    await userEvent.click(screen.getByRole("button", { name: t("secret.save") }));
+
+    expect(await screen.findByText(/settings write failed/)).toBeTruthy();
   });
 
   it("an OpenAI key switches the transcriber to OpenAI", async () => {

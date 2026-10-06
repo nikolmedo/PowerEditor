@@ -218,6 +218,7 @@
   "error.ffmpeg_failed": "FFmpeg falló al procesar un archivo.",
   "error.empty_timeline": "No quedó ningún clip para exportar.",
   "error.render_failed": "El render falló.",
+  "error.path_too_long": "La carpeta de datos es demasiado profunda para el navegador de render en Windows. Elige una carpeta de datos más corta.",
   "error.render_timeout": "El render tardó demasiado y se detuvo.",
   "error.music_not_found": "Falta el archivo de música del proyecto. Vuelve a cargarlo en Audio.",
   "error.overlay_asset_not_found": "Falta una imagen de un gráfico. Elígela de nuevo en Gráficos.",
