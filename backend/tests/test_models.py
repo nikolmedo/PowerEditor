@@ -51,6 +51,7 @@ def _project_payload() -> dict[str, Any]:
                 "maxWordsPerLine": 3,
             },
             "words": [{"text": "hola", "startFrame": 0, "endFrame": 10, "clipId": "c1"}],
+            "sourceWords": {"s1": [{"text": "hola", "start": 0.0, "end": 0.33}]},
         },
         "overlays": [
             {

@@ -14,6 +14,7 @@ from powereditor.models import (
     ProjectPreset,
     Segment,
     Source,
+    SourceWord,
     Subtitles,
     SubtitleStyle,
     TransitionIn,
@@ -34,7 +35,7 @@ DEFAULT_SUBTITLE_STYLE = SubtitleStyle(
     highlight_color="#FFD400",
     max_words_per_line=4,
 )
-# Default length of non-cut transitions until Phase 5 sets them per type.
+# Length of fades and slides; cuts and punch-ins are instant.
 TRANSITION_SECONDS = 0.3
 NEUTRAL_GRADE = ColorGrade(
     preset="natural", brightness=1.0, contrast=1.0, saturation=1.0, temperature=0.0
@@ -109,7 +110,8 @@ def _apply_entries(clips: Mapping[str, Clip], entries: Sequence[TakeEntry], fps:
         clip = clips.get(entry.segment_id)
         if clip is None:
             continue
-        duration = 0 if entry.transition == "cut" else round(fps * TRANSITION_SECONDS)
+        instant = entry.transition in ("cut", "punch_in")
+        duration = 0 if instant else round(fps * TRANSITION_SECONDS)
         placed.append(
             clip.model_copy(
                 update={
@@ -152,7 +154,12 @@ def build_draft(
         clips = list(by_segment.values())
     else:
         clips = _apply_entries(by_segment, entries, fps)
-    words = {draft.ingested.source_id: draft.words for draft in sources}
+    source_words = {
+        draft.ingested.source_id: [
+            SourceWord(text=word.text, start=word.start, end=word.end) for word in draft.words
+        ]
+        for draft in sources
+    }
     return Project(
         version=1,
         preset=preset or _preset_for(sources[0].ingested),
@@ -160,7 +167,11 @@ def build_draft(
         sources=[_source(index, draft) for index, draft in enumerate(sources)],
         clips=clips,
         audio_tracks=[AudioTrack(id="voice", kind="voice", volume=1.0, ducking_enabled=False)],
-        subtitles=Subtitles(style=DEFAULT_SUBTITLE_STYLE, words=remap_words(clips, words, fps)),
+        subtitles=Subtitles(
+            style=DEFAULT_SUBTITLE_STYLE,
+            words=remap_words(clips, source_words, fps),
+            source_words=source_words,
+        ),
         overlays=[],
         color_grade=NEUTRAL_GRADE,
     )

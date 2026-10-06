@@ -41,4 +41,9 @@ class DecisionEngine(Protocol):
 
     def classify_segment(self, segment: Segment) -> SegmentFlags: ...
 
-    def transition_between(self, prev: Segment, next: Segment) -> TransitionDecision: ...
+    def transition_between(
+        self, prev: Segment, next: Segment, pause_s: float | None = None
+    ) -> TransitionDecision:
+        """Topic change between consecutive kept segments; `pause_s` is the silence recorded
+        right before `next` (None when unknown, for example across source files)."""
+        ...

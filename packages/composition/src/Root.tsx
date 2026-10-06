@@ -9,6 +9,7 @@ import type { Project } from "./types";
 const defaultProps: ProjectVideoProps = {
   project: fixture.project as Project,
   audioCrossfadeMs: 15,
+  punchInScale: 1.1,
   mediaBaseUrl: "http://127.0.0.1:0",
 };
 

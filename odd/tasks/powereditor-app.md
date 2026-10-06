@@ -49,7 +49,7 @@ Reviewed boundary: `f35332a` (phase-0).
 - [x] 4b LLM decision engine (structured JSON + Pydantic, double-order choice, confidence gating, token/cost tracking) wired into take/segment/transition decisions.
 
 ### Slice 5 — `feat/phase-5-subtitles`
-- [ ] 5a Word remap to timeline, subtitle presets, topic transitions, SRT/ASS + OTIO export.
+- [x] 5a Word remap to timeline, subtitle presets, topic transitions, SRT/ASS + OTIO export.
 
 ### Slice 6 — `feat/phase-6-ui`
 - [ ] 6a Web app: settings page (keys + test connection), first-run setup check, Load/Review(read-only)/Export steps, jobs WebSocket, media range serving.
@@ -121,5 +121,9 @@ Reviewed boundary: `f35332a` (phase-0).
 - 4b done (delegated): 4a follow-ups (base URL trust per kind + `customBaseUrlConfirmed`, CLI basename check, auth regex, anthropic bad output, CLI kill/close, no POST ReadError retry, delete under lock); `model_min_confidence` (legacy `jev_min_confidence` accepted); typed questions (Noul/Choice/Score) over any provider with strict schemas; `ModelDecisionEngine` routing per feature with heuristic fallback, double-order best-take, confidence gating, usage report `cache/model_usage.json`; Jev provider (`typesafe`, HTTP `POST /v1/systemone`); CLI `providers list`, `features`; README terms section. Evidence: pytest 369 passed (parent re-run); eval-takes unchanged.
 - Commits `139c9a9` (hardening, high, 4 lenses approved), `5c5734f` (engine, medium, approved). Follow-ups: Jev score div-by-zero (jev.py:119), bad-output retry not memoized (model_engine.py:272), base URL check only at write time for stored configs, `.env.example` needs `MODEL_MIN_CONFIDENCE`/`FFMPEG_PATH`/`FFPROBE_PATH` (file not readable by agent), per-provider benchmark pending real footage.
 
+- PR #7 (phase 4) merged; it merged before CI registered (gh race) but main CI was green afterwards; now merging via a helper that waits for checks.
+- Phase 5 done (delegated): follow-ups (Jev single-level score, bad-output memo, stored base URL rejected at build); `Subtitles.sourceWords` + `TimelineWord.wordIndex` schema change; `rebuild_subtitles`, `retime_words`, `edit_subtitle_text`, `group_lines` with TS mirror and shared fixture; 4 presets in Inter (bundled, OFL) with reel safe areas; heuristic topic transitions (new source → slide, long pause → fade) alternating cut/punch_in, all non-overlapping; SRT/ASS (karaoke `\k`), optional `nle` extra for OTIO/FCPXML (speed dropped in FCPXML). Acceptance: after speed 1.5 + take swap, word starts within half a frame of audio (−2..−15 ms); render 0.10–0.19x realtime. Evidence: pytest 397 passed, vitest 29 passed (parent re-run).
+- Commits `7cb75ea` deps (not due), `ec45214` backend (approved, no findings), `fae43e7` composition (approved; follow-up: font load not awaited in font.ts).
+
 ## Next step
-PR for phase 4, then Phase 5 (subtitles + transitions).
+Phase 6 UI.

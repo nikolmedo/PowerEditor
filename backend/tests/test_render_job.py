@@ -107,7 +107,7 @@ def test_render_project_writes_the_normalized_export_and_reports_speed(tmp_path:
     assert result.video_seconds == pytest.approx(160 / 30)
     assert result.realtime_factor == pytest.approx(result.video_seconds / result.wall_s)
     assert result.timing == RenderTiming(setup_s=0.5, render_s=1.0)
-    assert renderer.settings == RenderSettings(audio_crossfade_ms=15)
+    assert renderer.settings == RenderSettings(audio_crossfade_ms=15, punch_in_scale=1.1)
     assert fractions[-1] == 1.0
     assert list(dict.fromkeys(stages)) == ["audio", "render", "final-pass"]
     video_s, audio_s = _durations(result.output)

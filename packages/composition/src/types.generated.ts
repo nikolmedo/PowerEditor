@@ -114,8 +114,22 @@ export interface ColorStats {
  * via the `definition` "Subtitles".
  */
 export interface Subtitles {
+  sourceWords?: {
+    [k: string]: SourceWord[];
+  };
   style: SubtitleStyle;
   words: TimelineWord[];
+}
+/**
+ * A transcribed word in source seconds; its text may have been edited.
+ *
+ * This interface was referenced by `Project`'s JSON-Schema
+ * via the `definition` "SourceWord".
+ */
+export interface SourceWord {
+  end: number;
+  start: number;
+  text: string;
 }
 /**
  * This interface was referenced by `Project`'s JSON-Schema
@@ -137,4 +151,5 @@ export interface TimelineWord {
   endFrame: number;
   startFrame: number;
   text: string;
+  wordIndex?: number | null;
 }

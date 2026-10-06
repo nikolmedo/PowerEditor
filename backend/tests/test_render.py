@@ -306,6 +306,7 @@ def test_remotion_renderer_forwards_clamped_progress_and_passes_props(
     assert fractions == [0.25, 0.5, 1.0]
     props = json.loads(output.read_text(encoding="utf-8"))
     assert props["audioCrossfadeMs"] == 15
+    assert props["punchInScale"] == 1.1
     assert props["mediaBaseUrl"].startswith("http://127.0.0.1:")
     assert props["project"]["clips"][0]["id"] == "c1"
     assert sorted(p.name for p in output.parent.iterdir()) == ["video.mp4"]

@@ -142,8 +142,9 @@ PowerEditor/
         media_server.py      # loopback media server for the renderer
         final_pass.py        # mux + two-pass loudnorm
       export/
-        subtitles.py         # word remap to the timeline; SRT/ASS planned
-        otio_export.py       # planned
+        subtitles.py         # word remap, rebuilds, text edits, line grouping
+        subtitle_files.py    # SRT/ASS writers
+        otio_export.py       # OTIO → FCPXML (optional `nle` extra)
     tests/
   packages/
     composition/             # Remotion composition (shared)
@@ -231,12 +232,14 @@ Each stage: input → output JSON in `<project>/cache/<stage>.json`. The cache k
 - Never re-transcribe the final video: remap word timestamps from source time to timeline time using the clips (including `speed`).
 - Editing text in the UI keeps each word's timing.
 - Optional extra export: SRT/ASS.
+- Source words are stored per source in `project.json` (`subtitles.sourceWords`); timeline words are rebuilt from them after every edit, and text edits are applied to them.
 
 ### Default transitions
 
 - Between phrases of the same block: `punch_in` (alternate scale 1.0 / `PUNCH_IN_SCALE`).
 - Between blocks with a topic change: `fade` or `slide`.
 - Audio crossfade of `AUDIO_CROSSFADE_MS` at every cut.
+- Transitions never overlap clips: `fade` rises from black and `slide` enters over the start of the incoming clip, so the timeline length and the rebuilt audio are unchanged.
 
 ## Transcription providers
 

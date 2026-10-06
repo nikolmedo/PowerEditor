@@ -4,7 +4,9 @@ import { AbsoluteFill, Series } from "remotion";
 import { ClipVideo } from "./clips/ClipVideo";
 import { edgeFadeFrames } from "./clips/edgeFade";
 import { MediaResolverContext, mezzanineResolver } from "./clips/media";
+import { Subtitles } from "./subtitles/Subtitles";
 import { timelineLayout } from "./timeline";
+import { ClipTransition } from "./transitions/ClipTransition";
 import type { Clip, Project, Source } from "./types";
 
 /** Input props of the `ProjectVideo` composition (must stay JSON-serializable). */
@@ -16,6 +18,8 @@ export type ProjectVideoProps = {
    * renders are muted and the backend rebuilds the voice sample-accurately with ffmpeg.
    */
   audioCrossfadeMs: number;
+  /** Zoom of `punch_in` clips (UserSettings.punchInScale). */
+  punchInScale: number;
   /** Where render-time media is served; each source loads `${mediaBaseUrl}/<mezzanine file name>`. */
   mediaBaseUrl: string;
 };
@@ -23,6 +27,7 @@ export type ProjectVideoProps = {
 export const ProjectVideo: React.FC<ProjectVideoProps> = ({
   project,
   audioCrossfadeMs,
+  punchInScale,
   mediaBaseUrl,
 }) => {
   const resolve = useContext(MediaResolverContext) ?? mezzanineResolver(mediaBaseUrl);
@@ -45,17 +50,20 @@ export const ProjectVideo: React.FC<ProjectVideoProps> = ({
           }
           return (
             <Series.Sequence key={clip.id} durationInFrames={placement.durationInFrames}>
-              <ClipVideo
-                src={resolve(source)}
-                clip={clip}
-                sourceStartFrame={placement.sourceStartFrame}
-                durationInFrames={placement.durationInFrames}
-                fadeFrames={fadeFrames}
-              />
+              <ClipTransition transition={clip.transitionIn} punchInScale={punchInScale}>
+                <ClipVideo
+                  src={resolve(source)}
+                  clip={clip}
+                  sourceStartFrame={placement.sourceStartFrame}
+                  durationInFrames={placement.durationInFrames}
+                  fadeFrames={fadeFrames}
+                />
+              </ClipTransition>
             </Series.Sequence>
           );
         })}
       </Series>
+      <Subtitles project={project} />
     </AbsoluteFill>
   );
 };

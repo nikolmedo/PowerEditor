@@ -121,3 +121,17 @@ def test_jev_overload_is_retried() -> None:
 
     assert [m.id for m in models] == ["jev-1.13.0"]
     assert sleeps == [1.0]
+
+
+def test_single_level_score_maps_to_the_middle_of_the_scale() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        answer = {"type": "score", "score": 0, "confidence": 0.9, "legend": {}}
+        return httpx.Response(200, json={"answers": {"fluency": answer}})
+
+    # Validation forbids a one-level scale; model_construct reaches the adapter anyway.
+    question = ScoreQuestion.model_construct(type="score", instructions="Fluent?", levels=["ok"])
+    result = ask_questions(
+        _jev(handler), "jev-latest", {"segment_text": "hola"}, {"fluency": question}
+    )
+
+    assert result.answers["fluency"] == ScoreAnswer(value=0.5, confidence=0.9)

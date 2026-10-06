@@ -14,6 +14,7 @@ from powereditor.models import (
     TakeCluster,
     TakeFeatures,
     TransitionDecision,
+    TransitionType,
 )
 from powereditor.pipeline.take_text import looks_cut_off, tokens
 from powereditor.settings_store import TakeWeights
@@ -26,6 +27,12 @@ CONFIDENCE_MARGIN = 1.5
 TARGET_SPEECH_RATE_WPS = 2.7
 MAX_COUNTED_DEFECTS = 5
 REMARK_MAX_WORDS = 6
+# Topic change between consecutive kept segments: a long pause before the next one, or a
+# shorter pause together with a lexical shift (no shared content word).
+TOPIC_PAUSE_S = 2.0
+SHIFT_PAUSE_S = 1.0
+SHIFT_MIN_CONTENT_WORDS = 6
+CONTENT_WORD_MIN_CHARS = 4
 
 # Matched against accent-free, lowercase, punctuation-free text.
 _REMARK = re.compile(
@@ -37,6 +44,22 @@ _CTA = re.compile(
     r"\b(suscribi\w*|suscribe\w*|dale like|deja\w* tu like|link en la bio|seguime|sigueme"
     r"|activa la campanita|subscribe|follow (me|us)|link in (the )?bio|hit the bell)\b"
 )
+
+
+def topic_transition(prev: Segment, next: Segment) -> TransitionType:
+    """Transition into a new block: a slide when the footage changes file, else a fade."""
+    return "slide" if prev.source_id != next.source_id else "fade"
+
+
+def _content_words(text: str) -> set[str]:
+    return {word for word in tokens(text) if len(word) >= CONTENT_WORD_MIN_CHARS}
+
+
+def _lexical_shift(prev: Segment, next: Segment) -> bool:
+    """Both segments say enough and share no content word."""
+    first, second = _content_words(prev.text), _content_words(next.text)
+    long_enough = min(len(first), len(second)) >= SHIFT_MIN_CONTENT_WORDS
+    return long_enough and not first & second
 
 
 def _rate_score(rate_wps: float) -> float:
@@ -122,6 +145,16 @@ class HeuristicEngine:
             confidence=confidence,
         )
 
-    def transition_between(self, prev: Segment, next: Segment) -> TransitionDecision:
-        # Topic-change detection lands with Phase 5; until then every cut is a plain cut.
-        return TransitionDecision(type="cut", topic_change=False, confidence=0.5)
+    def transition_between(
+        self, prev: Segment, next: Segment, pause_s: float | None = None
+    ) -> TransitionDecision:
+        if prev.source_id != next.source_id:
+            changed, confidence = True, 0.6
+        elif pause_s is not None and pause_s >= TOPIC_PAUSE_S:
+            changed, confidence = True, 0.7
+        elif pause_s is not None and pause_s >= SHIFT_PAUSE_S and _lexical_shift(prev, next):
+            changed, confidence = True, 0.55
+        else:
+            changed, confidence = False, 0.6
+        kind = topic_transition(prev, next) if changed else "cut"
+        return TransitionDecision(type=kind, topic_change=changed, confidence=confidence)
