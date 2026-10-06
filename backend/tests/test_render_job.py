@@ -117,7 +117,11 @@ def test_render_project_writes_the_normalized_export_and_reports_speed(tmp_path:
     assert audio_s == pytest.approx(video_s, abs=1 / 30)
 
 
-def test_render_project_passes_the_quality_and_the_concurrency_override(tmp_path: Path) -> None:
+def test_render_project_passes_the_quality_and_the_concurrency_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The override is capped at the core count; pin it so CI runners with 2 cores agree.
+    monkeypatch.setattr("powereditor.render.concurrency.os.cpu_count", lambda: 12)
     layout = _project_layout(tmp_path)
     service = SettingsService.default()
     service.update({"renderMaxConcurrency": 3})
