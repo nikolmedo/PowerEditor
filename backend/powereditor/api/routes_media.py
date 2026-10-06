@@ -19,6 +19,12 @@ _SAFE_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]*$")
 CONTENT_TYPES = {
     ".mp4": "video/mp4",
     ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".flac": "audio/flac",
     ".srt": "application/x-subrip",
     ".ass": "text/x-ssa",
     ".json": "application/json",

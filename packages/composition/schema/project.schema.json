@@ -3,6 +3,12 @@
     "AudioTrack": {
       "additionalProperties": false,
       "properties": {
+        "duckingDb": {
+          "default": 12.0,
+          "maximum": 30.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
         "duckingEnabled": {
           "type": "boolean"
         },
@@ -132,13 +138,46 @@
       "title": "Clip",
       "type": "object"
     },
+    "ColorCorrection": {
+      "additionalProperties": false,
+      "description": "Per-channel gains that match a source's color to the project, applied before the grade.",
+      "properties": {
+        "blueGain": {
+          "maximum": 2.0,
+          "minimum": 0.5,
+          "type": "number"
+        },
+        "greenGain": {
+          "maximum": 2.0,
+          "minimum": 0.5,
+          "type": "number"
+        },
+        "redGain": {
+          "maximum": 2.0,
+          "minimum": 0.5,
+          "type": "number"
+        }
+      },
+      "required": [
+        "redGain",
+        "greenGain",
+        "blueGain"
+      ],
+      "title": "ColorCorrection",
+      "type": "object"
+    },
     "ColorGrade": {
       "additionalProperties": false,
+      "description": "Brightness, contrast and saturation are factors (1 = unchanged); temperature runs from\n-1 (cool) to 1 (warm). The preset names the values it last set.",
       "properties": {
         "brightness": {
+          "maximum": 2.0,
+          "minimum": 0.0,
           "type": "number"
         },
         "contrast": {
+          "maximum": 2.0,
+          "minimum": 0.0,
           "type": "number"
         },
         "preset": {
@@ -151,9 +190,13 @@
           "type": "string"
         },
         "saturation": {
+          "maximum": 2.0,
+          "minimum": 0.0,
           "type": "number"
         },
         "temperature": {
+          "maximum": 1.0,
+          "minimum": -1.0,
           "type": "number"
         }
       },
@@ -173,6 +216,8 @@
         "brightness": {
           "anyOf": [
             {
+              "maximum": 2.0,
+              "minimum": 0.0,
               "type": "number"
             },
             {
@@ -184,6 +229,8 @@
         "contrast": {
           "anyOf": [
             {
+              "maximum": 2.0,
+              "minimum": 0.0,
               "type": "number"
             },
             {
@@ -212,6 +259,8 @@
         "saturation": {
           "anyOf": [
             {
+              "maximum": 2.0,
+              "minimum": 0.0,
               "type": "number"
             },
             {
@@ -223,6 +272,8 @@
         "temperature": {
           "anyOf": [
             {
+              "maximum": 1.0,
+              "minimum": -1.0,
               "type": "number"
             },
             {
@@ -307,6 +358,17 @@
     "Source": {
       "additionalProperties": false,
       "properties": {
+        "colorCorrection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorCorrection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "colorStats": {
           "$ref": "#/$defs/ColorStats"
         },
@@ -520,6 +582,10 @@
     "fps": {
       "exclusiveMinimum": 0,
       "type": "integer"
+    },
+    "normalizeSources": {
+      "default": false,
+      "type": "boolean"
     },
     "overlays": {
       "items": {

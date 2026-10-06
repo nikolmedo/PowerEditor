@@ -114,6 +114,16 @@ def probe_media(ffprobe: str, path: Path) -> ProbeResult:
     return parse_probe(json.loads(output))
 
 
+def probe_audio_duration(ffprobe: str, path: Path) -> float:
+    """Length in seconds of a file with an audio stream; ValueError when it has none."""
+    flags = ["-v", "error", "-print_format", "json", "-show_format", "-show_streams"]
+    data: dict[str, Any] = json.loads(run_capture([ffprobe, *flags, str(path)]))
+    streams: list[dict[str, Any]] = data.get("streams", [])
+    if not any(stream.get("codec_type") == "audio" for stream in streams):
+        raise ValueError(f"{path.name} has no audio stream")
+    return float(data.get("format", {}).get("duration") or 0.0)
+
+
 def select_video_encoder(encoders_listing: str, cuda_available: bool) -> str:
     listed = {line.split()[1] for line in encoders_listing.splitlines() if len(line.split()) > 1}
     return "h264_nvenc" if cuda_available and "h264_nvenc" in listed else "libx264"

@@ -7,6 +7,7 @@ export interface Project {
   clips: Clip[];
   colorGrade: ColorGrade;
   fps: number;
+  normalizeSources?: boolean;
   overlays: Overlay[];
   preset: "reel_9x16" | "landscape_16x9";
   sources: Source[];
@@ -18,6 +19,7 @@ export interface Project {
  * via the `definition` "AudioTrack".
  */
 export interface AudioTrack {
+  duckingDb?: number;
   duckingEnabled: boolean;
   id: string;
   kind: "voice" | "music" | "sfx";
@@ -62,6 +64,9 @@ export interface TransitionIn {
   type: "cut" | "punch_in" | "fade" | "slide";
 }
 /**
+ * Brightness, contrast and saturation are factors (1 = unchanged); temperature runs from
+ * -1 (cool) to 1 (warm). The preset names the values it last set.
+ *
  * This interface was referenced by `Project`'s JSON-Schema
  * via the `definition` "ColorGrade".
  */
@@ -91,6 +96,7 @@ export interface Overlay {
  * via the `definition` "Source".
  */
 export interface Source {
+  colorCorrection?: ColorCorrection | null;
   colorStats: ColorStats;
   displayColor: string;
   id: string;
@@ -98,6 +104,17 @@ export interface Source {
   mezzaninePath: string;
   originalPath: string;
   proxyPath: string;
+}
+/**
+ * Per-channel gains that match a source's color to the project, applied before the grade.
+ *
+ * This interface was referenced by `Project`'s JSON-Schema
+ * via the `definition` "ColorCorrection".
+ */
+export interface ColorCorrection {
+  blueGain: number;
+  greenGain: number;
+  redGain: number;
 }
 /**
  * This interface was referenced by `Project`'s JSON-Schema

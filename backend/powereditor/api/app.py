@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from powereditor import doctor, settings_store
 from powereditor.api.origin_guard import LocalOriginGuard
+from powereditor.api.routes_audio import router as audio_router
 from powereditor.api.routes_jobs import router as jobs_router
 from powereditor.api.routes_media import contained_file
 from powereditor.api.routes_media import router as media_router
@@ -147,6 +148,7 @@ def create_app(
     app.include_router(projects_router)
     app.include_router(jobs_router)
     app.include_router(media_router)
+    app.include_router(audio_router)
     app.include_router(setup_router)
     _mount_web_app(app, web_dir or resolve_web_dir())
     return app

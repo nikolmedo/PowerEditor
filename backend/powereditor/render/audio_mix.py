@@ -14,6 +14,11 @@ padded with silence up to the slot length (frame rounding can make the slot up t
 half a frame longer than the audio). Edges get short fades to silence instead of
 overlapping crossfades: an overlap would shorten the audio relative to the video.
 
+Gain per clip: the clip's volume times the voice track's volume and, when the project
+asks for `normalize_sources`, a per-source gain that brings every audible source to the
+mean loudness of the sources (capped at `MAX_SOURCE_GAIN_DB`). The final pass then
+normalizes the whole mix to the target loudness.
+
 Each clip reads its source as a separate ffmpeg input. A single input fanned out
 with `asplit` would decode once, but every branch that concat has not reached yet
 would queue its decoded audio in memory; repeated inputs cost decode time
@@ -33,6 +38,7 @@ from tempfile import TemporaryDirectory
 
 from powereditor.models import Project
 from powereditor.pipeline.ffmpeg import FractionCallback, run_ffmpeg
+from powereditor.pipeline.loudness import SILENT_LUFS
 from powereditor.timeline import timeline_layout
 
 VOICE_LABEL = "voice"
@@ -40,6 +46,7 @@ DEFAULT_SAMPLE_RATE = 48000
 ATEMPO_MIN = 0.5
 ATEMPO_MAX = 2.0
 BATCH_CLIPS = 40
+MAX_SOURCE_GAIN_DB = 12.0
 
 
 @dataclass(frozen=True)
@@ -99,6 +106,37 @@ def _fade_filters(samples: int, fade: int) -> list[str]:
     return [f"afade=t=in:ss=0:ns={fade}", f"afade=t=out:ss={samples - fade}:ns={fade}"]
 
 
+def source_gains_db(loudness_lufs: Mapping[str, float]) -> dict[str, float]:
+    """Gain per source id that brings it to the mean loudness of the audible sources.
+
+    Silent sources (at or below the -70 LUFS gate) get no gain: there is nothing to match.
+    """
+    audible = [lufs for lufs in loudness_lufs.values() if lufs > SILENT_LUFS]
+    if not audible:
+        return dict.fromkeys(loudness_lufs, 0.0)
+    reference = sum(audible) / len(audible)
+    return {
+        source_id: 0.0
+        if lufs <= SILENT_LUFS
+        else max(-MAX_SOURCE_GAIN_DB, min(MAX_SOURCE_GAIN_DB, reference - lufs))
+        for source_id, lufs in loudness_lufs.items()
+    }
+
+
+def _source_factors(project: Project) -> dict[str, float]:
+    """Linear voice gain per source: the voice track's volume and the optional normalization."""
+    track = next((t for t in project.audio_tracks if t.kind == "voice"), None)
+    volume = track.volume if track is not None else 1.0
+    gains = (
+        source_gains_db({source.id: source.loudness_lufs for source in project.sources})
+        if project.normalize_sources
+        else {}
+    )
+    return {
+        source.id: volume * 10 ** (gains.get(source.id, 0.0) / 20) for source in project.sources
+    }
+
+
 def build_voice_filtergraph(
     project: Project,
     crossfade_ms: int,
@@ -112,6 +150,7 @@ def build_voice_filtergraph(
     `silent_sources` have no audio stream and contribute silence.
     """
     clips = {clip.id: clip for clip in project.clips}
+    factors = _source_factors(project)
     fmt = f"aformat=sample_fmts=fltp:sample_rates={sample_rate}:channel_layouts=stereo"
     fade_target = round(crossfade_ms * sample_rate / 1000)
     inputs: list[Path] = []
@@ -148,7 +187,7 @@ def build_voice_filtergraph(
             fmt,
             f"atrim=end_sample={content}",
             "asetpts=N/SR/TB",
-            f"volume={_num(clip.volume)}",
+            f"volume={_num(clip.volume * factors.get(clip.source_id, 1.0))}",
             *_fade_filters(content, fade),
             f"apad=whole_len={samples}",
         ]

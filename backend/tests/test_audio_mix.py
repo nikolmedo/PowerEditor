@@ -15,6 +15,7 @@ from powereditor.render.audio_mix import (
     batch_graph,
     build_voice_filtergraph,
     render_voice,
+    source_gains_db,
 )
 from tests.media import FFMPEG, FFPROBE, ffmpeg_lavfi, needs_ffmpeg
 
@@ -23,6 +24,9 @@ FIXTURE = (
 )
 MEDIA = {"s1": Path("media/s1.mezzanine.mp4")}
 RATE = 48000
+AUDIO_FIXTURE: dict[str, Any] = json.loads(
+    (FIXTURE.parent / "audio.json").read_text(encoding="utf-8")
+)
 
 
 def _fixture_project() -> Project:
@@ -121,6 +125,40 @@ def test_builder_rejects_an_empty_timeline_and_unknown_media() -> None:
         build_voice_filtergraph(project, 15, {"s1": Path("s1.wav")})
     with pytest.raises(ValueError, match="s1"):
         build_voice_filtergraph(_project([("c1", "s1", 0.0, 1.0, 1.0)]), 15, {})
+
+
+def test_source_gains_bring_audible_sources_to_their_mean_loudness() -> None:
+    gains = source_gains_db(AUDIO_FIXTURE["sourceLoudness"])
+    assert gains == pytest.approx(AUDIO_FIXTURE["sourceGainDb"])
+
+
+def test_source_gains_are_capped() -> None:
+    assert source_gains_db({"quiet": -40.0, "loud": -10.0}) == {"quiet": 12.0, "loud": -12.0}
+
+
+def _clip_volumes(graph: audio_mix.VoiceGraph) -> list[float]:
+    return [
+        float(part.removeprefix("volume="))
+        for _, body in graph.chains
+        for part in body.split(",")
+        if part.startswith("volume=")
+    ]
+
+
+def test_clip_gain_includes_the_voice_track_and_optional_source_normalization() -> None:
+    project = _project([("c1", "a", 0.0, 1.0, 1.0), ("c2", "b", 0.0, 1.0, 1.0)])
+    project.sources[0].loudness_lufs = -20.0
+    project.sources[1].loudness_lufs = -14.0
+    project.audio_tracks[0].volume = 0.5
+    media = {"a": Path("a.wav"), "b": Path("b.wav")}
+
+    plain = build_voice_filtergraph(project, 15, media)
+    normalized = build_voice_filtergraph(
+        project.model_copy(update={"normalize_sources": True}), 15, media
+    )
+
+    assert _clip_volumes(plain) == [0.5, 0.5]
+    assert _clip_volumes(normalized) == pytest.approx([0.5 * 10 ** (3 / 20), 0.5 * 10 ** (-3 / 20)])
 
 
 @pytest.mark.parametrize(
