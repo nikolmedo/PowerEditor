@@ -6,8 +6,8 @@ from pathlib import Path
 
 from pydantic.json_schema import GenerateJsonSchema
 
-from autocut.config import REPO_ROOT
-from autocut.models import Project
+from powereditor.config import REPO_ROOT
+from powereditor.models import Project
 
 DEFAULT_OUTPUT = REPO_ROOT / "packages" / "composition" / "schema" / "project.schema.json"
 
@@ -32,7 +32,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.check:
         on_disk = output.read_bytes().replace(b"\r\n", b"\n") if output.is_file() else None
         if on_disk != expected:
-            print(f"{output} is stale; run `uv run python -m autocut.schema_gen`", file=sys.stderr)
+            print(
+                f"{output} is stale; run `uv run python -m powereditor.schema_gen`",
+                file=sys.stderr,
+            )
             return 1
         return 0
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
-from autocut.paths import AppPaths
-from autocut.pipeline.ffmpeg import MediaTools, parse_progress_seconds
-from autocut.pipeline.ingest import (
+from powereditor.paths import AppPaths
+from powereditor.pipeline.ffmpeg import MediaTools, parse_progress_seconds
+from powereditor.pipeline.ingest import (
     ProbeResult,
     ingest_files,
     parse_rate,
@@ -17,7 +17,7 @@ from autocut.pipeline.ingest import (
     select_video_encoder,
     target_fps,
 )
-from autocut.pipeline.runner import ProjectLayout
+from powereditor.pipeline.runner import ProjectLayout
 
 FFMPEG = shutil.which("ffmpeg")
 FFPROBE = shutil.which("ffprobe")

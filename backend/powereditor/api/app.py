@@ -6,11 +6,11 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from autocut import doctor, settings_store
-from autocut.api.routes_settings import get_service
-from autocut.api.routes_settings import router as settings_router
-from autocut.paths import AppPaths
-from autocut.settings_store import SettingsService
+from powereditor import doctor, settings_store
+from powereditor.api.routes_settings import get_service
+from powereditor.api.routes_settings import router as settings_router
+from powereditor.paths import AppPaths
+from powereditor.settings_store import SettingsService
 
 
 def _validation_error_without_input(_: Request, exc: Exception) -> JSONResponse:
@@ -34,7 +34,7 @@ def create_app(
             secrets=settings_store.default_secret_store(),
             env=settings_store.default_env_settings(),
         )
-    app = FastAPI(title="AutoCut", version=version("autocut"))
+    app = FastAPI(title="PowerEditor", version=version("powereditor"))
     app.state.settings_service = settings_service
     app.state.openai_transport = openai_transport
     app.state.doctor_runner = doctor_runner
@@ -42,7 +42,7 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": version("autocut")}
+        return {"status": "ok", "version": version("powereditor")}
 
     @app.get("/api/doctor")
     def run_doctor(request: Request) -> doctor.DoctorReport:

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from autocut.models import CamelModel
-from autocut.paths import AppPaths
-from autocut.pipeline.runner import ProjectLayout, run_stage
+from powereditor.models import CamelModel
+from powereditor.paths import AppPaths
+from powereditor.pipeline.runner import ProjectLayout, run_stage
 
 
 class Doubled(CamelModel):

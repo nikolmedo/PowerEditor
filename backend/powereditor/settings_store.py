@@ -10,14 +10,14 @@ import keyring
 import keyring.errors
 from pydantic import Field, ValidationError
 
-from autocut import doctor
-from autocut.config import DecisionEngine, Settings, Transcriber, WhisperDevice
-from autocut.models import CamelModel, write_text_atomic
-from autocut.paths import AppPaths, resolve_executable
+from powereditor import doctor
+from powereditor.config import DecisionEngine, Settings, Transcriber, WhisperDevice
+from powereditor.models import CamelModel, write_text_atomic
+from powereditor.paths import AppPaths, resolve_executable
 
 logger = logging.getLogger(__name__)
 
-KEYRING_SERVICE = "AutoCut"
+KEYRING_SERVICE = "PowerEditor"
 GPU_WHISPER_MODEL = "large-v3-turbo"
 CPU_WHISPER_MODEL = "small"
 

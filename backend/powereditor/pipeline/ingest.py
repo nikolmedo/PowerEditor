@@ -8,9 +8,9 @@ from typing import Any
 
 from pydantic import Field, ValidationError
 
-from autocut.models import CamelModel, write_text_atomic
-from autocut.pipeline.ffmpeg import MediaTools, list_encoders, run_capture, run_ffmpeg
-from autocut.pipeline.runner import ProgressCallback, ProjectLayout, no_progress, run_stage
+from powereditor.models import CamelModel, write_text_atomic
+from powereditor.pipeline.ffmpeg import MediaTools, list_encoders, run_capture, run_ffmpeg
+from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress, run_stage
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,9 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
-from autocut.config import WhisperDevice
-from autocut.models import TranscriberProvider, Transcript
-from autocut.transcribe.base import RawWord, audio_duration, filler_prompt, normalize_words
+from powereditor.config import WhisperDevice
+from powereditor.models import TranscriberProvider, Transcript
+from powereditor.transcribe.base import RawWord, audio_duration, filler_prompt, normalize_words
 
 
 class WhisperWordLike(Protocol):

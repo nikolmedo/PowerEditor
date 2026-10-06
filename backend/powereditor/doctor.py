@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 
 from pydantic import BaseModel, computed_field
 
-from autocut.models import CamelModel
+from powereditor.models import CamelModel
 
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 Locator = Callable[[str], str | None]

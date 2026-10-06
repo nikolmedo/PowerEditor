@@ -7,9 +7,9 @@ import keyring.errors
 import pytest
 from pydantic import ValidationError
 
-from autocut.config import Settings
-from autocut.paths import AppPaths, resolve_executable
-from autocut.settings_store import InMemorySecretStore, SettingsService
+from powereditor.config import Settings
+from powereditor.paths import AppPaths, resolve_executable
+from powereditor.settings_store import InMemorySecretStore, SettingsService
 
 
 def _service(

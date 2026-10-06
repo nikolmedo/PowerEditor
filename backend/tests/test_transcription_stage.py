@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from autocut.cli import app
-from autocut.models import TranscriberProvider, Transcript, Word
-from autocut.paths import AppPaths
-from autocut.pipeline.ingest import IngestedSource, IngestManifest, ProbeResult, load_manifest
-from autocut.pipeline.runner import ProjectLayout
-from autocut.pipeline.transcription import transcribe_project
+from powereditor.cli import app
+from powereditor.models import TranscriberProvider, Transcript, Word
+from powereditor.paths import AppPaths
+from powereditor.pipeline.ingest import IngestedSource, IngestManifest, ProbeResult, load_manifest
+from powereditor.pipeline.runner import ProjectLayout
+from powereditor.pipeline.transcription import transcribe_project
 
 FFMPEG = shutil.which("ffmpeg")
 

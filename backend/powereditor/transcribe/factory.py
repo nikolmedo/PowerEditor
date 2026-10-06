@@ -1,9 +1,9 @@
 import httpx
 
-from autocut.settings_store import SettingsService
-from autocut.transcribe.base import Transcriber
-from autocut.transcribe.local_whisper import LocalWhisperTranscriber
-from autocut.transcribe.openai_whisper import OpenAIWhisperTranscriber
+from powereditor.settings_store import SettingsService
+from powereditor.transcribe.base import Transcriber
+from powereditor.transcribe.local_whisper import LocalWhisperTranscriber
+from powereditor.transcribe.openai_whisper import OpenAIWhisperTranscriber
 
 
 class TranscriberConfigError(RuntimeError):

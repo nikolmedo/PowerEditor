@@ -6,9 +6,9 @@ from pathlib import Path
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from autocut.models import TranscriberProvider, Transcript
-from autocut.pipeline.ffmpeg import run_ffmpeg, run_ffmpeg_stderr
-from autocut.transcribe.base import (
+from powereditor.models import TranscriberProvider, Transcript
+from powereditor.pipeline.ffmpeg import run_ffmpeg, run_ffmpeg_stderr
+from powereditor.transcribe.base import (
     RawWord,
     TranscriptionError,
     filler_prompt,
@@ -157,7 +157,7 @@ class OpenAIWhisperTranscriber:
         raw: list[RawWord] = []
         detected: str | None = None
         with (
-            tempfile.TemporaryDirectory(prefix="autocut-openai-") as tmp,
+            tempfile.TemporaryDirectory(prefix="powereditor-openai-") as tmp,
             httpx.Client(transport=self._transport, timeout=REQUEST_TIMEOUT_SECONDS) as client,
         ):
             workdir = Path(tmp)

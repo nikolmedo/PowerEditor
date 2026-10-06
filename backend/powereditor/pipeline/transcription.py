@@ -1,10 +1,10 @@
 from functools import partial
 from pathlib import Path
 
-from autocut.models import Transcript
-from autocut.pipeline.ingest import load_manifest
-from autocut.pipeline.runner import ProgressCallback, ProjectLayout, no_progress, run_stage
-from autocut.transcribe.base import Transcriber
+from powereditor.models import Transcript
+from powereditor.pipeline.ingest import load_manifest
+from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress, run_stage
+from powereditor.transcribe.base import Transcriber
 
 TRANSCRIBE_STAGE_VERSION = 1
 

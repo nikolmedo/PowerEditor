@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from autocut.models import Clip, Project, Transcript, Word, load_project, save_project
+from powereditor.models import Clip, Project, Transcript, Word, load_project, save_project
 
 
 def _clip_payload(**overrides: Any) -> dict[str, Any]:

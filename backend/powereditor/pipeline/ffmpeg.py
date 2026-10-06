@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import cache
 from typing import IO
 
-from autocut.settings_store import SettingsService
+from powereditor.settings_store import SettingsService
 
 FractionCallback = Callable[[float], None]
 STDERR_TAIL_CHARS = 2000

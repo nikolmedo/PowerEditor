@@ -6,10 +6,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from autocut.api.app import create_app
-from autocut.config import Settings
-from autocut.paths import AppPaths
-from autocut.settings_store import InMemorySecretStore, SettingsService
+from powereditor.api.app import create_app
+from powereditor.config import Settings
+from powereditor.paths import AppPaths
+from powereditor.settings_store import InMemorySecretStore, SettingsService
 
 SECRET = "sk-super-secret-value"
 

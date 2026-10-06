@@ -10,14 +10,14 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from autocut import doctor as doctor_module
-from autocut.pipeline.ffmpeg import FfmpegError, MediaTools, MissingToolError
-from autocut.pipeline.ingest import ingest_files, load_manifest
-from autocut.pipeline.runner import ProgressCallback, ProjectLayout
-from autocut.pipeline.transcription import transcribe_project
-from autocut.settings_store import SettingsService
-from autocut.transcribe.base import TranscriptionError
-from autocut.transcribe.factory import TranscriberConfigError, create_transcriber
+from powereditor import doctor as doctor_module
+from powereditor.pipeline.ffmpeg import FfmpegError, MediaTools, MissingToolError
+from powereditor.pipeline.ingest import ingest_files, load_manifest
+from powereditor.pipeline.runner import ProgressCallback, ProjectLayout
+from powereditor.pipeline.transcription import transcribe_project
+from powereditor.settings_store import SettingsService
+from powereditor.transcribe.base import TranscriptionError
+from powereditor.transcribe.factory import TranscriberConfigError, create_transcriber
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -27,7 +27,7 @@ app = typer.Typer(no_args_is_help=True, add_completion=False)
 
 @app.callback()
 def main() -> None:
-    """AutoCut command line interface."""
+    """PowerEditor command line interface."""
 
 
 @app.command()
@@ -60,7 +60,7 @@ def doctor() -> None:
 @app.command()
 def serve(port: int = typer.Option(DEFAULT_PORT, help="Port to listen on.")) -> None:
     """Start the local API server."""
-    uvicorn.run("autocut.api.app:create_app", factory=True, host=DEFAULT_HOST, port=port)
+    uvicorn.run("powereditor.api.app:create_app", factory=True, host=DEFAULT_HOST, port=port)
 
 
 @contextmanager

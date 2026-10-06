@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from autocut import settings_store
-from autocut.config import Settings
-from autocut.paths import ENV_DATA_DIR
+from powereditor import settings_store
+from powereditor.config import Settings
+from powereditor.paths import ENV_DATA_DIR
 
 ENV_SETTING_NAMES = (
     "TRANSCRIBER",
@@ -28,7 +28,7 @@ ENV_SETTING_NAMES = (
 
 @pytest.fixture(autouse=True)
 def isolated_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    data_dir = tmp_path / "autocut-data"
+    data_dir = tmp_path / "powereditor-data"
     monkeypatch.setenv(ENV_DATA_DIR, str(data_dir))
     for name in ENV_SETTING_NAMES:
         monkeypatch.delenv(name, raising=False)

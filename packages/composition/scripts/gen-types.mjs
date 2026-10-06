@@ -7,7 +7,7 @@ const outputPath = fileURLToPath(new URL("../src/types.generated.ts", import.met
 
 const banner = `/* eslint-disable */
 // Generated from schema/project.schema.json by \`corepack pnpm gen:types\`. Do not edit.
-// Regenerate the schema with \`uv run python -m autocut.schema_gen\` in backend/.`;
+// Regenerate the schema with \`uv run python -m powereditor.schema_gen\` in backend/.`;
 
 const generated = await compileFromFile(schemaPath, {
   bannerComment: banner,

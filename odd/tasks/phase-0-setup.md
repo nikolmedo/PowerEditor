@@ -3,17 +3,17 @@
 Locator: `odd/tasks/phase-0-setup.md` · Engram mirror: `odd/phase-0-setup/tasks`
 
 ## Objective
-Implement PLAN.md Phase 0: monorepo skeleton (uv + pnpm), lint, typecheck, tests, `.env.example`, and `autocut doctor`.
+Implement PLAN.md Phase 0: monorepo skeleton (uv + pnpm), lint, typecheck, tests, `.env.example`, and `powereditor doctor`.
 
 ## Acceptance criteria
-- `uv run autocut doctor` reports the status of each dependency (FFmpeg, ffprobe, Node, pnpm, CUDA optional).
+- `uv run powereditor doctor` reports the status of each dependency (FFmpeg, ffprobe, Node, pnpm, CUDA optional).
 - `ruff`, `mypy --strict`, `pytest` pass in `backend/`.
 - `corepack pnpm install`, `-r typecheck`, `-r lint` pass at the root.
 
 ## Constraints
 - All code/identifiers/comments/commits in English. Conventional Commits, no AI attribution.
 - FFmpeg/subprocess calls use argument lists, never shell strings.
-- Repo root acts as the `autocut/` root from PLAN.md (`backend/`, `packages/`, `web/` at top level).
+- Repo root acts as the `powereditor/` root from PLAN.md (`backend/`, `packages/`, `web/` at top level).
 - pnpm invoked as `corepack pnpm` (nvm pnpm shim is broken); `packageManager: pnpm@12.9.1`.
 - No Remotion/React deps in Phase 0.
 
@@ -39,8 +39,8 @@ Implement PLAN.md Phase 0: monorepo skeleton (uv + pnpm), lint, typecheck, tests
 
 ## Verification evidence
 - `uv run pytest -q`: 10 passed (re-run by parent).
-- `uv run ruff check . && ruff format --check .`: pass. `uv run mypy autocut tests`: no issues (strict).
-- `uv run autocut doctor`: exit 0; ffmpeg 9.0.2, ffprobe 9.0.2, node v24.19.0, pnpm 12.9.1 found; cuda missing (optional) (re-run by parent).
+- `uv run ruff check . && ruff format --check .`: pass. `uv run mypy powereditor tests`: no issues (strict).
+- `uv run powereditor doctor`: exit 0; ffmpeg 9.0.2, ffprobe 9.0.2, node v24.19.0, pnpm 12.9.1 found; cuda missing (optional) (re-run by parent).
 - `corepack pnpm install`, `-r typecheck`, `-r lint`, `prettier --check .`: pass.
 
 ## Review

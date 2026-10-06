@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from autocut.models import TranscriberProvider, Transcript, Word
+from powereditor.models import TranscriberProvider, Transcript, Word
 
 FILLER_PROMPTS: dict[str, str] = {
     "es": "Eh, este, mmm, o sea, bueno, eh... pues, este, ¿no?",

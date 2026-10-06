@@ -9,8 +9,8 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ValidationError
 
-from autocut.models import write_text_atomic
-from autocut.paths import AppPaths
+from powereditor.models import write_text_atomic
+from powereditor.paths import AppPaths
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,9 @@
-# Feature: autocut-app
+# Feature: powereditor-app
 
-Locator: `odd/tasks/autocut-app.md` · Engram mirror: `odd/autocut-app/tasks`
+Locator: `odd/tasks/powereditor-app.md` · Engram mirror: `odd/powereditor-app/tasks`
 
 ## Objective
-Build the rest of AutoCut (PLAN.md Phases 1–10) as a downloadable, user-friendly Windows app.
+Build the rest of PowerEditor (PLAN.md Phases 1–10) as a downloadable, user-friendly Windows app.
 
 ## User decisions (2026-10-05)
 - Phase 1 real-API comparison test (local vs OpenAI on the same audio) is **skipped by user decision**. The schema half stays: both transcribers must produce the same `Transcript` schema, verified with fakes.
@@ -12,7 +12,7 @@ Build the rest of AutoCut (PLAN.md Phases 1–10) as a downloadable, user-friend
 - Delivery: `feature-branch-chain`, one branch per slice stacked on the previous one.
 
 ## Architecture decisions
-- Settings layering: code defaults ← `.env` (dev only) ← user settings file in `platformdirs.user_data_dir("AutoCut")`. Secrets live in the OS keyring (Windows Credential Locker) via `keyring`, never in plain files.
+- Settings layering: code defaults ← `.env` (dev only) ← user settings file in `platformdirs.user_data_dir("PowerEditor")`. Secrets live in the OS keyring (Windows Credential Locker) via `keyring`, never in plain files.
 - Runtime data (projects, models, downloaded binaries) lives in the user data dir. The app never writes to its install folder.
 - ffmpeg/ffprobe paths are settings (auto-detected, later bundled or downloaded at first run).
 - Runtime-aware Whisper default: GPU → `large-v3-turbo`, CPU → `small`.
@@ -62,11 +62,11 @@ Reviewed boundary: `f35332a` (phase-0).
 
 ## Progress
 - Branch `feat/phase-1-core` created on top of `feat/phase-0-setup`.
-- 1a done (delegated): models + schema-generated TS types, paths (platformdirs), settings store (layering + keyring WinVault verified), FastAPI settings/secrets/doctor API, `autocut serve`. Evidence: pytest 62 passed (parent re-run); ruff/mypy clean; `schema_gen --check` 0 (parent re-run); pnpm typecheck/lint/check:types/prettier pass; serve smoke returned masked secrets only. RED observed for models/schema/settings/api; not observed for CRLF check and late-added isolation tests. Added `.gitattributes` (eol=lf).
+- 1a done (delegated): models + schema-generated TS types, paths (platformdirs), settings store (layering + keyring WinVault verified), FastAPI settings/secrets/doctor API, `powereditor serve`. Evidence: pytest 62 passed (parent re-run); ruff/mypy clean; `schema_gen --check` 0 (parent re-run); pnpm typecheck/lint/check:types/prettier pass; serve smoke returned masked secrets only. RED observed for models/schema/settings/api; not observed for CRLF check and late-added isolation tests. Added `.gitattributes` (eol=lf).
 - Follow-ups: invalid settings.json discards whole file (needs per-key migration later); Starlette TestClient httpx deprecation warning.
 
 - 1b done (delegated): settings fixes (per-key load, update lock) closing R3 warnings; pipeline runner + cache; ingest (ffprobe, mezzanine libx264 CFR, 540p proxy, 16 kHz WAV) with lavfi fixtures; transcribers local (faster-whisper 1.2.1 / ctranslate2 4.8.2 installs on this host, 0 CUDA devices) and openai (whisper-1, MP3 upload, 25 MB limit verified, silence split); schema parity test with fakes; CLI ingest/transcribe. Evidence: pytest 104 passed / 1 slow deselected (parent re-run); ruff/mypy clean; ingest smoke 3.97 s then cache hit 1.77 s. RED: strong for settings fixes; weak (import error) for new modules.
 - Notes: gyan.dev ffmpeg lists h264_nvenc without GPU → encoder choice also checks CUDA. Encoder not in ingest cache key (label may go stale).
 
 ## Next step
-Rename AutoCut → PowerEditor (user request), then slice 2.
+Rename PowerEditor → PowerEditor (user request), then slice 2.

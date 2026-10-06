@@ -9,20 +9,20 @@ from typing import Any
 import httpx
 import pytest
 
-from autocut.config import Settings, WhisperDevice
-from autocut.models import Transcript
-from autocut.paths import AppPaths
-from autocut.settings_store import InMemorySecretStore, SettingsService
-from autocut.transcribe.base import (
+from powereditor.config import Settings, WhisperDevice
+from powereditor.models import Transcript
+from powereditor.paths import AppPaths
+from powereditor.settings_store import InMemorySecretStore, SettingsService
+from powereditor.transcribe.base import (
     RawWord,
     TranscriptionError,
     filler_prompt,
     normalize_words,
     wav_duration,
 )
-from autocut.transcribe.factory import TranscriberConfigError, create_transcriber
-from autocut.transcribe.local_whisper import LocalWhisperTranscriber
-from autocut.transcribe.openai_whisper import (
+from powereditor.transcribe.factory import TranscriberConfigError, create_transcriber
+from powereditor.transcribe.local_whisper import LocalWhisperTranscriber
+from powereditor.transcribe.openai_whisper import (
     OpenAIWhisperTranscriber,
     parse_silences,
     plan_chunks,
@@ -357,7 +357,7 @@ def test_local_and_openai_transcripts_share_schema(tmp_path: Path) -> None:
 @pytest.mark.ffmpeg
 @needs_ffmpeg
 def test_real_tiny_model_on_tone(tmp_path: Path) -> None:
-    from autocut.transcribe.local_whisper import ensure_model
+    from powereditor.transcribe.local_whisper import ensure_model
 
     models = AppPaths.from_env().models_dir
     ensure_model("tiny", models)

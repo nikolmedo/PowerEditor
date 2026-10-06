@@ -5,8 +5,8 @@ import keyring.errors
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import ValidationError
 
-from autocut.models import CamelModel
-from autocut.settings_store import (
+from powereditor.models import CamelModel
+from powereditor.settings_store import (
     SECRET_NAMES,
     SecretName,
     SecretSource,

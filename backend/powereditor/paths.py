@@ -5,8 +5,8 @@ from pathlib import Path
 
 import platformdirs
 
-ENV_DATA_DIR = "AUTOCUT_DATA_DIR"
-APP_NAME = "AutoCut"
+ENV_DATA_DIR = "POWEREDITOR_DATA_DIR"
+APP_NAME = "PowerEditor"
 
 
 @dataclass(frozen=True)

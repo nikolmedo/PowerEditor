@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from autocut import doctor
-from autocut.cli import app
-from autocut.settings_store import SettingsService
+from powereditor import doctor
+from powereditor.cli import app
+from powereditor.settings_store import SettingsService
 
 
 def _fake_runner(output: str) -> doctor.Runner:

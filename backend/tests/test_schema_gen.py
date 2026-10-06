@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from autocut import schema_gen
+from powereditor import schema_gen
 
 
 def test_schema_uses_camel_case_and_named_definitions() -> None:

@@ -1,5 +1,5 @@
 {
-  "name": "autocut",
+  "name": "powereditor",
   "private": true,
   "packageManager": "pnpm@12.9.1",
   "type": "module",
