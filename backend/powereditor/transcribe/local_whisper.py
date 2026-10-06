@@ -1,9 +1,14 @@
+import wave
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
+import numpy as np
+from numpy.typing import NDArray
+
 from powereditor.config import WhisperDevice
 from powereditor.models import TranscriberProvider, Transcript
+from powereditor.pipeline.vad import read_wav
 from powereditor.transcribe.base import RawWord, audio_duration, filler_prompt, normalize_words
 
 
@@ -31,13 +36,36 @@ class WhisperInfoLike(Protocol):
     def language(self) -> str: ...
 
 
+WhisperAudio = str | NDArray[np.float32]
+
+
 class WhisperModelLike(Protocol):
     def transcribe(
-        self, audio: str, **kwargs: Any
+        self, audio: WhisperAudio, **kwargs: Any
     ) -> tuple[Iterable[WhisperSegmentLike], WhisperInfoLike]: ...
 
 
+def whisper_audio(path: Path) -> WhisperAudio:
+    """Samples of a 16 kHz PCM WAV (what ingest writes), else the path for faster-whisper.
+
+    Decoding here keeps transcription independent of PyAV: faster-whisper 1.2.1 passes
+    `metadata_errors` to `av.open`, which PyAV 19 no longer accepts.
+    """
+    try:
+        with wave.open(str(path), "rb") as handle:
+            readable = handle.getframerate() == WHISPER_SAMPLE_RATE and handle.getsampwidth() == 2
+    except (wave.Error, EOFError, OSError):
+        return str(path)
+    if not readable:
+        return str(path)
+    samples, _ = read_wav(path)
+    return samples.astype(np.float32)
+
+
 ModelLoader = Callable[[str, str, str, Path], WhisperModelLike]
+
+
+WHISPER_SAMPLE_RATE = 16000
 
 
 def load_faster_whisper(
@@ -112,7 +140,7 @@ class LocalWhisperTranscriber:
 
     def transcribe(self, audio_path: Path, language: str | None) -> Transcript:
         segments, info = self._whisper().transcribe(
-            str(audio_path),
+            whisper_audio(audio_path),
             language=language,
             initial_prompt=filler_prompt(language),
             word_timestamps=True,

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import numpy as np
 import pytest
 
 from powereditor.config import Settings, WhisperDevice
@@ -101,7 +102,7 @@ class FakeWhisperModel:
     segments: list[FakeSegment]
     calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def transcribe(self, audio: str, **kwargs: Any) -> tuple[Iterable[FakeSegment], FakeInfo]:
+    def transcribe(self, audio: object, **kwargs: Any) -> tuple[Iterable[FakeSegment], FakeInfo]:
         self.calls.append({"audio": audio, **kwargs})
         return iter(self.segments), FakeInfo(language="es")
 
@@ -125,15 +126,25 @@ def _local(
     return transcriber, loads
 
 
-def _write_wav(path: Path, seconds: float) -> Path:
+def _write_wav(path: Path, seconds: float, rate: int = 16000) -> Path:
     import wave
 
     with wave.open(str(path), "wb") as handle:
         handle.setnchannels(1)
         handle.setsampwidth(2)
-        handle.setframerate(16000)
-        handle.writeframes(b"\x00\x00" * int(16000 * seconds))
+        handle.setframerate(rate)
+        handle.writeframes(b"\x00\x00" * int(rate * seconds))
     return path
+
+
+def test_local_transcriber_passes_other_audio_as_a_path(tmp_path: Path) -> None:
+    model = _fake_model()
+    audio = _write_wav(tmp_path / "a.wav", 1.0, rate=44100)
+    transcriber, _ = _local(model, tmp_path)
+
+    transcriber.transcribe(audio, "es")
+
+    assert model.calls[0]["audio"] == str(audio)
 
 
 SPOKEN = [("Eh,", 0.1, 0.4), ("hola", 0.5, 0.9), ("a", 0.95, 1.1), ("todos.", 1.1, 1.6)]
@@ -159,7 +170,9 @@ def test_local_transcriber_uses_word_timestamps_prompt_and_cpu_int8(tmp_path: Pa
 
     assert loads == [("small", "cpu", "int8", tmp_path / "models")]
     call = model.calls[0]
-    assert call["audio"] == str(audio)
+    # A 16 kHz WAV is decoded here, so faster-whisper never needs PyAV for it.
+    assert isinstance(call["audio"], np.ndarray)
+    assert (call["audio"].dtype, call["audio"].shape) == (np.float32, (32000,))
     assert call["word_timestamps"] is True
     assert call["vad_filter"] is False
     assert call["language"] == "es"

@@ -15,8 +15,10 @@ from powereditor.pipeline.ingest import (
     ProbeResult,
     ingest_files,
     ingest_source,
+    mezzanine_args,
     parse_rate,
     probe_media,
+    proxy_args,
     select_video_encoder,
     source_id_for,
     target_fps,
@@ -29,6 +31,10 @@ needs_ffmpeg = pytest.mark.skipif(
     FFMPEG is None or FFPROBE is None, reason="ffmpeg/ffprobe not found"
 )
 
+LGPL_LISTING = (
+    " V....D libopenh264  OpenH264 H.264\n V....D h264_mf  H264 via MediaFoundation\n"
+    " V....D h264_nvenc  NVIDIA NVENC H.264 encoder\n"
+)
 NVENC_LISTING = " V....D libx264  libx264 H.264\n V....D h264_nvenc  NVIDIA NVENC H.264 encoder\n"
 
 
@@ -54,6 +60,8 @@ def _probe(**overrides: Any) -> ProbeResult:
         (NVENC_LISTING, False, "libx264"),
         (NVENC_LISTING, True, "h264_nvenc"),
         (" V....D libx264  libx264 H.264\n", True, "libx264"),
+        (LGPL_LISTING, False, "libopenh264"),
+        (LGPL_LISTING, True, "h264_nvenc"),
     ],
 )
 def test_select_video_encoder(listing: str, cuda: bool, expected: str) -> None:
@@ -304,3 +312,16 @@ def test_ingest_writes_outputs_atomically(fake_media: dict[str, Any]) -> None:
         .cache_file(f"ingest-{source_id_for(fake_media['source'])}")
         .exists()
     )
+
+
+def test_an_lgpl_ffmpeg_encodes_with_openh264_at_a_fixed_bitrate(tmp_path: Path) -> None:
+    source, out = tmp_path / "in.mov", tmp_path / "out.mp4"
+
+    mezzanine = mezzanine_args(source, out, 30, "libopenh264")
+    proxy = proxy_args(source, out, 30, encoder="libopenh264")
+    default_proxy = proxy_args(source, out, 30)
+
+    assert mezzanine[mezzanine.index("-c:v") + 1 :][:3] == ["libopenh264", "-b:v", "20M"]
+    assert proxy[proxy.index("-c:v") + 1 :][:3] == ["libopenh264", "-b:v", "2M"]
+    assert "-crf" not in mezzanine and "-crf" not in proxy
+    assert default_proxy[default_proxy.index("-c:v") + 1] == "libx264"

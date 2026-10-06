@@ -23,7 +23,9 @@ PROXY_SHORT_SIDE = 540
 PROXY_GOP = 12
 WAV_SAMPLE_RATE = 16000
 MEZZANINE_CRF = 18
+MEZZANINE_BITRATE = "20M"
 PROXY_CRF = 28
+PROXY_BITRATE = "2M"
 
 _MEZZANINE_SHARE = 0.6
 _PROXY_SHARE = 0.3
@@ -139,9 +141,20 @@ def probe_audio_duration(ffprobe: str, path: Path) -> float:
     return duration
 
 
+def _listed_encoders(encoders_listing: str) -> set[str]:
+    return {line.split()[1] for line in encoders_listing.splitlines() if len(line.split()) > 1}
+
+
+def software_encoder(encoders_listing: str) -> str:
+    """libx264 when the build has it; an LGPL build (the packaged app's) only has OpenH264."""
+    listed = _listed_encoders(encoders_listing)
+    return "libopenh264" if "libx264" not in listed and "libopenh264" in listed else "libx264"
+
+
 def select_video_encoder(encoders_listing: str, cuda_available: bool) -> str:
-    listed = {line.split()[1] for line in encoders_listing.splitlines() if len(line.split()) > 1}
-    return "h264_nvenc" if cuda_available and "h264_nvenc" in listed else "libx264"
+    if cuda_available and "h264_nvenc" in _listed_encoders(encoders_listing):
+        return "h264_nvenc"
+    return software_encoder(encoders_listing)
 
 
 def target_fps(probe: ProbeResult) -> int:
@@ -154,9 +167,12 @@ def source_id_for(path: Path) -> str:
     return "src-" + hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
 
 
-def _video_codec_args(encoder: str, crf: int, preset: str) -> list[str]:
+def _video_codec_args(encoder: str, crf: int, preset: str, bitrate: str) -> list[str]:
+    """`bitrate` only applies to OpenH264, which has no constant-quality mode."""
     if encoder == "h264_nvenc":
         return ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", str(crf + 1)]
+    if encoder == "libopenh264":
+        return ["-c:v", "libopenh264", "-b:v", bitrate, "-profile:v", "high"]
     return ["-c:v", "libx264", "-preset", preset, "-crf", str(crf)]
 
 
@@ -168,7 +184,7 @@ def mezzanine_args(source: Path, output: Path, fps: int, encoder: str) -> list[s
     return [
         "-i", str(source),
         "-map", "0:v:0", "-map", "0:a:0?",
-        *_video_codec_args(encoder, MEZZANINE_CRF, "medium"),
+        *_video_codec_args(encoder, MEZZANINE_CRF, "medium", MEZZANINE_BITRATE),
         "-r", str(fps), "-fps_mode", "cfr", "-pix_fmt", "yuv420p",
         *_audio_args("192k"),
         "-movflags", "+faststart",
@@ -176,14 +192,14 @@ def mezzanine_args(source: Path, output: Path, fps: int, encoder: str) -> list[s
     ]  # fmt: skip
 
 
-def proxy_args(source: Path, output: Path, fps: int) -> list[str]:
+def proxy_args(source: Path, output: Path, fps: int, encoder: str = "libx264") -> list[str]:
     short = PROXY_SHORT_SIDE
     scale = f"scale='if(gt(iw,ih),-2,{short})':'if(gt(iw,ih),{short},-2)'"
     return [
         "-i", str(source),
         "-map", "0:v:0", "-map", "0:a:0?",
         "-vf", scale,
-        *_video_codec_args("libx264", PROXY_CRF, "veryfast"),
+        *_video_codec_args(encoder, PROXY_CRF, "veryfast", PROXY_BITRATE),
         "-g", str(PROXY_GOP), "-keyint_min", str(PROXY_GOP), "-sc_threshold", "0",
         "-r", str(fps), "-fps_mode", "cfr", "-pix_fmt", "yuv420p",
         *_audio_args("96k"),
@@ -252,7 +268,9 @@ def ingest_source(
     proxy = media / f"{source_id}.proxy.mp4"
     wav = media / f"{source_id}.wav"
 
-    encoder = select_video_encoder(list_encoders(tools.ffmpeg), cuda_available)
+    listing = list_encoders(tools.ffmpeg)
+    encoder = select_video_encoder(listing, cuda_available)
+    proxy_encoder = software_encoder(listing)
 
     def compute() -> IngestedSource:
         layout.ensure()
@@ -267,7 +285,7 @@ def ingest_source(
         )
         _encode_atomic(
             tools.ffmpeg,
-            lambda out: proxy_args(source, out, chosen_fps),
+            lambda out: proxy_args(source, out, chosen_fps, proxy_encoder),
             proxy,
             probe.duration,
             _scaled(progress, stage, _MEZZANINE_SHARE, _PROXY_SHARE, "proxy"),
@@ -297,8 +315,10 @@ def ingest_source(
     params = {
         "fps": fps,
         "videoEncoder": encoder,
-        "mezzanineVideoArgs": _video_codec_args(encoder, MEZZANINE_CRF, "medium"),
-        "proxyVideoArgs": _video_codec_args("libx264", PROXY_CRF, "veryfast"),
+        "mezzanineVideoArgs": _video_codec_args(
+            encoder, MEZZANINE_CRF, "medium", MEZZANINE_BITRATE
+        ),
+        "proxyVideoArgs": _video_codec_args(proxy_encoder, PROXY_CRF, "veryfast", PROXY_BITRATE),
     }
     return run_stage(
         layout,
