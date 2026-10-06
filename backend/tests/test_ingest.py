@@ -8,13 +8,17 @@ from typing import Any
 import pytest
 
 from powereditor.paths import AppPaths
-from powereditor.pipeline.ffmpeg import MediaTools, parse_progress_seconds
+from powereditor.pipeline import ingest as ingest_module
+from powereditor.pipeline.ffmpeg import FfmpegError, MediaTools, parse_progress_seconds
 from powereditor.pipeline.ingest import (
+    IngestedSource,
     ProbeResult,
     ingest_files,
+    ingest_source,
     parse_rate,
     probe_media,
     select_video_encoder,
+    source_id_for,
     target_fps,
 )
 from powereditor.pipeline.runner import ProjectLayout
@@ -215,3 +219,88 @@ def test_ingest_produces_cfr_mezzanine_proxy_and_wav(
     again = ingest_files(layout, [clips["accented"]], _tools(), cuda_available=False)
     assert again.sources[0] == accented
     assert len(again.sources) == 3
+
+
+class FakeFfmpeg:
+    """Stands in for ffmpeg: writes the last argument as the output file."""
+
+    def __init__(self, fail_on: str | None = None) -> None:
+        self.outputs: list[Path] = []
+        self.fail_on = fail_on
+
+    def __call__(self, ffmpeg: str, args: list[str], *rest: object) -> None:
+        output = Path(args[-1])
+        self.outputs.append(output)
+        if output.suffix == ".wav":
+            with wave.open(str(output), "wb") as handle:
+                handle.setnchannels(1)
+                handle.setsampwidth(2)
+                handle.setframerate(16000)
+                handle.writeframes(b"\x00\x00" * 1600)
+        else:
+            output.write_bytes(b"video")
+        if self.fail_on is not None and self.fail_on in output.name:
+            raise FfmpegError("simulated crash")
+
+
+@pytest.fixture
+def fake_media(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
+    state: dict[str, Any] = {"listing": " V....D libx264  libx264 H.264\n", "ffmpeg": FakeFfmpeg()}
+    monkeypatch.setattr(ingest_module, "probe_media", lambda ffprobe, path: _probe())
+    monkeypatch.setattr(ingest_module, "list_encoders", lambda ffmpeg: state["listing"])
+    monkeypatch.setattr(ingest_module, "run_ffmpeg", lambda *args: state["ffmpeg"](*args))
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"source")
+    state["source"] = source
+    state["layout"] = ProjectLayout.for_project(AppPaths(data_dir=tmp_path), "demo")
+    return state
+
+
+def _ingest(state: dict[str, Any], cuda: bool = False) -> IngestedSource:
+    tools = MediaTools(ffmpeg="ffmpeg", ffprobe="ffprobe")
+    return ingest_source(state["layout"], state["source"], tools, cuda_available=cuda)
+
+
+def test_ingest_cache_key_includes_video_encoder(fake_media: dict[str, Any]) -> None:
+    first = _ingest(fake_media)
+    runs = len(fake_media["ffmpeg"].outputs)
+    assert _ingest(fake_media) == first
+    assert len(fake_media["ffmpeg"].outputs) == runs
+
+    fake_media["listing"] = NVENC_LISTING
+    again = _ingest(fake_media, cuda=True)
+
+    assert again.video_encoder == "h264_nvenc"
+    assert len(fake_media["ffmpeg"].outputs) == 2 * runs
+
+
+def test_ingest_missing_or_corrupt_wav_is_a_cache_miss(fake_media: dict[str, Any]) -> None:
+    entry = _ingest(fake_media)
+    runs = len(fake_media["ffmpeg"].outputs)
+    assert entry.wav_path is not None
+
+    Path(entry.wav_path).unlink()
+    _ingest(fake_media)
+    assert len(fake_media["ffmpeg"].outputs) == 2 * runs
+
+    Path(entry.wav_path).write_bytes(b"not a wav file")
+    _ingest(fake_media)
+    assert len(fake_media["ffmpeg"].outputs) == 3 * runs
+
+
+def test_ingest_writes_outputs_atomically(fake_media: dict[str, Any]) -> None:
+    fake_media["ffmpeg"] = FakeFfmpeg(fail_on="proxy")
+
+    with pytest.raises(FfmpegError):
+        _ingest(fake_media)
+
+    written = fake_media["ffmpeg"].outputs
+    assert all(".part" in path.name for path in written)
+    media_dir: Path = fake_media["layout"].media_dir
+    assert not any(path.name.endswith(".proxy.mp4") for path in media_dir.iterdir())
+    assert not any(".part" in path.name for path in media_dir.iterdir())
+    assert (
+        not fake_media["layout"]
+        .cache_file(f"ingest-{source_id_for(fake_media['source'])}")
+        .exists()
+    )

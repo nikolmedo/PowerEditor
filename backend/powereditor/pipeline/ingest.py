@@ -2,7 +2,7 @@ import hashlib
 import json
 import logging
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,10 +11,11 @@ from pydantic import Field, ValidationError
 from powereditor.models import CamelModel, write_text_atomic
 from powereditor.pipeline.ffmpeg import MediaTools, list_encoders, run_capture, run_ffmpeg
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress, run_stage
+from powereditor.transcribe.base import audio_duration
 
 logger = logging.getLogger(__name__)
 
-INGEST_STAGE_VERSION = 1
+INGEST_STAGE_VERSION = 2
 MANIFEST_STAGE = "ingest"
 STANDARD_FPS = (24, 25, 30, 50, 60)
 VFR_TOLERANCE = 0.01
@@ -182,6 +183,34 @@ def _scaled(progress: ProgressCallback, stage: str, start: float, share: float, 
     return report
 
 
+def _partial(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.part{path.suffix}")
+
+
+def _encode_atomic(
+    ffmpeg: str,
+    build_args: Callable[[Path], list[str]],
+    output: Path,
+    duration: float,
+    on_progress: Callable[[float], None],
+) -> None:
+    partial = _partial(output)
+    try:
+        run_ffmpeg(ffmpeg, build_args(partial), duration, on_progress)
+        partial.replace(output)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
+def _ingest_outputs(entry: "IngestedSource") -> list[Path]:
+    paths = [Path(entry.mezzanine_path), Path(entry.proxy_path)]
+    return paths + ([Path(entry.wav_path)] if entry.wav_path else [])
+
+
+def _wav_readable(entry: "IngestedSource") -> bool:
+    return entry.wav_path is None or bool(audio_duration(Path(entry.wav_path)))
+
+
 def ingest_source(
     layout: ProjectLayout,
     source: Path,
@@ -198,29 +227,33 @@ def ingest_source(
     proxy = media / f"{source_id}.proxy.mp4"
     wav = media / f"{source_id}.wav"
 
+    encoder = select_video_encoder(list_encoders(tools.ffmpeg), cuda_available)
+
     def compute() -> IngestedSource:
         layout.ensure()
         probe = probe_media(tools.ffprobe, source)
         chosen_fps = fps or target_fps(probe)
-        encoder = select_video_encoder(list_encoders(tools.ffmpeg), cuda_available)
-        run_ffmpeg(
+        _encode_atomic(
             tools.ffmpeg,
-            mezzanine_args(source, mezzanine, chosen_fps, encoder),
+            lambda out: mezzanine_args(source, out, chosen_fps, encoder),
+            mezzanine,
             probe.duration,
             _scaled(progress, stage, 0.0, _MEZZANINE_SHARE, "mezzanine"),
         )
-        run_ffmpeg(
+        _encode_atomic(
             tools.ffmpeg,
-            proxy_args(source, proxy, chosen_fps),
+            lambda out: proxy_args(source, out, chosen_fps),
+            proxy,
             probe.duration,
             _scaled(progress, stage, _MEZZANINE_SHARE, _PROXY_SHARE, "proxy"),
         )
         wav_path: str | None = None
         if probe.has_audio:
             start = _MEZZANINE_SHARE + _PROXY_SHARE
-            run_ffmpeg(
+            _encode_atomic(
                 tools.ffmpeg,
-                wav_args(source, wav),
+                lambda out: wav_args(source, out),
+                wav,
                 probe.duration,
                 _scaled(progress, stage, start, 1.0 - start, "audio"),
             )
@@ -236,7 +269,12 @@ def ingest_source(
             wav_path=wav_path,
         )
 
-    params = {"fps": fps, "mezzanineCrf": MEZZANINE_CRF, "proxyCrf": PROXY_CRF}
+    params = {
+        "fps": fps,
+        "videoEncoder": encoder,
+        "mezzanineVideoArgs": _video_codec_args(encoder, MEZZANINE_CRF, "medium"),
+        "proxyVideoArgs": _video_codec_args("libx264", PROXY_CRF, "veryfast"),
+    }
     return run_stage(
         layout,
         stage,
@@ -245,7 +283,8 @@ def ingest_source(
         params,
         IngestedSource,
         compute,
-        outputs=[mezzanine, proxy],
+        outputs=_ingest_outputs,
+        validate=_wav_readable,
         progress=progress,
     )
 

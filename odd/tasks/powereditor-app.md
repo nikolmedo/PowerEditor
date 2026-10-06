@@ -37,7 +37,7 @@ Reviewed boundary: `f35332a` (phase-0).
 - [x] 1b Pipeline runner + cache, ingest (ffprobe, mezzanine, proxy, WAV) with lavfi fixtures; transcribers (local, openai) + fakes; CLI commands. Route: delegated writer.
 
 ### Slice 2 — `feat/phase-2-render`
-- [ ] 2a VAD, segmentation, silence cut, draft builder.
+- [x] 2a VAD, segmentation, silence cut, draft builder.
 - [ ] 2b Remotion composition (clips + audio crossfade), render CLI + loudnorm final pass, render-speed measurement.
 
 ### Slice 3 — `feat/phase-3-takes`
@@ -76,5 +76,9 @@ Reviewed boundary: `f35332a` (phase-0).
 - `045420e` (rename): unavailable — mechanical rename counted as 4399 lines, exceeds native review budget; verified by full suite instead.
 - Reviewed boundary: `045420e`.
 
+- 2a done (delegated): 1b follow-ups fixed (encoder in cache key, WAV tracked output, atomic stage outputs, CLI error codes, OpenAI per-chunk retry); VAD (Silero ONNX bundled in faster-whisper, no torch, + dB floor; EnergyDetector fallback); segmentation; LUFS (ebur128) + color stats; draft builder + `export/subtitles.remap_words`; `analyze_project` + `powereditor analyze`. Evidence: pytest 156 passed (parent re-run); ruff/mypy clean; smoke on gated-tone clip kept 5.18 of 10 s, second run fully cached. RED strong for follow-ups, weak for new modules.
+- Contract for 2b: clip frames = round((out-in)/speed*fps); composition must match.
+- Known limits: fps from first source only; zero-length segment after VAD split may become a padded clip; Silero only tested on silence/noise (no speech fixture).
+
 ## Next step
-Slice 2 on `feat/phase-2-render`: 2a VAD/segmentation/draft builder (+ 1b WARNING follow-ups), then 2b composition + render.
+2b: Remotion composition + render + loudnorm + render-speed measurement.

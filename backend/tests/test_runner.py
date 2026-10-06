@@ -6,7 +6,7 @@ import pytest
 
 from powereditor.models import CamelModel
 from powereditor.paths import AppPaths
-from powereditor.pipeline.runner import ProjectLayout, run_stage
+from powereditor.pipeline.runner import ProjectLayout, StageOutputError, run_stage
 
 
 class Doubled(CamelModel):
@@ -102,3 +102,89 @@ def test_run_stage_reports_progress_and_cache_hits(tmp_path: Path) -> None:
         run_stage(layout, "s", 1, [], {}, Doubled, lambda: Doubled(value=1), progress=record)
 
     assert events == [("s", 0.0, "running"), ("s", 1.0, "done"), ("s", 1.0, "cached")]
+
+
+def test_run_stage_drops_cache_record_when_compute_crashes(tmp_path: Path) -> None:
+    layout = _layout(tmp_path)
+    output = layout.media_dir / "out.bin"
+    attempts: list[str] = []
+
+    def compute_ok() -> Doubled:
+        attempts.append("ok")
+        output.write_bytes(b"complete")
+        return Doubled(value=1)
+
+    def compute_crash() -> Doubled:
+        attempts.append("crash")
+        output.write_bytes(b"part")
+        raise RuntimeError("boom")
+
+    run_stage(layout, "s", 1, [], {}, Doubled, compute_ok, outputs=[output])
+    output.unlink()
+    with pytest.raises(RuntimeError):
+        run_stage(layout, "s", 1, [], {}, Doubled, compute_crash, outputs=[output])
+
+    assert not layout.cache_file("s").exists()
+    assert run_stage(layout, "s", 1, [], {}, Doubled, compute_ok, outputs=[output]).value == 1
+    assert attempts == ["ok", "crash", "ok"]
+
+
+def test_run_stage_rejects_missing_or_empty_outputs_without_caching(tmp_path: Path) -> None:
+    layout = _layout(tmp_path)
+    output = layout.media_dir / "out.bin"
+
+    def compute_empty() -> Doubled:
+        output.write_bytes(b"")
+        return Doubled(value=1)
+
+    with pytest.raises(StageOutputError) as excinfo:
+        run_stage(layout, "s", 1, [], {}, Doubled, compute_empty, outputs=[output])
+
+    assert excinfo.value.code == "stage_output_missing"
+    assert not layout.cache_file("s").exists()
+
+
+def test_run_stage_outputs_can_depend_on_result(tmp_path: Path) -> None:
+    layout = _layout(tmp_path)
+    extra = layout.media_dir / "extra.bin"
+    calls: list[int] = []
+
+    def compute() -> Doubled:
+        calls.append(1)
+        extra.write_bytes(b"x")
+        return Doubled(value=len(calls))
+
+    def outputs(result: Doubled) -> list[Path]:
+        return [extra] if result.value > 0 else []
+
+    def run() -> Doubled:
+        return run_stage(layout, "s", 1, [], {}, Doubled, compute, outputs=outputs)
+
+    run()
+    run()
+    assert len(calls) == 1
+    extra.unlink()
+    run()
+    assert len(calls) == 2
+
+
+def test_run_stage_validator_failure_is_a_cache_miss(tmp_path: Path) -> None:
+    layout = _layout(tmp_path)
+    output = layout.media_dir / "out.bin"
+    calls: list[int] = []
+
+    def compute() -> Doubled:
+        calls.append(1)
+        output.write_bytes(b"good")
+        return Doubled(value=1)
+
+    def valid(_: Doubled) -> bool:
+        return output.read_bytes() == b"good"
+
+    def run() -> Doubled:
+        return run_stage(layout, "s", 1, [], {}, Doubled, compute, outputs=[output], validate=valid)
+
+    run()
+    output.write_bytes(b"bad")
+    run()
+    assert len(calls) == 2

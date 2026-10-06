@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import typer
 import uvicorn
@@ -11,10 +11,13 @@ from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedCo
 from rich.table import Table
 
 from powereditor import doctor as doctor_module
+from powereditor.models import ProjectPreset
+from powereditor.pipeline.analyze import analyze_project
 from powereditor.pipeline.ffmpeg import FfmpegError, MediaTools, MissingToolError
 from powereditor.pipeline.ingest import ingest_files, load_manifest
-from powereditor.pipeline.runner import ProgressCallback, ProjectLayout
+from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, StageOutputError
 from powereditor.pipeline.transcription import transcribe_project
+from powereditor.pipeline.vad import EnergyDetector, SileroDetector, SpeechDetector
 from powereditor.settings_store import SettingsService
 from powereditor.transcribe.base import TranscriptionError
 from powereditor.transcribe.factory import TranscriberConfigError, create_transcriber
@@ -23,6 +26,20 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
+
+PIPELINE_ERRORS = (
+    MissingToolError,
+    FfmpegError,
+    StageOutputError,
+    TranscriberConfigError,
+    TranscriptionError,
+)
+
+
+def _fail(console: Console, exc: Exception) -> typer.Exit:
+    code = getattr(exc, "code", "invalid_input")
+    console.print(f"[red]{code}: {exc}[/red]", soft_wrap=True)
+    return typer.Exit(code=1)
 
 
 @app.callback()
@@ -107,9 +124,8 @@ def ingest(
                 fps=fps,
                 progress=report,
             )
-    except (ValueError, MissingToolError, FfmpegError) as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
+    except (ValueError, *PIPELINE_ERRORS) as exc:
+        raise _fail(console, exc) from exc
     for source in manifest.sources:
         console.print(
             f"{source.source_id}: {source.probe.display_width}x{source.probe.display_height} "
@@ -127,8 +143,7 @@ def transcribe(project_id: str) -> None:
     try:
         layout = ProjectLayout.for_project(service.paths, project_id)
     except ValueError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
+        raise _fail(console, exc) from exc
     if not load_manifest(layout).sources:
         console.print(f"[red]Project {project_id!r} has no ingested sources.[/red]")
         raise typer.Exit(code=1)
@@ -138,9 +153,42 @@ def transcribe(project_id: str) -> None:
             transcripts = transcribe_project(
                 layout, transcriber, service.get_effective().language, report
             )
-    except (TranscriberConfigError, TranscriptionError) as exc:
-        console.print(f"[red]{exc.code}: {exc}[/red]")
-        raise typer.Exit(code=1) from exc
+    except PIPELINE_ERRORS as exc:
+        raise _fail(console, exc) from exc
     for source_id, transcript in transcripts.items():
         console.print(f"{source_id}: {len(transcript.words)} words ({transcript.model})")
     console.print(f"Project dir: {layout.root}", soft_wrap=True)
+
+
+VadChoice = Literal["silero", "energy"]
+DETECTORS: dict[str, SpeechDetector] = {"silero": SileroDetector(), "energy": EnergyDetector()}
+
+
+@app.command()
+def analyze(
+    files: Annotated[list[Path], typer.Argument(exists=True, dir_okay=False, resolve_path=True)],
+    project_id: Annotated[str | None, typer.Option(help="Project to create or update.")] = None,
+    preset: Annotated[ProjectPreset | None, typer.Option(help="Force the output format.")] = None,
+    vad: Annotated[VadChoice, typer.Option(help="Speech detector.")] = "silero",
+) -> None:
+    """Ingest, transcribe and cut silences into a draft project.json."""
+    console = Console()
+    service = SettingsService.default()
+    try:
+        layout = ProjectLayout.for_project(service.paths, project_id or _default_project_id())
+        with _progress_bar(console) as report:
+            result = analyze_project(
+                layout,
+                service,
+                files=files,
+                preset=preset,
+                detector=DETECTORS[vad],
+                progress=report,
+            )
+    except (ValueError, *PIPELINE_ERRORS) as exc:
+        raise _fail(console, exc) from exc
+    console.print(
+        f"{len(result.project.clips)} clips, kept {result.kept_seconds:.1f}s"
+        f" of {result.original_seconds:.1f}s"
+    )
+    console.print(f"Project file: {result.project_path}", soft_wrap=True)
