@@ -1,9 +1,13 @@
 import { useContext } from "react";
 import { AbsoluteFill, Series } from "remotion";
 
+import { speechIntervals, voiceGains } from "./audio/ducking";
+import { Music } from "./audio/Music";
 import { ClipVideo } from "./clips/ClipVideo";
 import { edgeFadeFrames } from "./clips/edgeFade";
-import { MediaResolverContext, mezzanineResolver } from "./clips/media";
+import { MediaResolverContext, mediaUrl, mezzanineResolver } from "./clips/media";
+import { ColorGraded } from "./color/ColorGraded";
+import { clipColorMatrix } from "./color/matrix";
 import { Subtitles } from "./subtitles/Subtitles";
 import { timelineLayout } from "./timeline";
 import { ClipTransition } from "./transitions/ClipTransition";
@@ -22,6 +26,11 @@ export type ProjectVideoProps = {
   punchInScale: number;
   /** Where render-time media is served; each source loads `${mediaBaseUrl}/<mezzanine file name>`. */
   mediaBaseUrl: string;
+  /**
+   * Play the music track (Player preview only). Renders leave it off: they are muted and
+   * the backend mixes the music with ffmpeg, so Remotion never needs to load it.
+   */
+  previewMusic?: boolean;
 };
 
 export const ProjectVideo: React.FC<ProjectVideoProps> = ({
@@ -29,11 +38,14 @@ export const ProjectVideo: React.FC<ProjectVideoProps> = ({
   audioCrossfadeMs,
   punchInScale,
   mediaBaseUrl,
+  previewMusic = false,
 }) => {
   const resolve = useContext(MediaResolverContext) ?? mezzanineResolver(mediaBaseUrl);
   const clips = new Map<string, Clip>(project.clips.map((clip) => [clip.id, clip]));
   const sources = new Map<string, Source>(project.sources.map((source) => [source.id, source]));
   const fadeFrames = edgeFadeFrames(audioCrossfadeMs, project.fps);
+  const gains = voiceGains(project);
+  const music = project.audioTracks.find((track) => track.kind === "music" && track.sourcePath);
   // Zero-length clips still count toward the layout but cannot become sequences.
   const placements = timelineLayout(project).clips.filter(
     (placement) => placement.durationInFrames > 0,
@@ -51,18 +63,34 @@ export const ProjectVideo: React.FC<ProjectVideoProps> = ({
           return (
             <Series.Sequence key={clip.id} durationInFrames={placement.durationInFrames}>
               <ClipTransition transition={clip.transitionIn} punchInScale={punchInScale}>
-                <ClipVideo
-                  src={resolve(source)}
-                  clip={clip}
-                  sourceStartFrame={placement.sourceStartFrame}
-                  durationInFrames={placement.durationInFrames}
-                  fadeFrames={fadeFrames}
-                />
+                <ColorGraded
+                  matrix={clipColorMatrix(
+                    project.colorGrade,
+                    source.colorCorrection,
+                    clip.colorOverride,
+                  )}
+                >
+                  <ClipVideo
+                    src={resolve(source)}
+                    clip={clip}
+                    sourceStartFrame={placement.sourceStartFrame}
+                    durationInFrames={placement.durationInFrames}
+                    fadeFrames={fadeFrames}
+                    gain={gains.get(source.id) ?? 1}
+                  />
+                </ColorGraded>
               </ClipTransition>
             </Series.Sequence>
           );
         })}
       </Series>
+      {previewMusic && music?.sourcePath && (
+        <Music
+          src={mediaUrl(mediaBaseUrl, music.sourcePath)}
+          track={music}
+          speech={speechIntervals(project.subtitles.words, project.fps)}
+        />
+      )}
       <Subtitles project={project} />
     </AbsoluteFill>
   );

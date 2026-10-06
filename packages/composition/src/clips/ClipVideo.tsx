@@ -11,6 +11,8 @@ interface ClipVideoProps {
   /** Timeline length of the clip; the enclosing sequence ends playback there. */
   durationInFrames: number;
   fadeFrames: number;
+  /** Voice track volume and source loudness match, on top of the clip's own volume. */
+  gain: number;
 }
 
 /** One timeline clip: a trimmed, speed-adjusted slice of its source. */
@@ -20,13 +22,14 @@ export const ClipVideo: React.FC<ClipVideoProps> = ({
   sourceStartFrame,
   durationInFrames,
   fadeFrames,
+  gain,
 }) => (
   <AbsoluteFill>
     <OffthreadVideo
       src={src}
       trimBefore={sourceStartFrame}
       playbackRate={clip.speed}
-      volume={(frame) => clip.volume * edgeFadeGain(frame, durationInFrames, fadeFrames)}
+      volume={(frame) => gain * clip.volume * edgeFadeGain(frame, durationInFrames, fadeFrames)}
       style={{ width: "100%", height: "100%", objectFit: "cover" }}
     />
   </AbsoluteFill>
