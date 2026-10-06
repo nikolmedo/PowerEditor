@@ -18,6 +18,7 @@ vi.mock("../src/api/endpoints", () => ({
       "setup",
       "downloadWhisperModel",
       "health",
+      "updates",
       "settings",
       "updateSettings",
       "providerKinds",
@@ -113,6 +114,7 @@ const SETTINGS: SettingsResponse = {
     ffprobePath: null,
     nodePath: null,
     uiLanguage: "en",
+    checkForUpdates: true,
   },
   resolvedWhisperModel: "small",
   secrets: {

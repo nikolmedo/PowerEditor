@@ -18,7 +18,7 @@ const NUMBER_FIELDS = [
   "modelMinConfidence",
   "renderMaxConcurrency",
 ] as const;
-const BOOLEAN_FIELDS = ["autoCta"] as const;
+const BOOLEAN_FIELDS = ["autoCta", "checkForUpdates"] as const;
 const WEIGHT_PREFIX = "takeWeights.";
 
 function toForm(settings: UserSettings): Form {
@@ -184,6 +184,20 @@ export function SettingsScreen() {
               hint={t("settings.pathHint")}
             />
           ))}
+        </fieldset>
+        <fieldset>
+          <legend>{t("settings.section.updates")}</legend>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={form.checkForUpdates === "true"}
+              onChange={(event) =>
+                setForm({ ...form, checkForUpdates: String(event.target.checked) })
+              }
+            />
+            {t("settings.checkForUpdates")}
+          </label>
+          <p className="meta">{t("settings.checkForUpdates.hint")}</p>
         </fieldset>
         <div className="row sticky-actions">
           <button type="submit" className="primary" disabled={status === "saving"}>

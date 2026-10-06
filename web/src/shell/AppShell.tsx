@@ -4,6 +4,7 @@ import { LANGUAGES, useT, type Language, type MessageKey } from "../i18n";
 import { STEPS, stepPath, type Step } from "../routes";
 import { useAppStore } from "../store/app";
 import { AUTHOR_URL } from "../ui/projectLinks";
+import { UpdateBanner } from "../updates/UpdateBanner";
 
 const NAV: readonly { path: string; key: MessageKey; nested?: boolean }[] = [
   { path: "/", key: "nav.projects" },
@@ -123,6 +124,7 @@ export function AppShell({ step, projectId, children }: ShellProps) {
         ))}
       </nav>
       <main className="content" data-step={step ?? undefined}>
+        <UpdateBanner />
         {children}
       </main>
       <footer className="app-footer">

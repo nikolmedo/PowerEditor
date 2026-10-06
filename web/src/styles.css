@@ -449,6 +449,18 @@ progress {
   border-left-color: var(--bad);
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.update-banner > button:last-child {
+  margin-left: auto;
+}
+
 /* Lists and tables */
 
 .checks,
