@@ -51,6 +51,7 @@ class UserSettings(CamelModel):
     punch_in_scale: float = Field(default=1.1, gt=0.0)
     ffmpeg_path: str | None = None
     ffprobe_path: str | None = None
+    node_path: str | None = None
     ui_language: str = "es"
 
 

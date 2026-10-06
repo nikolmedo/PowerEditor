@@ -3,11 +3,7 @@
 from collections.abc import Mapping, Sequence
 
 from powereditor.models import Clip, TimelineWord, Word
-
-
-def clip_frames(clip: Clip, fps: int) -> int:
-    """Timeline length of a clip in frames (the composition must use the same rounding)."""
-    return round((clip.out_sec - clip.in_sec) / clip.speed * fps)
+from powereditor.timeline import clip_frames
 
 
 def _overlap(word: Word, clip: Clip) -> float:

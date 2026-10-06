@@ -82,5 +82,9 @@ Reviewed boundary: `f35332a` (phase-0).
 - Contract for 2b: clip frames = round((out-in)/speed*fps); composition must match.
 - Known limits: fps from first source only; zero-length segment after VAD split may become a padded clip; Silero only tested on silence/noise (no speech fixture).
 
+- 2b done (delegated) with one acceptance failure: Remotion composition (Series/OffthreadVideo, shared timeline contract with roundHalfEven, injectable media resolver), `scripts/render.mjs`, backend render (x64 Node runtime probe, loopback media server, Remotion render, two-pass loudnorm final pass), `powereditor render`. pnpm `supportedArchitectures cpu [current, x64]` + `allowBuilds esbuild`. Evidence: pytest 172 passed, vitest 15 passed (parent re-run).
+- Phase 2 measurement (ARM64 host, x64 Node+Chrome emulated, 1080p30, 12.1 s output): 114 s wall = 0.11x realtime (~30 s fixed startup + ~0.17 s/frame). A/V sync pass (17 ms). Loudness pass (-14.0 LUFS). **Clicks at cuts FAIL**: Remotion volume callbacks only change gain at video-frame boundaries.
+- Fix path for clicks (needed under any render engine): rebuild audio sample-accurately with ffmpeg in the final pass (atrim/atempo/afade/concat) and drop Remotion audio.
+
 ## Next step
-2b: Remotion composition + render + loudnorm + render-speed measurement.
+User decision: keep Remotion (WYSIWYG, slow on ARM64) vs plan B (FFmpeg render). Then 2c audio rebuild.

@@ -18,6 +18,9 @@ from powereditor.pipeline.ingest import ingest_files, load_manifest
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, StageOutputError
 from powereditor.pipeline.transcription import transcribe_project
 from powereditor.pipeline.vad import EnergyDetector, SileroDetector, SpeechDetector
+from powereditor.render import job as render_job
+from powereditor.render.node_runtime import NodeRuntimeError
+from powereditor.render.remotion_render import RenderError
 from powereditor.settings_store import SettingsService
 from powereditor.transcribe.base import TranscriptionError
 from powereditor.transcribe.factory import TranscriberConfigError, create_transcriber
@@ -33,6 +36,9 @@ PIPELINE_ERRORS = (
     StageOutputError,
     TranscriberConfigError,
     TranscriptionError,
+    NodeRuntimeError,
+    RenderError,
+    render_job.ProjectNotFoundError,
 )
 
 
@@ -192,3 +198,27 @@ def analyze(
         f" of {result.original_seconds:.1f}s"
     )
     console.print(f"Project file: {result.project_path}", soft_wrap=True)
+
+
+@app.command()
+def render(
+    project_id: str,
+    output: Annotated[
+        str, typer.Option(help="Export name under the project's exports/.")
+    ] = "final",
+) -> None:
+    """Render a project to MP4 with loudness normalization."""
+    console = Console()
+    service = SettingsService.default()
+    try:
+        layout = ProjectLayout.for_project(service.paths, project_id)
+        with _progress_bar(console) as report:
+            result = render_job.render_project(layout, service, name=output, progress=report)
+    except (ValueError, *PIPELINE_ERRORS) as exc:
+        raise _fail(console, exc) from exc
+    console.print(f"Output: {result.output}", soft_wrap=True)
+    console.print(
+        f"Video {result.video_seconds:.2f}s in {result.wall_s:.1f}s wall"
+        f" (setup {result.timing.setup_s:.1f}s, render {result.timing.render_s:.1f}s):"
+        f" {result.realtime_factor:.2f}x realtime"
+    )
