@@ -8,12 +8,18 @@ from typing import Any, Literal, Protocol, get_args
 
 import keyring
 import keyring.errors
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator
 
 from powereditor import doctor
 from powereditor.config import DecisionEngine, Settings, Transcriber, WhisperDevice
 from powereditor.models import CamelModel, write_text_atomic
 from powereditor.paths import AppPaths, resolve_executable
+from powereditor.providers.config import (
+    FeatureId,
+    ModelRef,
+    ProviderConfig,
+    provider_secret_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +77,18 @@ class UserSettings(CamelModel):
     ffprobe_path: str | None = None
     node_path: str | None = None
     ui_language: str = "es"
+    providers: list[ProviderConfig] = Field(default_factory=list)
+    feature_models: dict[FeatureId, ModelRef | None] = Field(default_factory=dict)
+    """Unassigned features (missing or None) use the heuristic engine."""
+
+    @field_validator("providers")
+    @classmethod
+    def _unique_provider_ids(cls, providers: list[ProviderConfig]) -> list[ProviderConfig]:
+        ids = [provider.id for provider in providers]
+        duplicates = sorted({provider_id for provider_id in ids if ids.count(provider_id) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate provider id: {', '.join(duplicates)}")
+        return providers
 
 
 class SecretStore(Protocol):
@@ -173,12 +191,18 @@ class SettingsService:
         return self._merge(self._normalized_file_overrides())
 
     def update(self, partial: Mapping[str, Any]) -> UserSettings:
-        validated_partial = UserSettings.model_validate(partial)
-        changes = validated_partial.model_dump(
-            by_alias=True, mode="json", include=set(validated_partial.model_fields_set)
-        )
+        return self.mutate(lambda _current: partial)
+
+    def mutate(self, change: Callable[[UserSettings], Mapping[str, Any]]) -> UserSettings:
+        """Read-modify-write under the settings lock: `change` receives the effective
+        settings and returns the fields to store (by field name or alias)."""
         with _lock_for(self.paths.settings_file):
-            stored = {**self._normalized_file_overrides(), **changes}
+            stored = self._normalized_file_overrides()
+            validated_partial = UserSettings.model_validate(change(self._merge(stored)))
+            changes = validated_partial.model_dump(
+                by_alias=True, mode="json", include=set(validated_partial.model_fields_set)
+            )
+            stored.update(changes)
             effective = self._merge(stored)
             write_text_atomic(
                 self.paths.settings_file, json.dumps(stored, indent=2, sort_keys=True) + "\n"
@@ -247,3 +271,31 @@ class SettingsService:
 
     def clear_secret(self, name: SecretName) -> None:
         self._secrets.delete(name)
+
+    def provider(self, provider_id: str) -> ProviderConfig | None:
+        return next((p for p in self.get_effective().providers if p.id == provider_id), None)
+
+    def feature_model(self, feature: FeatureId) -> tuple[ProviderConfig, str] | None:
+        """The provider and model assigned to `feature`, or None for the heuristic."""
+        ref = self.get_effective().feature_models.get(feature)
+        if ref is None:
+            return None
+        provider = self.provider(ref.provider_id)
+        return (provider, ref.model) if provider is not None else None
+
+    def provider_api_key(self, provider_id: str) -> str | None:
+        name = provider_secret_name(provider_id)
+        try:
+            return self._secrets.get(name)
+        except keyring.errors.KeyringError as exc:
+            logger.warning("Secure storage unavailable while reading %s: %s", name, exc)
+            return None
+
+    def set_provider_api_key(self, provider_id: str, value: str) -> None:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("secret value must not be empty")
+        self._secrets.set(provider_secret_name(provider_id), cleaned)
+
+    def clear_provider_api_key(self, provider_id: str) -> None:
+        self._secrets.delete(provider_secret_name(provider_id))

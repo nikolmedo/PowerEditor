@@ -470,6 +470,8 @@ interface ColorGrade {
 
 ### Phase 4: AI providers and per-feature model selection
 
+**Status:** 4a (provider registry) done: `backend/powereditor/providers/` with API adapters (OpenAI, Gemini, Anthropic, DeepSeek over plain `httpx`) and local CLI adapters (Codex, Gemini CLI, Claude Code), per-provider keys in the secret store, `providers` and `featureModels` settings, and `/api/providers*` + `/api/features/models` routes. 4b (Jev adapter, LLM decision engine wired to features, confidence gating, benchmark per provider) is pending.
+
 Users bring their own models. Some subscriptions cannot be used through an API, so a provider can be reached in two ways: an **API key**, or a **local subscription client** (a CLI app already logged in on the machine).
 
 **Supported providers**

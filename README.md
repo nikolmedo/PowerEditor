@@ -106,31 +106,32 @@ Dense reference for coding agents. Read this before exploring; it should save mo
 
 ### Repo map
 
-| Path                                      | Responsibility                                                                                                                                          |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/powereditor/cli.py`              | Typer CLI: `doctor`, `serve`, `ingest`, `transcribe`, `analyze`, `render`, `eval-takes`                                                                 |
-| `backend/powereditor/api/`                | FastAPI app (`app.py`: `/api/health`, `/api/doctor`) and settings/secrets routes (`routes_settings.py`)                                                 |
-| `backend/powereditor/models.py`           | Pydantic models, single source of truth for `project.json` and stage results                                                                            |
-| `backend/powereditor/schema_gen.py`       | Writes `packages/composition/schema/project.schema.json` from `Project`                                                                                 |
-| `backend/powereditor/config.py`           | `.env` developer overrides (pydantic-settings), `REPO_ROOT`                                                                                             |
-| `backend/powereditor/settings_store.py`   | Settings layering, user `settings.json`, keyring and in-memory secret stores                                                                            |
-| `backend/powereditor/paths.py`            | User data dir layout, executable resolution (configured → `<data dir>/bin` → `PATH`)                                                                    |
-| `backend/powereditor/doctor.py`           | Dependency probes                                                                                                                                       |
-| `backend/powereditor/timeline.py`         | Clip frame layout; mirrored by `packages/composition/src/timeline.ts`                                                                                   |
-| `backend/powereditor/pipeline/`           | Stage runner + cache (`runner.py`), ffmpeg helpers, ingest, transcription, VAD, segmentation, loudness, color stats, takes, draft builder, `analyze.py` |
-| `backend/powereditor/decide/`             | `DecisionEngine` protocol (`base.py`), `HeuristicEngine`, `create_engine` factory                                                                       |
-| `backend/powereditor/eval/takes_eval.py`  | Take benchmark evaluator behind `powereditor eval-takes`                                                                                                |
-| `backend/powereditor/transcribe/`         | `Transcriber` protocol, factory, faster-whisper and OpenAI implementations                                                                              |
-| `backend/powereditor/render/`             | Render job: voice rebuild (`audio_mix.py`), Remotion runner, Node resolution, loopback media server, final pass                                         |
-| `backend/powereditor/export/subtitles.py` | Source-time words → timeline words                                                                                                                      |
-| `backend/tests/`                          | pytest suite; `conftest.py` isolates data dir, env and secrets; `media.py` builds lavfi fixtures                                                        |
-| `packages/composition/src/`               | Remotion composition (`ProjectVideo.tsx`, `Root.tsx`, `timeline.ts`, clips, transitions, subtitles, overlays, color)                                    |
-| `packages/composition/scripts/`           | `gen-types.mjs` (schema → TS), `render.mjs` (CLI render, NDJSON progress)                                                                               |
-| `packages/composition/test/`              | vitest                                                                                                                                                  |
-| `PLAN.md`                                 | Product plan, architecture, phases                                                                                                                      |
-| `odd/tasks/powereditor-app.md`            | Progress log, decisions, measurements, review history                                                                                                   |
+| Path                                      | Responsibility                                                                                                                                             |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/powereditor/cli.py`              | Typer CLI: `doctor`, `serve`, `ingest`, `transcribe`, `analyze`, `render`, `eval-takes`                                                                    |
+| `backend/powereditor/api/`                | FastAPI app (`app.py`: `/api/health`, `/api/doctor`), settings/secrets routes (`routes_settings.py`), providers and feature models (`routes_providers.py`) |
+| `backend/powereditor/models.py`           | Pydantic models, single source of truth for `project.json` and stage results                                                                               |
+| `backend/powereditor/schema_gen.py`       | Writes `packages/composition/schema/project.schema.json` from `Project`                                                                                    |
+| `backend/powereditor/config.py`           | `.env` developer overrides (pydantic-settings), `REPO_ROOT`                                                                                                |
+| `backend/powereditor/settings_store.py`   | Settings layering, user `settings.json`, keyring and in-memory secret stores                                                                               |
+| `backend/powereditor/paths.py`            | User data dir layout, executable resolution (configured → `<data dir>/bin` → `PATH`)                                                                       |
+| `backend/powereditor/doctor.py`           | Dependency probes                                                                                                                                          |
+| `backend/powereditor/timeline.py`         | Clip frame layout; mirrored by `packages/composition/src/timeline.ts`                                                                                      |
+| `backend/powereditor/pipeline/`           | Stage runner + cache (`runner.py`), ffmpeg helpers, ingest, transcription, VAD, segmentation, loudness, color stats, takes, draft builder, `analyze.py`    |
+| `backend/powereditor/providers/`          | `ModelProvider` contract (`base.py`), settings types (`config.py`), `registry.py`, API adapters (`api/`), local CLI adapters (`local_cli/`)                |
+| `backend/powereditor/decide/`             | `DecisionEngine` protocol (`base.py`), `HeuristicEngine`, `create_engine` factory                                                                          |
+| `backend/powereditor/eval/takes_eval.py`  | Take benchmark evaluator behind `powereditor eval-takes`                                                                                                   |
+| `backend/powereditor/transcribe/`         | `Transcriber` protocol, factory, faster-whisper and OpenAI implementations                                                                                 |
+| `backend/powereditor/render/`             | Render job: voice rebuild (`audio_mix.py`), Remotion runner, Node resolution, loopback media server, final pass                                            |
+| `backend/powereditor/export/subtitles.py` | Source-time words → timeline words                                                                                                                         |
+| `backend/tests/`                          | pytest suite; `conftest.py` isolates data dir, env and secrets; `media.py` builds lavfi fixtures                                                           |
+| `packages/composition/src/`               | Remotion composition (`ProjectVideo.tsx`, `Root.tsx`, `timeline.ts`, clips, transitions, subtitles, overlays, color)                                       |
+| `packages/composition/scripts/`           | `gen-types.mjs` (schema → TS), `render.mjs` (CLI render, NDJSON progress)                                                                                  |
+| `packages/composition/test/`              | vitest                                                                                                                                                     |
+| `PLAN.md`                                 | Product plan, architecture, phases                                                                                                                         |
+| `odd/tasks/powereditor-app.md`            | Progress log, decisions, measurements, review history                                                                                                      |
 
-Not yet present: `web/` (UI), provider registry.
+Not yet present: `web/` (UI); providers are not wired into decisions yet (Phase 4b).
 
 ### Data flow
 
@@ -159,7 +160,7 @@ Never hand-edit the schema or `types.generated.ts`. Both are in `.prettierignore
 - **Audio:** Remotion renders **muted** video. The voice is rebuilt by ffmpeg in `render/audio_mix.py` (atrim/atempo/afade/concat, cumulative frame→sample boundaries, batches of `BATCH_CLIPS = 40` via filter script files to respect the Windows 32767-char command line).
 - **Stage cache:** `run_stage()` keys on SHA-256 of stage name, stage version, input identities (path + size + SHA-256 if ≤ 1 MiB, else mtime) and params. The record is deleted before computing and written only after declared outputs exist, are non-empty and validate. Bump the stage version when its logic changes.
 - **Composition id:** single source `packages/composition/src/composition.json`.
-- **Secrets:** API responses report `set`/`source`, never values. Validation errors strip the `input` field.
+- **Secrets:** API responses report `set`/`source`, never values. Validation errors strip the `input` field. Provider API keys live in the secret store as `provider:<id>:api_key`, never in `settings.json`.
 
 ### Conventions
 
@@ -201,7 +202,7 @@ CI (`.github/workflows/ci.yml`) runs the same commands on Windows and Linux.
 - **API route:** create an `APIRouter(prefix="/api")` module in `api/`, inject the service with the `ServiceDep` pattern from `routes_settings.py`, and `include_router` it in `create_app()`. Test with `create_app(settings_service=...)` and FastAPI's `TestClient`.
 - **Takes stage** (`pipeline/takes.py`, cached as `cache/takes.json`): `engine.classify_segment` drops out-of-take remarks, `clustering.py` groups retakes inside a window (rapidfuzz text similarity, or `sentence-transformers` embeddings with `takeSimilarity: "embeddings"` and the `embeddings` extra; grey zone 0.5–0.8 goes to `engine.same_take`), `features.py` scores each take in code, `engine.decide_cluster` picks one. The result is an ordered `TakeEntry` list. `draft_builder` turns it into clips: a group keeps its chosen clip, the other takes become `removed` clips with the same `takeGroupId`, and `alternativeTakeIds` lists those clip ids. Remarks become `removed` clips without a group. Weights live in the `takeWeights` user setting. Visual features need the `vision` extra (OpenCV); without it they are `None`.
 - **Decision engine:** implement the `DecisionEngine` protocol in `decide/base.py` (`same_take`, `decide_cluster`, `classify_segment`, `transition_between`, plus `name` and a `fingerprint()` that goes into the stage cache key). Each method is one feature with Pydantic inputs and outputs, so an engine can delegate any method to `HeuristicEngine`. Return it from `decide/factory.py`. Check it with `uv run powereditor eval-takes`; the bundled benchmark is **synthetic** (`tests/fixtures/takes_benchmark.json`), not real footage.
-- **Model provider (planned, Phase 4):** implement the `ModelProvider` interface (capabilities + transport `api` or `local_cli`) and register it; features never import providers directly. See PLAN.md Phase 4.
+- **Model provider:** implement the `ModelProvider` protocol in `providers/base.py` (`kind`, `transport`, `check()`, `list_models()`, `judge(JudgmentRequest) -> JudgmentResult`). Raise `ProviderError` with one of its codes (`provider_unauthorized`, `provider_unavailable`, `provider_bad_output`, `provider_timeout`, `cli_not_found`) and return answers through `build_result`, which validates them against the request's JSON Schema. For an HTTP API subclass `api/base.ApiProvider` (bounded retry on 429/5xx/connection errors, auth mapping) or reuse `OpenAICompatibleProvider` with a base URL; for a local client subclass `local_cli/base.LocalCliProvider` (argument list, prompt on stdin, empty temp cwd, kill tree on timeout). Register a factory `(ProviderConfig, ProviderContext) -> ModelProvider` for a `(kind, transport)` pair in `registry.default_registry()`; kinds are open strings, so routes and settings need no changes. Test API adapters with `httpx.MockTransport` and CLI adapters with `tests/fixtures/fake_cli.py`; never call a real model in tests. Features ask for a provider through `SettingsService.feature_model()` and the registry, never by importing an adapter.
 
 ### Platform gotchas
 
