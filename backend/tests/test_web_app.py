@@ -1,4 +1,5 @@
 import os
+import socket
 import time
 import webbrowser
 from pathlib import Path
@@ -9,9 +10,9 @@ import uvicorn
 from typer.testing import CliRunner
 
 from powereditor import cli
-from powereditor.api import app as app_module
-from powereditor.api.app import ENV_DEV_CORS, ENV_WEB_DIR, create_app, resolve_web_dir
+from powereditor.api.app import ENV_DEV_CORS, create_app, resolve_web_dir
 from powereditor.config import REPO_ROOT
+from powereditor.resources import ENV_WEB_DIR
 from tests.api_client import local_client, make_client, make_service
 
 
@@ -69,7 +70,6 @@ def test_web_dir_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv(ENV_WEB_DIR, str(tmp_path / "custom"))
     assert resolve_web_dir() == tmp_path / "custom"
     monkeypatch.delenv(ENV_WEB_DIR)
-    monkeypatch.setattr(app_module, "BUNDLED_WEB_DIR", tmp_path / "missing")
     assert resolve_web_dir() == REPO_ROOT / "web" / "dist"
 
 
@@ -87,15 +87,20 @@ def test_cors_only_for_the_vite_dev_server(tmp_path: Path, dev: bool, allowed: s
 def test_serve_open_and_dev_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
     started: list[int] = []
+
+    def fake_run(self: uvicorn.Server, sockets: list[socket.socket]) -> None:
+        started.append(sockets[0].getsockname()[1])
+        sockets[0].close()
+
     monkeypatch.setattr(cli, "open_when_ready", opened.append)
-    monkeypatch.setattr(uvicorn, "run", lambda *_, **kwargs: started.append(kwargs["port"]))
+    monkeypatch.setattr(uvicorn.Server, "run", fake_run)
     monkeypatch.setenv(ENV_DEV_CORS, "0")  # restored after the test, as serve sets it
 
-    result = CliRunner().invoke(cli.app, ["serve", "--port", "8799", "--open", "--dev"])
+    result = CliRunner().invoke(cli.app, ["serve", "--port", "0", "--open", "--dev"])
 
     assert result.exit_code == 0, result.output
-    assert opened == ["http://127.0.0.1:8799"]
-    assert started == [8799]
+    assert len(started) == 1 and started[0] > 0
+    assert opened == [f"http://127.0.0.1:{started[0]}"]
     assert os.environ[ENV_DEV_CORS] == "1"
 
 

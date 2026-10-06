@@ -217,6 +217,23 @@ def test_render_node_skips_arm64_and_falls_back_to_bundled_x64(tmp_path: Path) -
     assert node == bundled
 
 
+def test_render_node_prefers_the_downloaded_runtime_then_the_bundled_one(tmp_path: Path) -> None:
+    bundled = str(_file(tmp_path / "app" / "runtime" / "node.exe"))
+    probe = ArchProbe({bundled: "x64"})
+
+    node = resolve_render_node(
+        None, tmp_path / "bin", probe, which=lambda _: None, runtime_dir=tmp_path / "app/runtime"
+    )
+    assert node == bundled
+
+    downloaded = str(_file(tmp_path / "bin" / "node-24.21.0" / "node.exe"))
+    probe.arches[downloaded] = "x64"
+    node = resolve_render_node(
+        None, tmp_path / "bin", probe, which=lambda _: None, runtime_dir=tmp_path / "app/runtime"
+    )
+    assert node == downloaded
+
+
 def test_render_node_rejects_a_system_arm64_node_on_windows(tmp_path: Path) -> None:
     probe = ArchProbe({"/usr/node": "arm64"})
 
@@ -270,7 +287,7 @@ if mode == "ok":
     for fraction in (0.25, 0.5, 1.5):
         emit({"event": "progress", "fraction": fraction})
     with open(args[args.index("--output") + 1], "w", encoding="utf-8") as out:
-        json.dump({**props, "argv": args}, out)
+        json.dump({**props, "argv": args, "cwd": os.getcwd()}, out)
     emit({"event": "done", "ms": 20, "frames": 3})
 elif mode == "error-event":
     emit({"event": "error", "message": "composition ProjectVideo crashed"})
@@ -330,6 +347,28 @@ def test_remotion_renderer_passes_quality_and_concurrency_flags(
     renderer.render(project, media, output, RenderSettings(15))
     argv = json.loads(output.read_text(encoding="utf-8"))["argv"]
     assert "--scale" not in argv and "--concurrency" not in argv
+
+
+def test_remotion_renderer_uses_a_prebuilt_bundle_from_its_work_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    renderer, project, media = _fake_renderer(tmp_path, monkeypatch, "ok")
+    bundle = tmp_path / "bundle"
+    work = tmp_path / "data" / "bin" / "remotion"
+    work.mkdir(parents=True)
+    prebuilt = RemotionRenderer(
+        sys.executable, script=renderer.script, bundle_dir=bundle, work_dir=work
+    )
+    output = tmp_path / "video.mp4"
+
+    renderer.render(project, media, output, RenderSettings(15))
+    dumped = json.loads(output.read_text(encoding="utf-8"))
+    assert "--bundle" not in dumped["argv"]
+
+    prebuilt.render(project, media, output, RenderSettings(15))
+    dumped = json.loads(output.read_text(encoding="utf-8"))
+    assert dumped["argv"][dumped["argv"].index("--bundle") + 1] == str(bundle)
+    assert Path(dumped["cwd"]) == work
 
 
 @pytest.mark.parametrize(

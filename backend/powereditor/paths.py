@@ -1,5 +1,4 @@
 import os
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,13 +42,3 @@ class AppPaths:
     def ensure_dirs(self) -> None:
         for directory in (self.projects_dir, self.models_dir, self.bin_dir, self.logs_dir):
             directory.mkdir(parents=True, exist_ok=True)
-
-
-def resolve_executable(name: str, configured: str | None, bin_dir: Path) -> str | None:
-    """Resolve a tool: configured path, then the app's bin dir, then PATH."""
-    if configured and Path(configured).is_file():
-        return configured
-    for candidate in (bin_dir / f"{name}.exe", bin_dir / name):
-        if candidate.is_file():
-            return str(candidate)
-    return shutil.which(name)

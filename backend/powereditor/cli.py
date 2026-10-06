@@ -1,4 +1,5 @@
 import os
+import secrets
 import threading
 import time
 import webbrowser
@@ -16,6 +17,7 @@ from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedCo
 from rich.table import Table
 
 from powereditor import doctor as doctor_module
+from powereditor import sidecar
 from powereditor.api.app import ENV_DEV_CORS
 from powereditor.decide.model_engine import ModelUsageReport
 from powereditor.eval.takes_eval import DEFAULT_BENCHMARK, evaluate_takes, load_benchmark
@@ -33,6 +35,13 @@ from powereditor.render import job as render_job
 from powereditor.render.node_runtime import NodeRuntimeError
 from powereditor.render.quality import RenderQuality
 from powereditor.render.remotion_render import RenderError
+from powereditor.resources import Resources
+from powereditor.runtime.manager import (
+    RuntimeInstallError,
+    RuntimeManager,
+    UnknownRuntimeError,
+    manager_for,
+)
 from powereditor.settings_store import SettingsService
 from powereditor.transcribe.base import TranscriptionError
 from powereditor.transcribe.factory import TranscriberConfigError, create_transcriber
@@ -71,7 +80,9 @@ def main() -> None:
 def doctor() -> None:
     """Report the status of external dependencies."""
     service = SettingsService.default()
-    report = doctor_module.run_checks(locate=service.locate_executable)
+    report = doctor_module.run_checks(
+        locate=service.locate_executable, frozen=Resources.current().frozen
+    )
     console = Console()
     console.print(f"Platform: {report.system} {report.machine} | Python {report.python_version}")
     table = Table("Dependency", "Required", "Status", "Version", "Detail")
@@ -115,20 +126,84 @@ def open_when_ready(base_url: str, timeout_s: float = 30.0) -> threading.Thread:
 
 @app.command()
 def serve(
-    port: Annotated[int, typer.Option(help="Port to listen on.")] = DEFAULT_PORT,
+    port: Annotated[
+        int, typer.Option(help="Port to listen on; 0 picks a free one (see the READY line).")
+    ] = DEFAULT_PORT,
     open_browser: Annotated[
         bool, typer.Option("--open", help="Open the app in the default browser.")
     ] = False,
     dev: Annotated[
         bool, typer.Option(help="Allow the Vite dev server origin (CORS) for UI development.")
     ] = False,
+    parent_pid: Annotated[
+        int | None, typer.Option(help="Shut down when this process exits (desktop shell).")
+    ] = None,
 ) -> None:
-    """Start the local server: the API under /api and the built web app at /."""
+    """Start the local server: the API under /api and the built web app at /.
+
+    Once listening it prints `POWEREDITOR_READY {"port": N, "token": "..."}` on stdout.
+    """
     if dev:
         os.environ[ENV_DEV_CORS] = "1"
+    try:
+        sock = sidecar.bind_loopback(DEFAULT_HOST, port)
+    except OSError as exc:
+        console = Console(stderr=True)
+        console.print(f"[red]port_unavailable: cannot listen on port {port}: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    bound = int(sock.getsockname()[1])
+    token = secrets.token_urlsafe(32)
     if open_browser:
-        open_when_ready(f"http://{DEFAULT_HOST}:{port}")
-    uvicorn.run("powereditor.api.app:create_app", factory=True, host=DEFAULT_HOST, port=port)
+        open_when_ready(f"http://{DEFAULT_HOST}:{bound}")
+    config = uvicorn.Config(
+        "powereditor.api.app:create_app", factory=True, host=DEFAULT_HOST, port=bound
+    )
+    server = sidecar.AnnouncingServer(
+        config, on_started=lambda: sidecar.announce(sidecar.ready_line(bound, token))
+    )
+    if parent_pid is not None:
+
+        def stop() -> None:
+            server.should_exit = True
+
+        sidecar.watch_parent(parent_pid, stop)
+    server.run(sockets=[sock])
+
+
+runtime_app = typer.Typer(no_args_is_help=True, help="Runtimes downloaded at first run.")
+app.add_typer(runtime_app, name="runtime")
+
+
+def runtime_manager(service: SettingsService) -> RuntimeManager:
+    return manager_for(service)
+
+
+@runtime_app.command("status")
+def runtime_status() -> None:
+    """List the downloadable runtimes (ffmpeg, Node, render browser) and where they are."""
+    console = Console()
+    table = Table("Runtime", "Version", "Status", "Path")
+    for status in runtime_manager(SettingsService.default()).statuses():
+        if not status.supported:
+            state = "[yellow]unsupported[/yellow]"
+        else:
+            state = "[green]installed[/green]" if status.installed else "[red]missing[/red]"
+        table.add_row(status.name, status.version or "-", state, status.path or "-")
+    console.print(table)
+
+
+@runtime_app.command("install")
+def runtime_install(name: str) -> None:
+    """Download, verify and install one runtime into the data dir."""
+    console = Console()
+    manager = runtime_manager(SettingsService.default())
+    try:
+        with _progress_bar(console) as report:
+            installed = manager.install(name, lambda fraction: report(name, fraction, "download"))
+    except (RuntimeInstallError, UnknownRuntimeError) as exc:
+        raise _fail(console, exc) from exc
+    version = f" {installed.version}" if installed.version else ""
+    console.print(f"{name}{version} installed: {installed.path}", soft_wrap=True)
 
 
 @contextmanager

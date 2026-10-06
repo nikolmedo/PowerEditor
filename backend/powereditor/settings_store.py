@@ -13,13 +13,14 @@ from pydantic import AliasChoices, Field, ValidationError, field_validator
 from powereditor import doctor
 from powereditor.config import DecisionEngine, Settings, Transcriber, WhisperDevice
 from powereditor.models import CamelModel, write_text_atomic
-from powereditor.paths import AppPaths, resolve_executable
+from powereditor.paths import AppPaths
 from powereditor.providers.config import (
     FeatureId,
     ModelRef,
     ProviderConfig,
     provider_secret_name,
 )
+from powereditor.resources import Resources, resolve_tool
 
 logger = logging.getLogger(__name__)
 
@@ -252,8 +253,14 @@ class SettingsService:
 
     def locate_executable(self, name: str) -> str | None:
         effective = self.get_effective()
-        configured = {"ffmpeg": effective.ffmpeg_path, "ffprobe": effective.ffprobe_path}
-        return resolve_executable(name, configured.get(name), self.paths.bin_dir)
+        configured = {
+            "ffmpeg": effective.ffmpeg_path,
+            "ffprobe": effective.ffprobe_path,
+            "node": effective.node_path,
+        }
+        return resolve_tool(
+            name, configured.get(name), self.paths.bin_dir, Resources.current().runtime_dir
+        )
 
     def _env_secret(self, name: SecretName) -> str | None:
         value = getattr(self._env, name)

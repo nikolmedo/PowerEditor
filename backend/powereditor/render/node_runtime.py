@@ -12,8 +12,9 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from powereditor.resources import tool_candidates
+
 PROBE_TIMEOUT_S = 15
-BUNDLED_NODE_DIR = "node-x64"
 
 ArchProbe = Callable[[str], str | None]
 
@@ -47,17 +48,12 @@ def resolve_render_node(
     probe_arch: ArchProbe = probe_node_arch,
     which: Callable[[str], str | None] = shutil.which,
     platform: str = sys.platform,
+    *,
+    runtime_dir: Path | None = None,
 ) -> str:
-    """First usable Node: configured path, then the app's bundled x64 Node, then PATH."""
+    """First usable Node, in the order of `resources.tool_candidates`, checked for its arch."""
     required = "x64" if platform == "win32" else None
-    candidates: list[str] = []
-    if configured and Path(configured).is_file():
-        candidates.append(configured)
-    bundled_dir = bin_dir / BUNDLED_NODE_DIR
-    candidates += [str(p) for p in (bundled_dir / "node.exe", bundled_dir / "node") if p.is_file()]
-    system = which("node")
-    if system:
-        candidates.append(system)
+    candidates = tool_candidates("node", configured, bin_dir, runtime_dir, which)
     for candidate in candidates:
         arch = probe_arch(candidate)
         if arch is not None and (required is None or arch == required):
@@ -66,6 +62,6 @@ def resolve_render_node(
         raise NodeRuntimeError("Node.js not found; configure nodePath in settings", "missing_node")
     raise NodeRuntimeError(
         f"rendering on {platform} needs an {required} Node.js (Remotion has no compositor for "
-        f"other architectures); set nodePath or install one under {bin_dir / BUNDLED_NODE_DIR}",
+        f"other architectures); set nodePath or run `powereditor runtime install node`",
         f"missing_node_{required}",
     )

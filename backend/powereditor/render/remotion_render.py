@@ -23,10 +23,10 @@ from powereditor.process import kill_tree, tracked
 from powereditor.render.base import RenderSettings, RenderTiming
 from powereditor.render.media_server import serve_directory
 from powereditor.render.quality import QUALITY_PROFILES, remotion_args
+from powereditor.resources import Resources
 from powereditor.timeline import timeline_layout
 
 STDERR_TAIL_CHARS = 4000
-COMPOSITION_DIR = Path(__file__).resolve().parents[3] / "packages" / "composition"
 # Measured on an emulated x64 Node: ~30 s startup + ~0.17 s per 1080p frame.
 # The budget is an order of magnitude above that so only a truly stuck render dies.
 TIMEOUT_BASE_S = 600.0
@@ -104,17 +104,28 @@ def _check_media(project: Project, media_dir: Path) -> None:
 
 
 class RemotionRenderer:
+    """Runs `render.mjs` from `composition_dir`.
+
+    With `bundle_dir` (a bundle built ahead of time by `scripts/bundle.mjs`) the script skips
+    webpack and runs from `work_dir`: Remotion keeps its Chrome download next to the nearest
+    `package.json` above the working directory, which must be writable (see `runtime.manager`).
+    """
+
     def __init__(
         self,
         node: str,
-        composition_dir: Path = COMPOSITION_DIR,
+        composition_dir: Path | None = None,
         *,
         script: Path | None = None,
+        bundle_dir: Path | None = None,
+        work_dir: Path | None = None,
         timeout_s: float | None = None,
     ) -> None:
         self.node = node
-        self.composition_dir = composition_dir
-        self.script = script or composition_dir / "scripts" / "render.mjs"
+        self.composition_dir = composition_dir or Resources.current().composition_dir()
+        self.script = script or self.composition_dir / "scripts" / "render.mjs"
+        self.bundle_dir = bundle_dir
+        self.work_dir = work_dir if bundle_dir is not None else None
         self.timeout_s = timeout_s
 
     def render(
@@ -152,10 +163,12 @@ class RemotionRenderer:
                 ]  # fmt: skip
                 if settings.concurrency is not None:
                     command += ["--concurrency", str(settings.concurrency)]
+                if self.bundle_dir is not None:
+                    command += ["--bundle", str(self.bundle_dir)]
                 with (
                     subprocess.Popen(
                         command,
-                        cwd=self.composition_dir,
+                        cwd=self.work_dir or self.composition_dir,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True,

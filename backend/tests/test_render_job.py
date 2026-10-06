@@ -13,7 +13,7 @@ from powereditor.pipeline.runner import ProjectLayout
 from powereditor.render import job as job_module
 from powereditor.render.base import RenderSettings, RenderTiming
 from powereditor.render.job import EmptyTimelineError, MusicNotFoundError, render_project
-from powereditor.render.remotion_render import RenderError
+from powereditor.render.remotion_render import RemotionRenderer, RenderError
 from powereditor.settings_store import SettingsService
 from tests.media import FFPROBE, ffmpeg_lavfi, needs_ffmpeg
 
@@ -234,3 +234,27 @@ def test_render_cli_reports_an_empty_timeline(isolated_environment: Path) -> Non
 
     assert result.exit_code == 1
     assert "empty_timeline" in result.output
+
+
+@pytest.mark.parametrize("prebuilt", [False, True])
+def test_create_renderer_uses_the_prebuilt_bundle_from_the_data_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prebuilt: bool
+) -> None:
+    composition = tmp_path / "composition"
+    if prebuilt:
+        (composition / "dist" / "bundle").mkdir(parents=True)
+        (composition / "dist" / "bundle" / "index.html").write_text("", encoding="utf-8")
+    monkeypatch.setenv("POWEREDITOR_COMPOSITION_DIR", str(composition))
+    monkeypatch.setattr(job_module, "resolve_render_node", lambda *_, **__: "node.exe")
+    service = SettingsService.default()
+
+    renderer = job_module.create_renderer(service)
+
+    assert isinstance(renderer, RemotionRenderer)
+    assert renderer.composition_dir == composition
+    work = service.paths.bin_dir / "remotion"
+    if prebuilt:
+        assert (renderer.bundle_dir, renderer.work_dir) == (composition / "dist" / "bundle", work)
+        assert (work / "package.json").is_file()
+    else:
+        assert (renderer.bundle_dir, renderer.work_dir) == (None, None)
