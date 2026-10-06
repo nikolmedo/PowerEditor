@@ -8,9 +8,16 @@ import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { aboutPanelOptions, APP_NAME, applicationMenuTemplate } from "./about";
-import { translator } from "./messages";
+import { translator, type Translate } from "./messages";
 import { isAllowedExternal, isAppUrl } from "./policy";
-import { ReadyLineReader, killTree, sidecarCommand, startSidecar, type Ready } from "./sidecar";
+import {
+  SidecarStartError,
+  awaitReady,
+  killTree,
+  sidecarCommand,
+  startSidecar,
+  type Ready,
+} from "./sidecar";
 import { showSplash } from "./splash";
 import { rememberWindowState, savedWindowOptions } from "./windowState";
 
@@ -35,14 +42,36 @@ function openLog(name: string): fs.WriteStream {
 const shellLog = openLog("desktop.log");
 const log = (message: string) => shellLog.write(`${new Date().toISOString()} ${message}\n`);
 
-function fail(t: ReturnType<typeof translator>, message: string): void {
+function fail(t: Translate, message: string): void {
   log(`fatal: ${message}`);
   dialog.showErrorBox(t("error.title"), `${message}\n\n${t("error.logHint", { path: logDir })}`);
   app.quit();
 }
 
+function startMessage(t: Translate, error: SidecarStartError): string {
+  if (error.reason === "timeout") return t("error.timeout", { seconds: error.detail });
+  if (error.reason === "spawn") return t("error.spawn", { message: error.detail });
+  return t("error.exited", { code: error.detail });
+}
+
+/** The engine stopped while the app was open: offer to restart the app or quit. */
+async function offerRestart(t: Translate, code: number | null): Promise<void> {
+  const { response } = await dialog.showMessageBox({
+    type: "error",
+    title: t("error.title"),
+    message: t("error.stopped", { code: String(code) }),
+    detail: t("error.logHint", { path: logDir }),
+    buttons: [t("action.restart"), t("action.quit")],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (response === 0) app.relaunch();
+  app.quit();
+}
+
 /** Start the engine and resolve with its READY line; rejects on exit, error or timeout. */
-function waitForReady(t: ReturnType<typeof translator>): Promise<Ready> {
+async function waitForReady(t: Translate): Promise<Ready> {
   const command = sidecarCommand({
     packaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -54,35 +83,24 @@ function waitForReady(t: ReturnType<typeof translator>): Promise<Ready> {
   sidecar = child;
   const output = openLog("engine.log");
   child.stderr?.pipe(output);
-  return new Promise((resolve, reject) => {
-    const reader = new ReadyLineReader();
-    let ready = false;
-    const timer = setTimeout(
-      () => reject(new Error(t("error.timeout", { seconds: READY_TIMEOUT_S }))),
-      READY_TIMEOUT_S * 1000,
-    );
-    child.stdout?.setEncoding("utf-8");
-    child.stdout?.on("data", (chunk: string) => {
-      output.write(chunk.replace(/POWEREDITOR_READY .*/g, "POWEREDITOR_READY <redacted>"));
-      const found = ready ? null : reader.push(chunk);
-      if (found) {
-        ready = true;
-        clearTimeout(timer);
-        resolve(found);
-      }
-    });
-    child.once("error", (error) => {
-      clearTimeout(timer);
-      reject(new Error(t("error.spawn", { message: error.message })));
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      log(`engine exited with code ${code}`);
-      const error = new Error(t("error.exited", { code: String(code) }));
-      if (!ready) reject(error);
-      else if (!quitting) fail(t, error.message);
-    });
+  child.stdout?.setEncoding("utf-8");
+  child.stdout?.on("data", (chunk: string) => {
+    output.write(chunk.replace(/POWEREDITOR_READY .*/g, "POWEREDITOR_READY <redacted>"));
   });
+  try {
+    const ready = await awaitReady(child, { timeoutMs: READY_TIMEOUT_S * 1000, kill: killTree });
+    child.once("exit", (code) => {
+      log(`engine exited with code ${code}`);
+      sidecar = null;
+      if (!quitting) void offerRestart(t, code);
+    });
+    return ready;
+  } catch (error) {
+    sidecar = null;
+    if (!(error instanceof SidecarStartError)) throw error;
+    log(`engine did not start: ${error.message}`);
+    throw new Error(startMessage(t, error), { cause: error });
+  }
 }
 
 function openExternal(url: string): void {
