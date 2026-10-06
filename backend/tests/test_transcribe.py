@@ -108,7 +108,11 @@ class FakeWhisperModel:
 
 
 def _local(
-    model: FakeWhisperModel, tmp_path: Path, device: WhisperDevice = "auto", cuda: bool = False
+    model: FakeWhisperModel,
+    tmp_path: Path,
+    device: WhisperDevice = "auto",
+    cuda: bool = False,
+    ffmpeg: str | None = None,
 ) -> tuple[LocalWhisperTranscriber, list[tuple[str, str, str, Path]]]:
     loads: list[tuple[str, str, str, Path]] = []
 
@@ -121,6 +125,7 @@ def _local(
         device,
         tmp_path / "models",
         cuda_available=cuda,
+        ffmpeg=ffmpeg,
         loader=loader,
     )
     return transcriber, loads
@@ -137,14 +142,32 @@ def _write_wav(path: Path, seconds: float, rate: int = 16000) -> Path:
     return path
 
 
-def test_local_transcriber_passes_other_audio_as_a_path(tmp_path: Path) -> None:
+@pytest.mark.ffmpeg
+@needs_ffmpeg
+def test_local_transcriber_converts_other_audio_with_ffmpeg(tmp_path: Path) -> None:
+    model = _fake_model()
+    audio = _write_wav(tmp_path / "a.wav", 1.0, rate=44100)
+    transcriber, _ = _local(model, tmp_path, ffmpeg=FFMPEG)
+
+    transcriber.transcribe(audio, "es")
+
+    # faster-whisper gets samples, never a path: decoding a path needs PyAV, which the
+    # frozen build leaves out.
+    samples = model.calls[0]["audio"]
+    assert isinstance(samples, np.ndarray)
+    assert (samples.dtype, samples.shape) == (np.float32, (16000,))
+
+
+def test_local_transcriber_without_ffmpeg_refuses_audio_it_cannot_read(tmp_path: Path) -> None:
     model = _fake_model()
     audio = _write_wav(tmp_path / "a.wav", 1.0, rate=44100)
     transcriber, _ = _local(model, tmp_path)
 
-    transcriber.transcribe(audio, "es")
+    with pytest.raises(TranscriptionError) as excinfo:
+        transcriber.transcribe(audio, "es")
 
-    assert model.calls[0]["audio"] == str(audio)
+    assert excinfo.value.code == "missing_ffmpeg"
+    assert model.calls == []
 
 
 SPOKEN = [("Eh,", 0.1, 0.4), ("hola", 0.5, 0.9), ("a", 0.95, 1.1), ("todos.", 1.1, 1.6)]
