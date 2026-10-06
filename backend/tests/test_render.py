@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from powereditor.models import Project
+from powereditor.models import Overlay, Project
 from powereditor.pipeline.ffmpeg import run_capture, run_ffmpeg_stderr
 from powereditor.pipeline.loudness import parse_integrated_lufs
 from powereditor.render.base import RenderSettings
@@ -344,3 +344,25 @@ def test_remotion_renderer_kills_a_hung_render_after_the_timeout(
 def test_default_render_timeout_grows_with_the_timeline() -> None:
     assert render_timeout_s(0) == 600.0
     assert render_timeout_s(1800) == 600.0 + 1800 * 2.0
+
+
+def test_remotion_renderer_refuses_overlay_images_missing_from_media(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    renderer, project, media = _fake_renderer(tmp_path, monkeypatch, "ok")
+    logo = Overlay(
+        id="o1",
+        template_id="logo",
+        start_frame=0,
+        end_frame=10,
+        props={"src": "overlay-0011aabb.png"},
+        auto_generated=False,
+    )
+    project = project.model_copy(update={"overlays": [logo]})
+
+    with pytest.raises(RenderError, match=r"overlay-0011aabb.png") as excinfo:
+        renderer.render(project, media, tmp_path / "video.mp4", RenderSettings(15))
+    assert excinfo.value.code == "overlay_asset_not_found"
+
+    _file(media / "overlay-0011aabb.png")
+    renderer.render(project, media, tmp_path / "video.mp4", RenderSettings(15))

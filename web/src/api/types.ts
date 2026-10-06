@@ -31,6 +31,7 @@ export interface UserSettings {
   audioCrossfadeMs: number;
   targetLufs: number;
   punchInScale: number;
+  autoCta: boolean;
   ffmpegPath: string | null;
   ffprobePath: string | null;
   nodePath: string | null;
@@ -138,6 +139,12 @@ export type ProjectPreset = "reel_9x16" | "landscape_16x9";
 export interface MusicFile {
   fileName: string;
   durationSeconds: number;
+  url: string;
+}
+
+/** An overlay image stored in a project's media folder (`POST /api/projects/{id}/overlay-assets`). */
+export interface OverlayAsset {
+  fileName: string;
   url: string;
 }
 

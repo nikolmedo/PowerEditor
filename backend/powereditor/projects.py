@@ -12,7 +12,14 @@ from typing import Literal
 
 from pydantic import ValidationError
 
-from powereditor.models import CamelModel, Project, ProjectPreset, save_project, write_text_atomic
+from powereditor.models import (
+    CamelModel,
+    Project,
+    ProjectPreset,
+    parse_project,
+    save_project,
+    write_text_atomic,
+)
 from powereditor.paths import AppPaths
 from powereditor.pipeline.ingest import load_manifest
 from powereditor.pipeline.runner import ProjectLayout
@@ -164,7 +171,7 @@ class ProjectStore:
             content = layout.project_file.read_bytes()
         except FileNotFoundError as exc:
             raise ProjectNotAnalyzedError(f"project {project_id!r} is not analyzed yet") from exc
-        return Project.model_validate_json(content), project_etag(content)
+        return parse_project(content), project_etag(content)
 
     def save(self, project_id: str, project: Project, if_match: str) -> str:
         """Write `project` only if the stored one still has the ETag `if_match`."""

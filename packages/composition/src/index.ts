@@ -33,3 +33,15 @@ export {
   resolveGrade,
   type GradeValues,
 } from "./color";
+export {
+  defaultOverlayProps,
+  normalizeOverlayProps,
+  OVERLAY_FIELDS,
+  OVERLAY_TEMPLATES,
+  overlayMotion,
+  overlaySpans,
+  readableTextColor,
+  type OverlayField,
+  type OverlayPropsMap,
+  type OverlayTemplateId,
+} from "./overlays";

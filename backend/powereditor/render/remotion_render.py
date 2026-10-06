@@ -78,11 +78,27 @@ def _drain(stream: IO[str], sink: list[str]) -> None:
     sink.extend(stream)
 
 
+class OverlayAssetNotFoundError(RenderError):
+    code = "overlay_asset_not_found"
+
+
+IMAGE_TEMPLATES = frozenset({"logo", "image"})
+
+
 def _check_media(project: Project, media_dir: Path) -> None:
+    """Fail before starting Node when a file the composition loads is missing: a missing
+    image would otherwise stall the headless browser until the render times out."""
     for source in project.sources:
         served = media_dir / Path(source.mezzanine_path).name
         if not served.is_file():
             raise RenderError(f"mezzanine for source {source.id} is not in {media_dir}")
+    for overlay in project.overlays:
+        src = overlay.props.get("src")
+        if overlay.template_id not in IMAGE_TEMPLATES or not isinstance(src, str) or not src:
+            continue
+        name = Path(src.replace("\\", "/")).name
+        if not (media_dir / name).is_file():
+            raise OverlayAssetNotFoundError(f"overlay image {name} is not in {media_dir}")
 
 
 class RemotionRenderer:

@@ -57,8 +57,10 @@ def upload_music(
             shutil.copyfileobj(file.file, handle, COPY_CHUNK_BYTES)
         try:
             duration = probe_audio_duration(tools.ffprobe, partial)
-        except (FfmpegError, ValueError) as exc:
-            error = ValueError(f"not a usable audio file: {exc}")
+        except ValueError as exc:
+            raise http_error(422, exc, "invalid_music") from exc
+        except FfmpegError as exc:
+            error = ValueError("The file is not a readable audio file.")
             raise http_error(422, error, "invalid_music") from exc
         partial.replace(layout.media_dir / file_name)
     finally:

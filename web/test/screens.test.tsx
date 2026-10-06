@@ -105,6 +105,7 @@ const SETTINGS: SettingsResponse = {
     audioCrossfadeMs: 15,
     targetLufs: -14,
     punchInScale: 1.1,
+    autoCta: true,
     ffmpegPath: null,
     ffprobePath: null,
     nodePath: null,
@@ -129,11 +130,13 @@ describe("SettingsScreen", () => {
     await userEvent.type(screen.getByLabelText(t("settings.nodePath")), "C:/node-x64/node.exe");
     await userEvent.clear(screen.getByLabelText(t("weight.fillers")));
     await userEvent.type(screen.getByLabelText(t("weight.fillers")), "1");
+    await userEvent.click(screen.getByLabelText(t("settings.autoCta")));
     await userEvent.click(screen.getByRole("button", { name: t("common.save") }));
 
     expect(api.updateSettings).toHaveBeenCalledWith({
       targetLufs: -16,
       nodePath: "C:/node-x64/node.exe",
+      autoCta: false,
       takeWeights: { fillers: 1 },
     });
     expect(await screen.findByText(t("common.saved"))).toBeTruthy();

@@ -1,5 +1,5 @@
 import { ApiError, parseError } from "./client";
-import type { MusicFile, ProjectOptions } from "./types";
+import type { MusicFile, OverlayAsset, ProjectOptions } from "./types";
 
 export type UploadState =
   | { phase: "idle" }
@@ -88,4 +88,19 @@ export function uploadMusic(
   const form = new FormData();
   form.append("file", file, file.name);
   return postForm(`/api/projects/${encodeURIComponent(projectId)}/music`, form, onProgress);
+}
+
+/** Store a PNG, JPEG or WebP image for an overlay; using it in an overlay is an edit. */
+export function uploadOverlayAsset(
+  projectId: string,
+  file: File,
+  onProgress: (loaded: number, total: number) => void,
+): Upload<OverlayAsset> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return postForm(
+    `/api/projects/${encodeURIComponent(projectId)}/overlay-assets`,
+    form,
+    onProgress,
+  );
 }

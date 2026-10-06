@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 from pydantic.alias_generators import to_camel
 
 ProjectPreset = Literal["reel_9x16", "landscape_16x9"]
@@ -19,6 +19,24 @@ DecisionEngineName = Literal["heuristic", "jev", "model"]
 
 class CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+
+LOAD_CONTEXT = {"clamp_to_bounds": True}
+"""Validation context of stored projects: values outside newer bounds are clamped, not refused."""
+
+
+def _clamped(value: Any, info: ValidationInfo, low: float, high: float) -> Any:
+    """Clamp a stored number into [low, high] when loading a project; new writes stay strict."""
+    if not (info.context or {}).get("clamp_to_bounds"):
+        return value
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return min(high, max(low, value))
+    return value
+
+
+def _clamp_grade_fields(value: Any, info: ValidationInfo) -> Any:
+    low, high = (-1.0, 1.0) if info.field_name == "temperature" else (0.0, 2.0)
+    return _clamped(value, info, low, high)
 
 
 class ColorStats(CamelModel):
@@ -63,6 +81,10 @@ class ColorGrade(CamelModel):
     saturation: float = Field(ge=0.0, le=2.0)
     temperature: float = Field(ge=-1.0, le=1.0)
 
+    _clamp_on_load = field_validator(
+        "brightness", "contrast", "saturation", "temperature", mode="before"
+    )(_clamp_grade_fields)
+
 
 class ColorGradeOverride(CamelModel):
     preset: ColorPreset | None = None
@@ -70,6 +92,10 @@ class ColorGradeOverride(CamelModel):
     contrast: float | None = Field(default=None, ge=0.0, le=2.0)
     saturation: float | None = Field(default=None, ge=0.0, le=2.0)
     temperature: float | None = Field(default=None, ge=-1.0, le=1.0)
+
+    _clamp_on_load = field_validator(
+        "brightness", "contrast", "saturation", "temperature", mode="before"
+    )(_clamp_grade_fields)
 
 
 class Clip(CamelModel):
@@ -247,8 +273,13 @@ def write_text_atomic(path: Path, text: str) -> None:
         raise
 
 
+def parse_project(content: bytes | str) -> Project:
+    """A stored `project.json`; files written before a bound existed load clamped into it."""
+    return Project.model_validate_json(content, context=LOAD_CONTEXT)
+
+
 def load_project(path: Path) -> Project:
-    return Project.model_validate_json(path.read_bytes())
+    return parse_project(path.read_bytes())
 
 
 def save_project(project: Project, path: Path) -> None:

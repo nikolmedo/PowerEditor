@@ -45,7 +45,10 @@ def test_a_file_without_audio_is_rejected_and_not_kept(tmp_path: Path) -> None:
         status, body, media_dir = _upload(tmp_path / name, name, content)
         assert status == 422
         assert body["detail"]["code"] == "invalid_music"
+        assert ".part" not in body["detail"]["message"]
         assert list(media_dir.iterdir()) == []
+    status, body, _ = _upload(tmp_path / "again", "video.m4a", silent_video.read_bytes())
+    assert body["detail"]["message"] == "The file has no audio stream."
 
 
 def test_unsupported_music_types_are_refused(tmp_path: Path) -> None:

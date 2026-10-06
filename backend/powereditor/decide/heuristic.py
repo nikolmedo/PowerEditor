@@ -42,7 +42,10 @@ _REMARK = re.compile(
 )
 _CTA = re.compile(
     r"\b(suscribi\w*|suscribe\w*|dale like|deja\w* tu like|link en la bio|seguime|sigueme"
-    r"|activa la campanita|subscribe|follow (me|us)|link in (the )?bio|hit the bell)\b"
+    r"|activa la campanita|comenta\w* (abajo|aqui|en los comentarios)"
+    r"|deja\w* (un|tu|en los) comentarios?|link en la descripcion"
+    r"|subscribe|follow (me|us)|follow for more|link in (the )?bio|hit the bell"
+    r"|leave a comment|comment below|let me know in the comments|link in the description)\b"
 )
 
 

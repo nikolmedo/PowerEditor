@@ -17,6 +17,7 @@ from powereditor.api.routes_audio import router as audio_router
 from powereditor.api.routes_jobs import router as jobs_router
 from powereditor.api.routes_media import contained_file
 from powereditor.api.routes_media import router as media_router
+from powereditor.api.routes_overlays import router as overlays_router
 from powereditor.api.routes_projects import router as projects_router
 from powereditor.api.routes_providers import router as providers_router
 from powereditor.api.routes_settings import get_service
@@ -149,6 +150,7 @@ def create_app(
     app.include_router(jobs_router)
     app.include_router(media_router)
     app.include_router(audio_router)
+    app.include_router(overlays_router)
     app.include_router(setup_router)
     _mount_web_app(app, web_dir or resolve_web_dir())
     return app

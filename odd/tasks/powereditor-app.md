@@ -57,7 +57,7 @@ Reviewed boundary: `f35332a` (phase-0).
 ### Slice 7–9 — `feat/phase-7-editing`, `feat/phase-8-audio-color`, `feat/phase-9-graphics`
 - [x] 7a Editing: change take, trim, remove/restore, transitions, subtitle edit, undo/redo.
 - [x] 8a Audio & color panels.
-- [ ] 9a Overlay templates + auto CTA.
+- [x] 9a Overlay templates + auto CTA.
 
 ### Slice 11 — docs, CI/CD, releases, auto-update
 - [x] 11a PLAN.md rewritten in English with new Phases 4 and 11; README.md (humans + agents); CLAUDE.md/AGENTS.md pointers; `.github/workflows/ci.yml` (windows + ubuntu). Branch `docs/plan-readme`.
@@ -143,5 +143,13 @@ Reviewed boundary: `f35332a` (phase-0).
 - Phase 8 done (delegated): music track (upload route, looped/trimmed, faded, deterministic ducking envelope driven by subtitle words, `amix`), per-source loudness matching (`Project.normalizeSources`, ±12 dB toward the mean), `AudioTrack.duckingDb`; color grade feColorMatrix per clip (presets natural/warm/cool/bw + 4 sliders, clip overrides), automatic source color match stored in `Source.colorCorrection`; Player preview music mirrors the ducking (shared fixture); Audio and Color panels; Phase 7 follow-ups (NumberField, swap confidence, keep-mine errors). Evidence: pytest 517, vitest 184 (parent re-run); manual render: ducking 12.0 dB, -14.0 LUFS, exact 7.933 s, warm shifts red +0.022 / blue -0.022.
 - Commits 8c35a82, fa148ed, c2b23d1, 9745e4d (approved), e511c63 docs. Follow-ups: model bounds on color fields may reject old projects (models.py:57-72); mix with short voice (music_mix.py:36-44); music file without audio stream message (ingest.py:117-124); music upload race (AudioPanel.tsx:73-86); orphaned replaced music files; no re-match action for pre-phase-8 projects; sfx not mixed; `error.music_not_found` i18n key.
 
+- PR #11 (phase 8) merged after green CI.
+- Phase 9 done (delegated): six overlay templates (title, lower_third, cta, logo, progress_bar, image) with typed props, spring entrance/fade exit, safe areas clear of subtitles, layer order video < graphics < subtitles; overlay image upload route (PNG/JPEG/WebP by signature, no SVG, 20 MB); auto CTA from `has_cta` (setting `autoCta`); Graphics panel + draggable/resizable overlay track (one undo step per drag); Phase 8 follow-ups (lenient load of legacy color values, music edge cases, newest upload wins). Evidence: pytest 546, vitest 216 (parent re-run); manual render shows every overlay at its time, duration unchanged (238 frames).
+- Commits a3100ca, 4310f1c, cc7873b, 741b5ea (approved), 717056c docs. Follow-ups: useLatestUpload stale state, ValueError leak in routes_audio.py:60-61, null overlay props (templates.ts:156), pointer capture loss on drag (OverlayBlock.tsx:75-93); overlays keep absolute frames after trims.
+- HyperFrames research (user request): Apache-2.0; adopted as Phase 9b (overlay/caption looks, export quality presets, RAM-aware concurrency), Phase 10 additions (error hints, memory ceiling, LICENSE + THIRD_PARTY_NOTICES), and a backlog (overlay-only render + ffmpeg composite, Parakeet, carve ducking, shader transitions, matted captions). Open user decision: project license.
+
+### Slice 9b — `feat/phase-9b-looks`
+- [ ] 9b Overlay variants and caption presets inspired by HyperFrames, export quality presets, RAM-aware render concurrency, Phase 9 follow-ups.
+
 ## Next step
-PR for phase 8, then Phase 9 (graphics).
+PR for phase 9, then 9b; Phase 10 needs the license decision.

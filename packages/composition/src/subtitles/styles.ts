@@ -3,14 +3,14 @@ import type { CSSProperties } from "react";
 import type { Project, SubtitleStyle } from "../types";
 
 /** Margins as fractions of the frame, keeping text clear of platform UI. */
-interface SafeArea {
+export interface SafeArea {
   top: number;
   bottom: number;
   left: number;
   right: number;
 }
 
-const SAFE_AREAS: Record<Project["preset"], SafeArea> = {
+export const SAFE_AREAS: Record<Project["preset"], SafeArea> = {
   // Reels, Shorts and TikTok overlay the caption and account at the bottom and the
   // action buttons on the right.
   reel_9x16: { top: 0.12, bottom: 0.24, left: 0.06, right: 0.16 },

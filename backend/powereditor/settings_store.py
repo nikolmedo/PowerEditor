@@ -88,6 +88,8 @@ class UserSettings(CamelModel):
     audio_crossfade_ms: int = Field(default=15, ge=0)
     target_lufs: float = -14.0
     punch_in_scale: float = Field(default=1.1, gt=0.0)
+    auto_cta: bool = True
+    """Add a call-to-action graphic over segments that ask the viewer to act (`cta_detection`)."""
     ffmpeg_path: str | None = None
     ffprobe_path: str | None = None
     node_path: str | None = None

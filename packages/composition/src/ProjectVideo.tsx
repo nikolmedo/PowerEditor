@@ -8,6 +8,7 @@ import { edgeFadeFrames } from "./clips/edgeFade";
 import { MediaResolverContext, mediaUrl, mezzanineResolver } from "./clips/media";
 import { ColorGraded } from "./color/ColorGraded";
 import { clipColorMatrix } from "./color/matrix";
+import { Overlays } from "./overlays/Overlays";
 import { Subtitles } from "./subtitles/Subtitles";
 import { timelineLayout } from "./timeline";
 import { ClipTransition } from "./transitions/ClipTransition";
@@ -46,10 +47,9 @@ export const ProjectVideo: React.FC<ProjectVideoProps> = ({
   const fadeFrames = edgeFadeFrames(audioCrossfadeMs, project.fps);
   const gains = voiceGains(project);
   const music = project.audioTracks.find((track) => track.kind === "music" && track.sourcePath);
+  const layout = timelineLayout(project);
   // Zero-length clips still count toward the layout but cannot become sequences.
-  const placements = timelineLayout(project).clips.filter(
-    (placement) => placement.durationInFrames > 0,
-  );
+  const placements = layout.clips.filter((placement) => placement.durationInFrames > 0);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
@@ -91,6 +91,11 @@ export const ProjectVideo: React.FC<ProjectVideoProps> = ({
           speech={speechIntervals(project.subtitles.words, project.fps)}
         />
       )}
+      <Overlays
+        project={project}
+        totalFrames={layout.durationInFrames}
+        mediaBaseUrl={mediaBaseUrl}
+      />
       <Subtitles project={project} />
     </AbsoluteFill>
   );
