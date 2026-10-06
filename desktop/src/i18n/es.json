@@ -1,0 +1,9 @@
+{
+  "splash.starting": "Iniciando PowerEditor…",
+  "error.title": "PowerEditor no pudo iniciar",
+  "error.timeout": "El motor de edición no arrancó en {seconds} segundos.",
+  "error.exited": "El motor de edición se detuvo de forma inesperada (código {code}).",
+  "error.spawn": "No se pudo iniciar el motor de edición: {message}",
+  "error.webMissing": "La app web no está compilada. Ejecuta: corepack pnpm --filter @powereditor/web build",
+  "error.logHint": "Los detalles están en la carpeta de registros: {path}"
+}
