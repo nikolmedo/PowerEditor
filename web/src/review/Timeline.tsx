@@ -33,11 +33,14 @@ function Track({
   label,
   onSeek,
   total,
+  lanes,
   children,
 }: {
   label: MessageKey;
   onSeek: (frame: number) => void;
   total: number;
+  /** Stacked rows for overlapping items; a track without it has a single row. */
+  lanes?: number;
   children: ReactNode;
 }) {
   const t = useT();
@@ -46,7 +49,11 @@ function Track({
     onSeek(frameAtRatio((event.clientX - box.left) / Math.max(box.width, 1), total));
   };
   return (
-    <div className="track">
+    <div
+      className="track"
+      data-lanes={lanes}
+      style={lanes ? ({ "--lanes": lanes } as CSSProperties) : undefined}
+    >
       <span className="track-label">{t(label)}</span>
       {/* Clicking the lane seeks; every clip is also a button, so this is mouse-only sugar. */}
       <div className="lane" onClick={seek} role="presentation">
@@ -150,7 +157,7 @@ export function Timeline({
             </span>
           ))}
         </Track>
-        <Track label="track.graphics" onSeek={onSeek} total={total}>
+        <Track label="track.graphics" onSeek={onSeek} total={total} lanes={model.graphicsLanes}>
           {model.graphics.map((overlay) => (
             <OverlayBlock
               key={overlay.id}
