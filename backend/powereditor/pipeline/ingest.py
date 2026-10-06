@@ -9,7 +9,13 @@ from typing import Any
 from pydantic import Field, ValidationError
 
 from powereditor.models import CamelModel, write_text_atomic
-from powereditor.pipeline.ffmpeg import MediaTools, list_encoders, run_capture, run_ffmpeg
+from powereditor.pipeline.ffmpeg import (
+    MediaTools,
+    encoder_works,
+    list_encoders,
+    run_capture,
+    run_ffmpeg,
+)
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress, run_stage
 from powereditor.transcribe.base import audio_duration
 
@@ -145,16 +151,33 @@ def _listed_encoders(encoders_listing: str) -> set[str]:
     return {line.split()[1] for line in encoders_listing.splitlines() if len(line.split()) > 1}
 
 
-def software_encoder(encoders_listing: str) -> str:
-    """libx264 when the build has it; an LGPL build (the packaged app's) only has OpenH264."""
+EncoderCheck = Callable[[str], bool]
+
+
+def _always_works(encoder: str) -> bool:
+    return True
+
+
+def software_encoder(encoders_listing: str, works: EncoderCheck = _always_works) -> str:
+    """libx264 when the build has it (developer machines). The LGPL build the app downloads
+    has none: Windows' own Media Foundation encoder comes next, OpenH264 last.
+
+    `works` confirms Media Foundation can encode on this machine before it is chosen.
+    """
     listed = _listed_encoders(encoders_listing)
-    return "libopenh264" if "libx264" not in listed and "libopenh264" in listed else "libx264"
+    if "libx264" in listed:
+        return "libx264"
+    if "h264_mf" in listed and works("h264_mf"):
+        return "h264_mf"
+    return "libopenh264" if "libopenh264" in listed else "libx264"
 
 
-def select_video_encoder(encoders_listing: str, cuda_available: bool) -> str:
+def select_video_encoder(
+    encoders_listing: str, cuda_available: bool, works: EncoderCheck = _always_works
+) -> str:
     if cuda_available and "h264_nvenc" in _listed_encoders(encoders_listing):
         return "h264_nvenc"
-    return software_encoder(encoders_listing)
+    return software_encoder(encoders_listing, works)
 
 
 def target_fps(probe: ProbeResult) -> int:
@@ -168,9 +191,12 @@ def source_id_for(path: Path) -> str:
 
 
 def _video_codec_args(encoder: str, crf: int, preset: str, bitrate: str) -> list[str]:
-    """`bitrate` only applies to OpenH264, which has no constant-quality mode."""
+    """`bitrate` applies to Media Foundation and OpenH264, which encode at a target bitrate."""
     if encoder == "h264_nvenc":
         return ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", str(crf + 1)]
+    if encoder == "h264_mf":
+        # Media Foundation takes the profile as a number: 100 is High.
+        return ["-c:v", "h264_mf", "-rate_control", "u_vbr", "-b:v", bitrate, "-profile:v", "100"]
     if encoder == "libopenh264":
         return ["-c:v", "libopenh264", "-b:v", bitrate, "-profile:v", "high"]
     return ["-c:v", "libx264", "-preset", preset, "-crf", str(crf)]
@@ -269,8 +295,12 @@ def ingest_source(
     wav = media / f"{source_id}.wav"
 
     listing = list_encoders(tools.ffmpeg)
-    encoder = select_video_encoder(listing, cuda_available)
-    proxy_encoder = software_encoder(listing)
+
+    def works(name: str) -> bool:
+        return encoder_works(tools.ffmpeg, name)
+
+    encoder = select_video_encoder(listing, cuda_available, works)
+    proxy_encoder = software_encoder(listing, works)
 
     def compute() -> IngestedSource:
         layout.ensure()
