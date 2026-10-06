@@ -11,6 +11,7 @@ import type {
   ProviderDraft,
   ProviderKindInfo,
   ProviderTestResult,
+  RenderQuality,
   SecretStatus,
   SettingsResponse,
   SetupStatus,
@@ -90,8 +91,8 @@ export const api = {
   saveProject,
   deleteProject: (id: string) => request<undefined>("DELETE", projectPath(id)),
   analyze: (id: string) => request<JobInfo>("POST", `${projectPath(id)}/analyze`),
-  render: (id: string, exportName: string) =>
-    request<JobInfo>("POST", `${projectPath(id)}/render`, { exportName }),
+  render: (id: string, exportName: string, quality: RenderQuality = "standard") =>
+    request<JobInfo>("POST", `${projectPath(id)}/render`, { exportName, quality }),
   exportSubtitles: (id: string, format: SubtitleFormat, name: string) =>
     request<JobInfo>("POST", `${projectPath(id)}/export/subtitles`, { format, name }),
   exports: (id: string) => request<ExportFile[]>("GET", `${projectPath(id)}/exports`),

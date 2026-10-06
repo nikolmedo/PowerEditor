@@ -444,9 +444,25 @@ describe("ExportStep", () => {
 
     const result = await screen.findByRole("status");
     expect(within(result).getByText("final.mp4")).toBeTruthy();
-    expect(api.render).toHaveBeenCalledWith("p1", "final");
+    expect(api.render).toHaveBeenCalledWith("p1", "final", "standard");
     await userEvent.click(within(result).getByRole("button", { name: t("export.reveal") }));
     expect(api.revealExport).toHaveBeenCalledWith("p1", "final.mp4");
+  });
+
+  it("renders a quick draft when the draft quality is picked", async () => {
+    vi.mocked(api.projects).mockResolvedValue([item()]);
+    vi.mocked(api.exports).mockResolvedValue([]);
+    vi.mocked(api.render).mockResolvedValue(job({ id: "job-3", kind: "render" }));
+    render(<ExportStep projectId="p1" />);
+
+    await userEvent.selectOptions(
+      await screen.findByLabelText(t("export.quality")),
+      t("export.quality.draft"),
+    );
+    expect(screen.getByText(t("export.quality.draft.hint"))).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: t("export.render") }));
+
+    expect(api.render).toHaveBeenCalledWith("p1", "final", "draft");
   });
 
   it("refuses an export name the server would reject", async () => {

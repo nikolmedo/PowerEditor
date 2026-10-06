@@ -2,6 +2,7 @@ import {
   normalizeOverlayProps,
   OVERLAY_FIELDS,
   OVERLAY_TEMPLATES,
+  overlayVariants,
   type Overlay,
   type OverlayField,
   type OverlayTemplateId,
@@ -13,7 +14,7 @@ import { uploadFraction, uploadOverlayAsset } from "../api/upload";
 import { addOverlay, projectAccent, removeOverlay, setOverlayProps } from "../edit/overlays";
 import { isMessageKey, useT, type MessageKey, type Translate } from "../i18n";
 import { useProjectStore } from "../store/project";
-import { ErrorNotice, SelectField, Slider, TextField } from "../ui/primitives";
+import { ErrorNotice, NumberField, SelectField, Slider, TextField } from "../ui/primitives";
 import { timecode } from "./Timeline";
 import { useLatestUpload } from "./useLatestUpload";
 
@@ -26,15 +27,42 @@ const STARTER_TEXT: Partial<Record<OverlayTemplateId, Record<string, MessageKey>
   cta: { text: "graphics.default.cta" },
 };
 
-/** Shapes drawn by each template's thumbnail (see `.thumb` in styles.css). */
-const THUMB_MARKS: Record<OverlayTemplateId, number> = {
+/**
+ * Shapes drawn by each thumbnail (see `.thumb` in styles.css), by template, or by
+ * `template:variant` for a look that draws differently from its template's first look.
+ */
+const THUMB_MARKS: Record<OverlayTemplateId, number> & Record<string, number> = {
   title: 2,
+  "title:headline_slam": 2,
   lower_third: 2,
+  "lower_third:kicker_name": 2,
+  "lower_third:mask_reveal": 2,
+  "lower_third:soft_pill": 2,
   cta: 1,
+  "cta:lockup": 2,
+  "cta:close": 2,
   logo: 1,
   progress_bar: 2,
   image: 1,
+  count_up: 2,
+  progress_ring: 2,
 };
+
+/** One entry of the picker: a template in one of its looks (none for single-look ones). */
+interface PickerEntry {
+  templateId: OverlayTemplateId;
+  variant: string | null;
+}
+
+/** Every template, each look of a template with several as its own entry. */
+export const PICKER_ENTRIES: readonly PickerEntry[] = OVERLAY_TEMPLATES.flatMap(
+  (templateId): PickerEntry[] => {
+    const variants = overlayVariants(templateId);
+    return variants.length === 0
+      ? [{ templateId, variant: null }]
+      : variants.map((variant) => ({ templateId, variant }));
+  },
+);
 
 const label = (t: Translate, prefix: string, key: string) => {
   const full = `${prefix}.${key}`;
@@ -44,20 +72,22 @@ const label = (t: Translate, prefix: string, key: string) => {
 const newOverlayId = () => `ov-${crypto.randomUUID().slice(0, 8)}`;
 
 /** A schematic of the template on a frame of the project's shape, in the project's accent. */
-function TemplateThumb({
-  templateId,
-  project,
-}: {
-  templateId: OverlayTemplateId;
-  project: Project;
-}) {
+function TemplateThumb({ entry, project }: { entry: PickerEntry; project: Project }) {
   const style = {
     "--thumb-accent": projectAccent(project),
     aspectRatio: project.preset === "reel_9x16" ? "9 / 16" : "16 / 9",
   } as CSSProperties;
+  const marks =
+    THUMB_MARKS[`${entry.templateId}:${entry.variant}`] ?? THUMB_MARKS[entry.templateId];
   return (
-    <span className="thumb" data-template={templateId} style={style} aria-hidden="true">
-      {Array.from({ length: THUMB_MARKS[templateId] }, (_, index) => (
+    <span
+      className="thumb"
+      data-template={entry.templateId}
+      data-variant={entry.variant ?? undefined}
+      style={style}
+      aria-hidden="true"
+    >
+      {Array.from({ length: marks }, (_, index) => (
         <span key={index} className="thumb-mark" />
       ))}
     </span>
@@ -165,6 +195,18 @@ function PropField({
         />
       );
     case "number":
+      if (field.entry) {
+        return (
+          <NumberField
+            label={name}
+            value={Number(value)}
+            min={field.min}
+            max={field.max}
+            integer={false}
+            onChange={set}
+          />
+        );
+      }
       return (
         <Slider
           label={name}
@@ -245,29 +287,35 @@ export function GraphicsPanel({
   const selected = project.overlays.find((overlay) => overlay.id === selectedId) ?? null;
   const ordered = [...project.overlays].sort((a, b) => a.startFrame - b.startFrame);
 
-  const add = (templateId: OverlayTemplateId) => {
+  const add = ({ templateId, variant }: PickerEntry) => {
     const id = newOverlayId();
-    const props = Object.fromEntries(
+    const props: Record<string, unknown> = Object.fromEntries(
       Object.entries(STARTER_TEXT[templateId] ?? {}).map(([key, message]) => [key, t(message)]),
     );
+    if (variant) props.variant = variant;
     edit((p) => addOverlay(p, { id, templateId, atFrame: frame, props }));
     onSelect(id);
   };
+  // A template's first look keeps the template's name; the others add the look's name.
+  const entryName = ({ templateId, variant }: PickerEntry) =>
+    variant && variant !== overlayVariants(templateId)[0]
+      ? `${t(`overlay.${templateId}`)} · ${label(t, "graphics.option", variant)}`
+      : t(`overlay.${templateId}`);
 
   return (
     <div className="panel-body">
       <h3>{t("graphics.templates")}</h3>
       <div className="template-grid">
-        {OVERLAY_TEMPLATES.map((templateId) => (
+        {PICKER_ENTRIES.map((entry) => (
           <button
-            key={templateId}
+            key={`${entry.templateId}:${entry.variant}`}
             type="button"
             className="template"
-            aria-label={t("graphics.addTemplate", { template: t(`overlay.${templateId}`) })}
-            onClick={() => add(templateId)}
+            aria-label={t("graphics.addTemplate", { template: entryName(entry) })}
+            onClick={() => add(entry)}
           >
-            <TemplateThumb templateId={templateId} project={project} />
-            <span>{t(`overlay.${templateId}`)}</span>
+            <TemplateThumb entry={entry} project={project} />
+            <span>{entryName(entry)}</span>
           </button>
         ))}
       </div>

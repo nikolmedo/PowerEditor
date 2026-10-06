@@ -106,6 +106,7 @@ const SETTINGS: SettingsResponse = {
     targetLufs: -14,
     punchInScale: 1.1,
     autoCta: true,
+    renderMaxConcurrency: 0,
     ffmpegPath: null,
     ffprobePath: null,
     nodePath: null,
