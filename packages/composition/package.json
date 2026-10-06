@@ -11,7 +11,9 @@
     "gen:types": "node scripts/gen-types.mjs",
     "check:types": "node scripts/gen-types.mjs --check",
     "test": "vitest run",
-    "render": "node scripts/render.mjs"
+    "render": "node scripts/render.mjs",
+    "bundle": "node scripts/bundle.mjs",
+    "stage:renderer": "node scripts/stage-renderer.mjs"
   },
   "devDependencies": {
     "@types/react": "19.3.0",

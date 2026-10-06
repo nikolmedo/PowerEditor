@@ -2,6 +2,11 @@
 //
 // Usage: node scripts/render.mjs --props <props.json> --output <file.mp4> [--concurrency <n>]
 //          [--scale <0..1>] [--crf <n>] [--x264-preset <preset>] [--jpeg-quality <0..100>]
+//          [--bundle <dir>]
+//
+// `--bundle` renders a bundle built ahead of time by `scripts/bundle.mjs` and skips webpack,
+// so only `@remotion/renderer` (and its compositor) has to be installed. Without it the
+// script bundles `src/entry.ts` first, which needs `@remotion/bundler`.
 //
 // The quality flags come from the backend's presets (`render/quality.py`); a flag left out
 // keeps Remotion's default.
@@ -18,7 +23,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -36,6 +40,7 @@ const { values } = parseArgs({
     crf: { type: "string" },
     "x264-preset": { type: "string" },
     "jpeg-quality": { type: "string" },
+    bundle: { type: "string" },
   },
 });
 if (!values.props || !values.output) {
@@ -66,14 +71,24 @@ function qualityOptions() {
 }
 
 async function render() {
-  const { id: compositionId } = JSON.parse(
-    await readFile(path.join(packageDir, "src", "composition.json"), "utf8"),
-  );
+  // A prebuilt bundle carries its own copy of composition.json (see bundle.mjs).
+  const compositionFile = values.bundle
+    ? path.join(values.bundle, "composition.json")
+    : path.join(packageDir, "src", "composition.json");
+  const { id: compositionId } = JSON.parse(await readFile(compositionFile, "utf8"));
   const inputProps = JSON.parse(await readFile(values.props, "utf8"));
 
   const bundleStart = performance.now();
-  const serveUrl = await bundle({ entryPoint: path.join(packageDir, "src", "entry.ts") });
-  emit({ event: "bundled", ms: Math.round(performance.now() - bundleStart) });
+  let serveUrl = values.bundle;
+  if (!serveUrl) {
+    const { bundle } = await import("@remotion/bundler");
+    serveUrl = await bundle({ entryPoint: path.join(packageDir, "src", "entry.ts") });
+  }
+  emit({
+    event: "bundled",
+    ms: Math.round(performance.now() - bundleStart),
+    prebuilt: Boolean(values.bundle),
+  });
 
   const renderStart = performance.now();
   const composition = await selectComposition({ serveUrl, id: compositionId, inputProps });
