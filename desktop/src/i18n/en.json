@@ -5,5 +5,6 @@
   "error.exited": "The editing engine stopped unexpectedly (exit code {code}).",
   "error.spawn": "The editing engine could not be started: {message}",
   "error.webMissing": "The web app is not built. Run: corepack pnpm --filter @powereditor/web build",
-  "error.logHint": "Details are in the log folder: {path}"
+  "error.logHint": "Details are in the log folder: {path}",
+  "menu.help": "Help"
 }

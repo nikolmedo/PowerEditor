@@ -3,17 +3,17 @@
  * down window. The window only ever loads the sidecar's loopback origin; any other link opens
  * in the default browser when its site is on the allowlist, and is dropped otherwise.
  */
-import { app, BrowserWindow, dialog, session, shell, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, Menu, session, shell, type WebContents } from "electron";
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { aboutPanelOptions, APP_NAME, applicationMenuTemplate } from "./about";
 import { translator } from "./messages";
 import { isAllowedExternal, isAppUrl } from "./policy";
 import { ReadyLineReader, killTree, sidecarCommand, startSidecar, type Ready } from "./sidecar";
 import { showSplash } from "./splash";
 import { rememberWindowState, savedWindowOptions } from "./windowState";
 
-const APP_NAME = "PowerEditor";
 const READY_TIMEOUT_S = 90;
 /** Permissions the web app may use; everything else (camera, notifications, ...) is denied. */
 const ALLOWED_PERMISSIONS = new Set(["fullscreen", "clipboard-sanitized-write"]);
@@ -142,6 +142,8 @@ function createMainWindow(ready: Ready, splash: BrowserWindow): void {
 
 async function start(): Promise<void> {
   const t = translator(app.getLocale());
+  app.setAboutPanelOptions(aboutPanelOptions(app.getVersion()));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenuTemplate(t("menu.help"))));
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
     callback(ALLOWED_PERMISSIONS.has(permission)),
   );

@@ -6,6 +6,7 @@ import webbrowser
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
+from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -16,8 +17,8 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from powereditor import COPYRIGHT, sidecar
 from powereditor import doctor as doctor_module
-from powereditor import sidecar
 from powereditor.api.app import ENV_DEV_CORS, ENV_SESSION_TOKEN
 from powereditor.api.session_token import TOKEN_HEADER, TOKEN_QUERY
 from powereditor.decide.model_engine import ModelUsageReport
@@ -72,8 +73,26 @@ def _fail(console: Console, exc: Exception) -> typer.Exit:
     return typer.Exit(code=1)
 
 
+def _print_version(requested: bool) -> None:
+    if not requested:
+        return
+    typer.echo(f"PowerEditor {package_version('powereditor')}")
+    typer.echo(COPYRIGHT)
+    raise typer.Exit()
+
+
 @app.callback()
-def main() -> None:
+def main(
+    show_version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_print_version,
+            is_eager=True,
+            help="Show the version and copyright, then exit.",
+        ),
+    ] = False,
+) -> None:
     """PowerEditor command line interface."""
 
 

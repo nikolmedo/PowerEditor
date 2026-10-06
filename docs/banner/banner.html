@@ -1,0 +1,260 @@
+<!doctype html>
+<!--
+  Source of docs/banner.png (1280x640). Render it with:
+    corepack pnpm install            # provides the IBM Plex font files
+    python docs/banner/render.py
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PowerEditor banner</title>
+    <style>
+      @font-face {
+        font-family: "Plex Sans";
+        font-weight: 400;
+        src: url("../../web/node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2");
+      }
+      @font-face {
+        font-family: "Plex Sans";
+        font-weight: 600;
+        src: url("../../web/node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2");
+      }
+      @font-face {
+        font-family: "Plex Mono";
+        font-weight: 500;
+        src: url("../../web/node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2");
+      }
+
+      :root {
+        --graphite: #1a1c1f;
+        --panel: #24272b;
+        --rule: #33373c;
+        --ink: #ece9e2;
+        --muted: #9a9893;
+        --amber: #e9a23b;
+        --source-a: #0072b2;
+        --source-b: #e69f00;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+
+      body {
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        background: var(--graphite);
+        color: var(--ink);
+        font-family: "Plex Sans", sans-serif;
+      }
+
+      .banner {
+        position: relative;
+        width: 1280px;
+        height: 640px;
+      }
+
+      /* Left column: who we are and what it does. */
+      .identity {
+        position: absolute;
+        left: 72px;
+        top: 92px;
+        width: 470px;
+      }
+
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+      }
+
+      .wordmark svg {
+        width: 84px;
+        height: 84px;
+        flex: none;
+      }
+
+      .wordmark h1 {
+        font-size: 58px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1;
+      }
+
+      .promise {
+        margin-top: 40px;
+        font-size: 31px;
+        font-weight: 600;
+        line-height: 1.22;
+        letter-spacing: -0.01em;
+      }
+
+      .detail {
+        margin-top: 18px;
+        font-size: 19px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      /* Right: the real app, bleeding off the edge, with a rendered frame in front. */
+      .app {
+        position: absolute;
+        left: 600px;
+        top: 52px;
+        width: 760px;
+        height: 456px;
+        border-radius: 12px 0 0 12px;
+        overflow: hidden;
+        border: 1px solid var(--rule);
+        border-right: none;
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+      }
+
+      .app img {
+        display: block;
+        width: 830px;
+        margin: -40px 0 0 -136px;
+      }
+
+      .render {
+        position: absolute;
+        left: 536px;
+        top: 214px;
+        width: 290px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 2px solid var(--graphite);
+        outline: 1px solid var(--rule);
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55);
+      }
+
+      .render img {
+        display: block;
+        width: 100%;
+      }
+
+      /* Bottom: a timeline across the whole banner. The amber cuts are removed silences. */
+      .timeline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 104px;
+        background: var(--panel);
+        border-top: 1px solid var(--rule);
+      }
+
+      .ruler {
+        position: absolute;
+        left: 72px;
+        top: 14px;
+        font-family: "Plex Mono", monospace;
+        font-size: 14px;
+        color: var(--amber);
+      }
+
+      .track {
+        position: absolute;
+        left: 72px;
+        right: 0;
+        top: 42px;
+        height: 34px;
+        display: flex;
+        gap: 0;
+      }
+
+      .clip {
+        height: 100%;
+        border-radius: 3px;
+      }
+
+      .clip.a {
+        background: var(--source-a);
+      }
+
+      .clip.b {
+        background: var(--source-b);
+      }
+
+      .cut {
+        width: 14px;
+        height: 100%;
+        position: relative;
+      }
+
+      .cut::after {
+        content: "";
+        position: absolute;
+        left: 5px;
+        top: -6px;
+        width: 4px;
+        height: 46px;
+        background: var(--amber);
+        transform: skewX(-12deg);
+        border-radius: 1px;
+      }
+
+      .playhead {
+        position: absolute;
+        left: 398px;
+        top: 8px;
+        bottom: 0;
+        width: 2px;
+        background: var(--amber);
+      }
+
+      .playhead::before {
+        content: "";
+        position: absolute;
+        left: -6px;
+        top: 0;
+        border: 7px solid transparent;
+        border-top: 9px solid var(--amber);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="banner">
+      <section class="identity">
+        <div class="wordmark">
+          <svg viewBox="64 64 896 896" aria-hidden="true">
+            <rect x="64" y="64" width="896" height="896" rx="200" fill="#2b2e33" />
+            <polygon points="332,260 332,764 772,512" fill="#e9a23b" />
+            <polygon points="520,200 584,200 504,824 440,824" fill="#2b2e33" />
+          </svg>
+          <h1>PowerEditor</h1>
+        </div>
+        <p class="promise">Record once. Get the edit.</p>
+        <p class="detail">
+          Picks your best take, cuts the silences, syncs the subtitles and exports a finished video.
+          Runs on your own PC.
+        </p>
+      </section>
+
+      <div class="app"><img src="../screenshots/review.jpg" alt="" /></div>
+      <div class="render"><img src="../screenshots/output-second-source.jpg" alt="" /></div>
+
+      <section class="timeline" aria-hidden="true">
+        <span class="ruler">00:00:07:24</span>
+        <div class="playhead"></div>
+        <div class="track">
+          <div class="clip a" style="width: 168px"></div>
+          <div class="cut"></div>
+          <div class="clip a" style="width: 236px"></div>
+          <div class="cut"></div>
+          <div class="clip b" style="width: 118px"></div>
+          <div class="cut"></div>
+          <div class="clip a" style="width: 204px"></div>
+          <div class="cut"></div>
+          <div class="clip b" style="width: 152px"></div>
+          <div class="cut"></div>
+          <div class="clip a" style="width: 94px"></div>
+          <div class="cut"></div>
+          <div class="clip b" style="width: 260px"></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

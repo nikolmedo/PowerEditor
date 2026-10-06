@@ -1,6 +1,9 @@
 {
   "name": "powereditor",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Nicolás Olmedo (https://nolmedo.dev)",
+  "homepage": "https://github.com/nikolmedo/PowerEditor",
   "packageManager": "pnpm@12.9.1",
   "type": "module",
   "scripts": {

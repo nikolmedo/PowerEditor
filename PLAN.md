@@ -55,9 +55,9 @@ Packaging as an installer was a non-goal in the first draft. It is now in scope 
 | Desktop shell | Electron with the Python backend as a PyInstaller sidecar (Phase 10) |
 | NLE export (optional) | OpenTimelineIO → FCPXML |
 
-**Remotion license:** free for individuals and companies of up to 3 people. Public distribution needs a license review before the first release.
+**Remotion license:** free for individuals and companies of up to 3 people; larger companies need a Remotion company license, also to use PowerEditor. PowerEditor's own license (PolyForm Noncommercial, see Phase 10) keeps the project noncommercial, and `THIRD_PARTY_NOTICES.md` points users to Remotion's terms.
 
-**FFmpeg license:** the gyan.dev `full_build` is GPL. Do not bundle it; prefer an LGPL build or a first-run download.
+**FFmpeg license:** the gyan.dev `full_build` is GPL. Do not bundle it; prefer an LGPL build or a first-run download. Note that Remotion's compositor and the PyAV wheel each ship their own FFmpeg (see Risks).
 
 ## Architecture
 
@@ -576,7 +576,7 @@ Design ideas from [HyperFrames](https://github.com/heygen-com/hyperframes) (Apac
 - **Acceptance:** a user without Python, Node or ffmpeg installs the app, finishes onboarding and exports a video.
 - **Status (10a, standalone backend): done.** `resources.py` resolves the web build, the Remotion composition (prebuilt bundle) and tools from source or frozen. `runtime/` downloads pinned runtimes with SHA-256 checks into `<data dir>/bin/<name>-<version>/`: LGPL FFmpeg 8.1.3 (BtbN month-end autobuild), Node 24.21.0 x64 (nodejs.org) and Remotion's Chrome Headless Shell (`ensure-browser.mjs`); `GET /api/setup` lists them, `POST /api/setup/runtime/{name}` and `powereditor runtime install` install them. Ingest falls back to OpenH264 when FFmpeg has no libx264. `scripts/bundle.mjs` bundles the composition once (renders skip webpack), `stage-renderer.mjs` stages `@remotion/renderer` with only the x64 compositor. `scripts/build_backend.py` builds a PyInstaller onedir with a console and a windowed exe. `serve --port 0 --parent-pid` prints `POWEREDITOR_READY {"port", "token"}` for the shell.
 - **Status (10b, desktop app and installer): done, pending a public release (Phase 11).** `desktop/` is an Electron 44 shell (TypeScript, sandboxed window with context isolation, only the sidecar's loopback origin, external links through an https allowlist, single instance, splash with a 90 s timeout and an error dialog naming the log folder, window bounds kept, sidecar tree killed on quit, logs in `%APPDATA%\PowerEditor\logs`). The sidecar token is enforced with `--port 0`: header `X-PowerEditor-Token` or an HttpOnly cookie set by a one-time `/?token=` redirect. A guided first run (`/welcome`: tools, transcription, optional AI models) opens while runtimes are missing. electron-builder writes a per-user NSIS installer for win x64 (`scripts/build_installer.py`, `dist/installer/`). 10a follow-ups fixed: symlinked zip members refused, a lock file per runtime, rename retried on Windows, READY only after the lifespan startup (already true, now pinned by tests), parent watched through its process handle, bounded smoke test, no `.env` in frozen builds, web types for runtimes.
-- **TODO (license):** the project license is not decided. The packages say `UNLICENSED` and the installer shows no license page; add `LICENSE`, `THIRD_PARTY_NOTICES` (Electron/Chromium, FFmpeg LGPL, PyAV, Remotion, fonts) and an NSIS license page before the first public build.
+- **License (decided):** PolyForm Noncommercial License 1.0.0 plus an additional permission that lets users use their output (videos, audio, subtitles, images) commercially; selling, renting or charging for the program, forks or hosted access stays out. Source-available, not OSI open source. Notice: `Copyright 2026 Nicolás Olmedo (https://nolmedo.dev)`. Done: root `LICENSE`, `THIRD_PARTY_NOTICES.md` (bundled, first-run downloads, optional extras, how each license was checked), package metadata (`SEE LICENSE IN`, author, homepage; `pyproject.toml` reads `../LICENSE`), electron-builder `copyright`, an NSIS license page (`build_installer.py` writes `desktop/build/license.txt` with a BOM and CRLF), `LICENSE.txt` and the notices in the app's resources, an About section in General settings plus a footer in the web app, the Electron About panel (Help menu), `powereditor --version`, and the README License section.
 
 ### Phase 11: Docs, CI/CD, releases and auto-update
 
@@ -608,6 +608,9 @@ Design ideas from [HyperFrames](https://github.com/heygen-com/hyperframes) (Apac
 - [ ] CUDA/cuDNN setup for faster-whisper on Windows (no GPU host available).
 - [ ] MediaPipe availability on Windows ARM64.
 - [ ] Proxy playback in the browser (served with range requests).
-- [ ] Remotion license for public distribution.
-- [x] FFmpeg build licensing for distribution → first-run download of a pinned LGPL build (BtbN `win64-lgpl`); no libx264, so ingest uses OpenH264. Still to check: OpenH264 patent terms for a source-built (not Cisco binary) encoder, and LGPL notices in `THIRD_PARTY_NOTICES`.
+- [x] Remotion license for public distribution → users at companies with more than 3 people need a Remotion company license; stated in the README and `THIRD_PARTY_NOTICES.md`.
+- [x] FFmpeg build licensing for distribution → first-run download of a pinned LGPL build (BtbN `win64-lgpl`, LGPL-3.0-or-later since BtbN configures it with `--enable-version3`); no libx264, so ingest uses OpenH264. Notices are in `THIRD_PARTY_NOTICES.md`.
+- [ ] OpenH264 patents: BtbN compiles OpenH264 from Cisco's source, and Cisco covers MPEG LA royalties only for its own binary module (openh264.org FAQ). Assess the patent exposure for users of the downloaded build, or switch ingest to Cisco's binary.
+- [ ] GPL FFmpeg code in the installer: Remotion's compositor (`@remotion/compositor-win32-x64-msvc`) ships an FFmpeg that reports GPL-2.0-or-later (`--enable-gpl --enable-libx264`), and the PyAV 19 wheel ships `libx264`/`libx265` DLLs (GPL) next to its LGPL-3.0 FFmpeg libraries; both end up in the frozen build. Confirm the distribution terms (source offer, or excluding the x264/x265 DLLs from the PyInstaller build) before the first public build.
+- [ ] `runtime/manifest.py` declares the BtbN FFmpeg as `LGPL-2.1-or-later`; the build is LGPL-3.0-or-later.
 - [ ] Terms of use and output stability of local CLI clients (Phase 4).

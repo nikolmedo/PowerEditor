@@ -1,5 +1,11 @@
 /** Shapes of the local API (`backend/powereditor/api/`), camelCase as the backend sends them. */
 
+/** `GET /api/health`. */
+export interface HealthStatus {
+  status: string;
+  version: string;
+}
+
 export type Transport = "api" | "local_cli";
 export type Transcriber = "local" | "openai";
 export type WhisperDevice = "auto" | "cuda" | "cpu";

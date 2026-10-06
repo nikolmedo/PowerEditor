@@ -19,6 +19,14 @@ describe("isAllowedExternal", () => {
     expect(isAllowedExternal("https://github.com/nikolmedo/PowerEditor#readme")).toBe(true);
     expect(isAllowedExternal("https://www.remotion.dev/license")).toBe(true);
     expect(isAllowedExternal("http://github.com/")).toBe(false);
+    expect(isAllowedExternal("https://evil.example/")).toBe(false);
+  });
+
+  it("opens the author's site from the About section and the footer", () => {
+    expect(isAllowedExternal("https://nolmedo.dev")).toBe(true);
+    expect(isAllowedExternal("https://nolmedo.dev/")).toBe(true);
+    expect(isAllowedExternal("http://nolmedo.dev/")).toBe(false);
+    expect(isAllowedExternal("https://nolmedo.dev.evil.example/")).toBe(false);
     expect(isAllowedExternal("https://github.com.evil.example/")).toBe(false);
     expect(isAllowedExternal("https://evil.example/?u=github.com")).toBe(false);
     expect(isAllowedExternal("file:///C:/")).toBe(false);

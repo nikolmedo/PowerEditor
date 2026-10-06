@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "PowerEditor desktop app: an Electron shell around the local PowerEditor engine.",
-  "author": "PowerEditor contributors",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "author": "Nicolás Olmedo (https://nolmedo.dev)",
+  "homepage": "https://github.com/nikolmedo/PowerEditor",
   "type": "commonjs",
   "main": "dist/main.js",
   "scripts": {
@@ -25,7 +26,7 @@
   "build": {
     "appId": "io.github.nikolmedo.powereditor",
     "productName": "PowerEditor",
-    "copyright": "PowerEditor contributors",
+    "copyright": "Copyright 2026 Nicolás Olmedo (https://nolmedo.dev)",
     "directories": {
       "output": "../dist/installer",
       "buildResources": "build"
@@ -38,6 +39,14 @@
       {
         "from": "../dist/backend/powereditor",
         "to": "backend"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE.txt"
+      },
+      {
+        "from": "../THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
       }
     ],
     "npmRebuild": false,
@@ -57,6 +66,7 @@
       "perMachine": false,
       "allowElevation": false,
       "allowToChangeInstallationDirectory": true,
+      "license": "build/license.txt",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "PowerEditor",

@@ -9,6 +9,7 @@ export const EXTERNAL_HOSTS: ReadonlySet<string> = new Set([
   "learn.chatgpt.com",
   "platform.openai.com",
   "console.anthropic.com",
+  "nolmedo.dev",
 ]);
 
 function parse(url: string): URL | null {

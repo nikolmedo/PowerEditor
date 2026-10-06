@@ -5,7 +5,8 @@ Usage (from the repo root, any Python 3.12+; it only drives other tools):
     python scripts/build_installer.py [--skip-backend] [--smoke]
 
 Steps: build the standalone backend (`scripts/build_backend.py`, with `--smoke` forwarded),
-compile the Electron shell (`desktop/`), then run electron-builder, which copies
+compile the Electron shell (`desktop/`), write the installer's license page
+(`desktop/build/license.txt`, from `LICENSE`), then run electron-builder, which copies
 `dist/backend/powereditor` into the app's `resources/backend` and writes
 `dist/installer/PowerEditor-Setup-<version>-x64.exe`.
 """
@@ -22,6 +23,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 BACKEND_BUILD = REPO / "dist" / "backend" / "powereditor"
 INSTALLER_DIR = REPO / "dist" / "installer"
+NSIS_LICENSE = REPO / "desktop" / "build" / "license.txt"
 
 
 def run(command: list[str], env: dict[str, str] | None = None) -> None:
@@ -48,6 +50,14 @@ def builder_env(shim_dir: Path, corepack: str) -> dict[str, str]:
     return env
 
 
+def write_nsis_license(source: Path, target: Path) -> None:
+    """Copy the license for the NSIS license page. NSIS reads a text file without a byte
+    order mark as ANSI (which garbles accented names) and expects Windows line endings."""
+    text = source.read_text(encoding="utf-8")  # universal newlines: every line ends in "\n"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(text.replace("\n", "\r\n").encode("utf-8-sig"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--skip-backend", action="store_true", help="reuse dist/backend")
@@ -62,6 +72,7 @@ def main() -> None:
     if not (BACKEND_BUILD / "powereditor-sidecar.exe").is_file():
         sys.exit(f"{BACKEND_BUILD} has no powereditor-sidecar.exe; build the backend first")
     run([corepack, "pnpm", "--filter", "@powereditor/desktop", "build"])
+    write_nsis_license(REPO / "LICENSE", NSIS_LICENSE)
     with tempfile.TemporaryDirectory(prefix="pnpm-shim-") as shim_dir:
         env = builder_env(Path(shim_dir), corepack)
         run([corepack, "pnpm", "--filter", "@powereditor/desktop", "dist"], env)

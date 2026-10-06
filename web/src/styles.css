@@ -85,7 +85,7 @@ a {
 
 .shell {
   display: grid;
-  grid-template: "top top" 52px "nav main" 1fr / 208px 1fr;
+  grid-template: "top top" 52px "nav main" 1fr "foot main" auto / 208px 1fr;
   min-height: 100vh;
 }
 
@@ -175,6 +175,33 @@ a {
 .sidebar-link[aria-current="page"] {
   background: var(--surface-2);
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.app-footer {
+  grid-area: foot;
+  padding: 12px 20px;
+  border-right: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.app-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.app-footer a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.about {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.about p {
+  margin: 0 0 8px;
 }
 
 .content {
