@@ -1,0 +1,519 @@
+{
+  "$defs": {
+    "AudioTrack": {
+      "additionalProperties": false,
+      "properties": {
+        "duckingEnabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "voice",
+            "music",
+            "sfx"
+          ],
+          "type": "string"
+        },
+        "sourcePath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "volume": {
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "volume",
+        "duckingEnabled"
+      ],
+      "title": "AudioTrack",
+      "type": "object"
+    },
+    "Clip": {
+      "additionalProperties": false,
+      "properties": {
+        "alternativeTakeIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "colorOverride": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorGradeOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "decisionConfidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "type": "string"
+        },
+        "inSec": {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "outSec": {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "removed": {
+          "type": "boolean"
+        },
+        "sourceId": {
+          "type": "string"
+        },
+        "speed": {
+          "maximum": 2.0,
+          "minimum": 0.5,
+          "type": "number"
+        },
+        "takeGroupId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "transitionIn": {
+          "$ref": "#/$defs/TransitionIn"
+        },
+        "volume": {
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "sourceId",
+        "inSec",
+        "outSec",
+        "speed",
+        "volume",
+        "transitionIn",
+        "alternativeTakeIds",
+        "removed"
+      ],
+      "title": "Clip",
+      "type": "object"
+    },
+    "ColorGrade": {
+      "additionalProperties": false,
+      "properties": {
+        "brightness": {
+          "type": "number"
+        },
+        "contrast": {
+          "type": "number"
+        },
+        "preset": {
+          "enum": [
+            "natural",
+            "warm",
+            "cool",
+            "bw"
+          ],
+          "type": "string"
+        },
+        "saturation": {
+          "type": "number"
+        },
+        "temperature": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "preset",
+        "brightness",
+        "contrast",
+        "saturation",
+        "temperature"
+      ],
+      "title": "ColorGrade",
+      "type": "object"
+    },
+    "ColorGradeOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "brightness": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "contrast": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "preset": {
+          "anyOf": [
+            {
+              "enum": [
+                "natural",
+                "warm",
+                "cool",
+                "bw"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "saturation": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ColorGradeOverride",
+      "type": "object"
+    },
+    "ColorStats": {
+      "additionalProperties": false,
+      "properties": {
+        "meanB": {
+          "type": "number"
+        },
+        "meanG": {
+          "type": "number"
+        },
+        "meanLuma": {
+          "type": "number"
+        },
+        "meanR": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "meanLuma",
+        "meanR",
+        "meanG",
+        "meanB"
+      ],
+      "title": "ColorStats",
+      "type": "object"
+    },
+    "Overlay": {
+      "additionalProperties": false,
+      "properties": {
+        "autoGenerated": {
+          "type": "boolean"
+        },
+        "endFrame": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "props": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "startFrame": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "templateId": {
+          "enum": [
+            "title",
+            "lower_third",
+            "cta",
+            "logo",
+            "progress_bar",
+            "image"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "templateId",
+        "startFrame",
+        "endFrame",
+        "props",
+        "autoGenerated"
+      ],
+      "title": "Overlay",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "colorStats": {
+          "$ref": "#/$defs/ColorStats"
+        },
+        "displayColor": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "loudnessLufs": {
+          "type": "number"
+        },
+        "mezzaninePath": {
+          "type": "string"
+        },
+        "originalPath": {
+          "type": "string"
+        },
+        "proxyPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "originalPath",
+        "mezzaninePath",
+        "proxyPath",
+        "displayColor",
+        "loudnessLufs",
+        "colorStats"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "SubtitleStyle": {
+      "additionalProperties": false,
+      "properties": {
+        "fontSize": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "highlightColor": {
+          "type": "string"
+        },
+        "maxWordsPerLine": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "position": {
+          "enum": [
+            "bottom",
+            "center",
+            "top"
+          ],
+          "type": "string"
+        },
+        "preset": {
+          "enum": [
+            "karaoke_highlight",
+            "clean",
+            "bold_pop",
+            "minimal"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "preset",
+        "fontSize",
+        "position",
+        "highlightColor",
+        "maxWordsPerLine"
+      ],
+      "title": "SubtitleStyle",
+      "type": "object"
+    },
+    "Subtitles": {
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/SubtitleStyle"
+        },
+        "words": {
+          "items": {
+            "$ref": "#/$defs/TimelineWord"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "style",
+        "words"
+      ],
+      "title": "Subtitles",
+      "type": "object"
+    },
+    "TimelineWord": {
+      "additionalProperties": false,
+      "properties": {
+        "clipId": {
+          "type": "string"
+        },
+        "endFrame": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "startFrame": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "startFrame",
+        "endFrame",
+        "clipId"
+      ],
+      "title": "TimelineWord",
+      "type": "object"
+    },
+    "TransitionIn": {
+      "additionalProperties": false,
+      "properties": {
+        "durationFrames": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "enum": [
+            "cut",
+            "punch_in",
+            "fade",
+            "slide"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "durationFrames"
+      ],
+      "title": "TransitionIn",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "audioTracks": {
+      "items": {
+        "$ref": "#/$defs/AudioTrack"
+      },
+      "type": "array"
+    },
+    "clips": {
+      "items": {
+        "$ref": "#/$defs/Clip"
+      },
+      "type": "array"
+    },
+    "colorGrade": {
+      "$ref": "#/$defs/ColorGrade"
+    },
+    "fps": {
+      "exclusiveMinimum": 0,
+      "type": "integer"
+    },
+    "overlays": {
+      "items": {
+        "$ref": "#/$defs/Overlay"
+      },
+      "type": "array"
+    },
+    "preset": {
+      "enum": [
+        "reel_9x16",
+        "landscape_16x9"
+      ],
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/Source"
+      },
+      "type": "array"
+    },
+    "subtitles": {
+      "$ref": "#/$defs/Subtitles"
+    },
+    "version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "preset",
+    "fps",
+    "sources",
+    "clips",
+    "audioTracks",
+    "subtitles",
+    "overlays",
+    "colorGrade"
+  ],
+  "title": "Project",
+  "type": "object"
+}

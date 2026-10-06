@@ -1,12 +1,14 @@
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from autocut import doctor
 from autocut.cli import app
+from autocut.settings_store import SettingsService
 
 
 def _fake_runner(output: str) -> doctor.Runner:
@@ -107,3 +109,18 @@ def test_version_drops_copyright_suffix(monkeypatch: pytest.MonkeyPatch) -> None
     )
 
     assert report.checks[0].version == "ffmpeg version 9.0.2"
+
+
+def test_cli_doctor_uses_configured_ffmpeg_path(
+    monkeypatch: pytest.MonkeyPatch, isolated_environment: Path
+) -> None:
+    custom = isolated_environment.parent / "tools" / "ffmpeg.exe"
+    custom.parent.mkdir()
+    custom.write_bytes(b"")
+    SettingsService.default().update({"ffmpegPath": str(custom)})
+    monkeypatch.setattr(shutil, "which", _which_only("ffprobe", "node", "corepack"))
+    monkeypatch.setattr(doctor, "default_runner", _fake_runner("v1.2.3"))
+
+    result = CliRunner().invoke(app, ["doctor"])
+
+    assert result.exit_code == 0, result.output

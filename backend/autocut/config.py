@@ -12,6 +12,13 @@ DecisionEngine = Literal["heuristic", "jev"]
 
 
 class Settings(BaseSettings):
+    """Developer overrides read from `.env` and environment variables.
+
+    Every field defaults to None: only explicitly set values override the code
+    defaults in `settings_store.UserSettings`, and the user settings file wins
+    over this layer.
+    """
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", Path(".env")),
         env_file_encoding="utf-8",
@@ -19,18 +26,21 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    transcriber: Transcriber = "local"
-    whisper_model: str = "large-v3-turbo"
-    whisper_device: WhisperDevice = "auto"
-    whisper_language: str | None = "es"
+    transcriber: Transcriber | None = None
+    whisper_model: str | None = None
+    whisper_device: WhisperDevice | None = None
+    whisper_language: str | None = None
     openai_api_key: SecretStr | None = None
 
-    decision_engine: DecisionEngine = "heuristic"
+    decision_engine: DecisionEngine | None = None
     typesafe_api_key: SecretStr | None = None
-    jev_model: str = "jev-1.13"
-    jev_min_confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    jev_model: str | None = None
+    jev_min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
-    silence_padding_ms: int = Field(default=120, ge=0)
-    audio_crossfade_ms: int = Field(default=15, ge=0)
-    target_lufs: float = -14.0
-    punch_in_scale: float = Field(default=1.1, gt=0.0)
+    silence_padding_ms: int | None = Field(default=None, ge=0)
+    audio_crossfade_ms: int | None = Field(default=None, ge=0)
+    target_lufs: float | None = None
+    punch_in_scale: float | None = Field(default=None, gt=0.0)
+
+    ffmpeg_path: str | None = None
+    ffprobe_path: str | None = None
