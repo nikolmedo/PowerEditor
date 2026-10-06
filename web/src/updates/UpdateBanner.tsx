@@ -42,9 +42,13 @@ function UpdateNotice({
       if (update.releaseUrl) window.open(update.releaseUrl, "_blank", "noreferrer");
       return;
     }
-    void desktop.download(version).then((state) => {
-      if (state) setDownload(state);
-    });
+    desktop.download(version).then(
+      (state) => {
+        if (state) setDownload(state);
+      },
+      // The shell went away mid-call (IPC closed): show the failure so Retry is offered.
+      () => setDownload({ status: "failed", version, error: "download_failed" }),
+    );
   };
   const install = () => void desktop?.installAndQuit();
 

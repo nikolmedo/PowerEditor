@@ -118,6 +118,30 @@ describe("watchJob", () => {
     expect(fetchJob).toHaveBeenCalledTimes(1);
   });
 
+  it("drops the socket's stall watch for good once it polls", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", FakeSocket);
+    const fetchJob = vi.fn().mockResolvedValue(job({ fraction: 0.6 }));
+    const events: JobEvent[] = [];
+    const stop = watchJob("j1", (event) => events.push(event), {
+      pollMs: 100,
+      stallMs: 1000,
+      fetchJob,
+    });
+
+    FakeSocket.last?.onclose?.();
+    expect(vi.getTimerCount()).toBe(1); // the first poll only
+    // A message that was already queued when the socket dropped.
+    FakeSocket.last?.emit({ jobId: "j1", status: "running", stage: "render", fraction: 0.9 });
+    expect(vi.getTimerCount()).toBe(1);
+    expect(events).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(150);
+    expect(events.map((event) => event.fraction)).toEqual([0.6]);
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("stops without polling once the caller stops listening", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", FakeSocket);

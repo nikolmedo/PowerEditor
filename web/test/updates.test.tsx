@@ -140,6 +140,21 @@ describe("UpdateBanner", () => {
     expect(await screen.findByText(t("updates.downloading", { percent: 25 }))).toBeTruthy();
   });
 
+  it("shows the failure and a retry when the desktop download call itself fails", async () => {
+    vi.mocked(api.updates).mockResolvedValue(status());
+    const desktop = fakeDesktop({ status: "ready", version: "0.2.0" });
+    vi.mocked(desktop.download).mockRejectedValueOnce(new Error("IPC channel closed"));
+    window.powereditor = { updates: desktop };
+    render(<UpdateBanner />);
+
+    await userEvent.click(await screen.findByRole("button", { name: t("updates.download") }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", t("updates.failed"));
+    await userEvent.click(screen.getByRole("button", { name: t("updates.retry") }));
+    expect(desktop.download).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("button", { name: t("updates.install") })).toBeTruthy();
+  });
+
   it("offers a retry when the desktop download fails", async () => {
     vi.mocked(api.updates).mockResolvedValue(status());
     const desktop = fakeDesktop({ status: "failed", version: "0.2.0", error: "checksum_mismatch" });

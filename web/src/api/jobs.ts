@@ -72,22 +72,28 @@ export function watchJob(
     if (!finished) timer = setTimeout(() => void poll(), pollMs);
   };
 
+  const socket = new WebSocket(jobEventsUrl(jobId));
+
+  /** From here on the socket is ignored: a late message must not re-arm the stall watch
+   * or deliver an event older than what polling reports. */
   const switchToPolling = (delayMs: number) => {
     clearTimeout(stallTimer);
+    socket.onmessage = null;
     if (finished || polling) return;
     polling = true;
     timer = setTimeout(() => void poll(), delayMs);
   };
 
-  const socket = new WebSocket(jobEventsUrl(jobId));
   const watchForStall = () => {
     clearTimeout(stallTimer);
+    if (finished || polling) return;
     stallTimer = setTimeout(() => {
       socket.close();
       switchToPolling(0);
     }, stallMs);
   };
   socket.onmessage = (message: MessageEvent<string>) => {
+    if (polling) return;
     deliver(JSON.parse(message.data) as JobEvent);
     if (finished) {
       clearTimeout(stallTimer);
