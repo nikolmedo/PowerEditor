@@ -22,6 +22,7 @@ from powereditor.api.routes_providers import router as providers_router
 from powereditor.api.routes_settings import get_service
 from powereditor.api.routes_settings import router as settings_router
 from powereditor.api.routes_setup import router as setup_router
+from powereditor.api.routes_updates import router as updates_router
 from powereditor.api.services import Pipelines, Revealer, default_revealer
 from powereditor.api.session_token import SessionTokenGuard
 from powereditor.jobs import JobManager
@@ -93,6 +94,7 @@ def create_app(
     runtime_downloads: Sequence[RuntimeDownload] | None = None,
     runtime_transport: httpx.BaseTransport | None = None,
     session_token: str | None = None,
+    update_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     if settings_service is None:
         settings_service = SettingsService(
@@ -131,6 +133,7 @@ def create_app(
     app.state.provider_transport = provider_transport
     app.state.runtime_downloads = runtime_downloads
     app.state.runtime_transport = runtime_transport
+    app.state.update_transport = update_transport
     app.state.project_store = ProjectStore(settings_service.paths)
     app.state.jobs = jobs
     app.state.pipelines = pipelines or Pipelines()
@@ -157,5 +160,6 @@ def create_app(
     app.include_router(audio_router)
     app.include_router(overlays_router)
     app.include_router(setup_router)
+    app.include_router(updates_router)
     _mount_web_app(app, web_dir or resolve_web_dir())
     return app
