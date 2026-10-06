@@ -1,6 +1,8 @@
 import re
 import tempfile
+import time
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -26,6 +28,8 @@ MP3_BITRATE = "32k"
 MIN_CHUNK_FRACTION = 0.5
 SILENCE_FILTER = "silencedetect=noise=-35dB:d=0.3"
 REQUEST_TIMEOUT_SECONDS = 600.0
+MAX_ATTEMPTS = 3
+BACKOFF_SECONDS = 1.0
 
 _SILENCE_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
 _SILENCE_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
@@ -84,12 +88,16 @@ class OpenAIWhisperTranscriber:
         transport: httpx.BaseTransport | None = None,
         base_url: str = OPENAI_API_BASE,
         max_upload_bytes: int = MAX_UPLOAD_BYTES,
+        max_attempts: int = MAX_ATTEMPTS,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._api_key = api_key
         self._ffmpeg = ffmpeg
         self._transport = transport
         self._url = f"{base_url.rstrip('/')}/audio/transcriptions"
         self._max_upload_bytes = max_upload_bytes
+        self._max_attempts = max(max_attempts, 1)
+        self._sleep = sleep
 
     @property
     def provider(self) -> TranscriberProvider:
@@ -116,6 +124,30 @@ class OpenAIWhisperTranscriber:
         max_chunk_seconds = duration * budget / size
         return plan_chunks(duration, max_chunk_seconds, parse_silences(stderr, duration))
 
+    def _post_with_retry(
+        self, client: httpx.Client, data: dict[str, str], content: bytes
+    ) -> httpx.Response:
+        """POST one chunk, retrying connection errors, 429 and 5xx with exponential backoff."""
+        for attempt in range(1, self._max_attempts + 1):
+            last = attempt == self._max_attempts
+            try:
+                response = client.post(
+                    self._url,
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    data=data,
+                    files={"file": ("audio.mp3", content, "audio/mpeg")},
+                )
+            except httpx.HTTPError as exc:
+                if last:
+                    message = f"OpenAI request failed: {exc}"
+                    raise TranscriptionError("openai_unreachable", message) from exc
+            else:
+                transient = response.status_code == 429 or response.status_code >= 500
+                if not transient or last:
+                    return response
+            self._sleep(BACKOFF_SECONDS * 2 ** (attempt - 1))
+        raise AssertionError("unreachable")
+
     def _request(
         self, client: httpx.Client, upload: Path, language: str | None
     ) -> _VerboseTranscription:
@@ -129,15 +161,7 @@ class OpenAIWhisperTranscriber:
         prompt = filler_prompt(language)
         if prompt:
             data["prompt"] = prompt
-        try:
-            response = client.post(
-                self._url,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                data=data,
-                files={"file": ("audio.mp3", upload.read_bytes(), "audio/mpeg")},
-            )
-        except httpx.HTTPError as exc:
-            raise TranscriptionError("openai_unreachable", f"OpenAI request failed: {exc}") from exc
+        response = self._post_with_retry(client, data, upload.read_bytes())
         if response.status_code == 401:
             raise TranscriptionError("openai_unauthorized", "OpenAI rejected the API key")
         if response.status_code >= 400:

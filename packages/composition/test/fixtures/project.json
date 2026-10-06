@@ -1,0 +1,151 @@
+{
+  "description": "Shared timeline-layout contract; clip c1 lands on an exact .5 frame (round half to even).",
+  "project": {
+    "version": 1,
+    "preset": "reel_9x16",
+    "fps": 30,
+    "sources": [
+      {
+        "id": "s1",
+        "originalPath": "C:/media/s1.mp4",
+        "mezzaninePath": "C:/data/projects/p/media/s1.mezzanine.mp4",
+        "proxyPath": "C:/data/projects/p/media/s1.proxy.mp4",
+        "displayColor": "#0072B2",
+        "loudnessLufs": -20.0,
+        "colorStats": {
+          "meanLuma": 0.5,
+          "meanR": 0.5,
+          "meanG": 0.5,
+          "meanB": 0.5
+        }
+      }
+    ],
+    "clips": [
+      {
+        "id": "c1",
+        "sourceId": "s1",
+        "inSec": 0.0,
+        "outSec": 1.15,
+        "speed": 1.0,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "cut",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": [],
+        "removed": false
+      },
+      {
+        "id": "c2",
+        "sourceId": "s1",
+        "inSec": 2.0,
+        "outSec": 3.25,
+        "speed": 1.0,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "cut",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": [],
+        "removed": false
+      },
+      {
+        "id": "c3",
+        "sourceId": "s1",
+        "inSec": 4.0,
+        "outSec": 5.0,
+        "speed": 1.5,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "cut",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": [],
+        "removed": true
+      },
+      {
+        "id": "c4",
+        "sourceId": "s1",
+        "inSec": 6.0,
+        "outSec": 6.0,
+        "speed": 1.0,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "cut",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": [],
+        "removed": false
+      },
+      {
+        "id": "c5",
+        "sourceId": "s1",
+        "inSec": 7.1,
+        "outSec": 9.3,
+        "speed": 0.75,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "cut",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": [],
+        "removed": false
+      }
+    ],
+    "audioTracks": [
+      {
+        "id": "voice",
+        "kind": "voice",
+        "volume": 1.0,
+        "duckingEnabled": false
+      }
+    ],
+    "subtitles": {
+      "style": {
+        "preset": "clean",
+        "fontSize": 64,
+        "position": "bottom",
+        "highlightColor": "#FFD400",
+        "maxWordsPerLine": 4
+      },
+      "words": []
+    },
+    "overlays": [],
+    "colorGrade": {
+      "preset": "natural",
+      "brightness": 1.0,
+      "contrast": 1.0,
+      "saturation": 1.0,
+      "temperature": 0.0
+    }
+  },
+  "expected": {
+    "durationInFrames": 160,
+    "clips": [
+      {
+        "clipId": "c1",
+        "startFrame": 0,
+        "durationInFrames": 34,
+        "sourceStartFrame": 0
+      },
+      {
+        "clipId": "c2",
+        "startFrame": 34,
+        "durationInFrames": 38,
+        "sourceStartFrame": 60
+      },
+      {
+        "clipId": "c4",
+        "startFrame": 72,
+        "durationInFrames": 0,
+        "sourceStartFrame": 180
+      },
+      {
+        "clipId": "c5",
+        "startFrame": 72,
+        "durationInFrames": 88,
+        "sourceStartFrame": 213
+      }
+    ]
+  }
+}

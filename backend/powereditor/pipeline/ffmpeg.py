@@ -19,7 +19,7 @@ class MissingToolError(RuntimeError):
 
 
 class FfmpegError(RuntimeError):
-    pass
+    code = "ffmpeg_failed"
 
 
 @dataclass(frozen=True)
@@ -93,6 +93,15 @@ def run_capture(args: Sequence[str]) -> str:
     )
     if result.returncode != 0:
         raise FfmpegError(f"{args[0]} exited with code {result.returncode}: {result.stderr[-500:]}")
+    return result.stdout
+
+
+def run_capture_bytes(args: Sequence[str]) -> bytes:
+    """Run a command and return its raw stdout (e.g. ffmpeg rawvideo on pipe:1)."""
+    result = subprocess.run(list(args), capture_output=True, check=False)
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace")[-500:]
+        raise FfmpegError(f"{args[0]} exited with code {result.returncode}: {stderr}")
     return result.stdout
 
 

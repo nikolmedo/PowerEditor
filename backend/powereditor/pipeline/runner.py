@@ -18,6 +18,16 @@ SMALL_FILE_BYTES = 1024 * 1024
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
+class StageOutputError(RuntimeError):
+    def __init__(self, stage: str, missing: Sequence[Path]) -> None:
+        names = ", ".join(path.name for path in missing) or "result validation"
+        super().__init__(f"stage {stage} did not produce valid outputs: {names}")
+        self.code = "stage_output_missing"
+
+
+type StageOutputs[T] = Sequence[Path] | Callable[[T], Sequence[Path]]
+
+
 class ProgressCallback(Protocol):
     def __call__(self, stage: str, fraction: float, message: str) -> None: ...
 
@@ -94,6 +104,11 @@ def _load_cached[T: BaseModel](path: Path, key: str, result_type: type[T]) -> T 
         return None
 
 
+def _invalid_outputs[T: BaseModel](result: T, outputs: StageOutputs[T]) -> list[Path]:
+    paths = outputs(result) if callable(outputs) else outputs
+    return [path for path in paths if not path.is_file() or path.stat().st_size == 0]
+
+
 def run_stage[T: BaseModel](
     layout: ProjectLayout,
     stage: str,
@@ -103,18 +118,32 @@ def run_stage[T: BaseModel](
     result_type: type[T],
     compute: Callable[[], T],
     *,
-    outputs: Sequence[Path] = (),
+    outputs: StageOutputs[T] = (),
+    validate: Callable[[T], bool] | None = None,
     progress: ProgressCallback = no_progress,
 ) -> T:
-    """Run `compute` unless a cached result exists for the same stage inputs."""
+    """Run `compute` unless a cached result exists for the same stage inputs.
+
+    The cache record is removed before computing and written only after every
+    declared output exists, is non-empty and passes `validate`, so a crash can
+    never leave a record that points at partial outputs.
+    """
     key = cache_key(stage, version, inputs, params)
     cache_path = layout.cache_file(stage)
     cached = _load_cached(cache_path, key, result_type)
-    if cached is not None and all(path.is_file() for path in outputs):
+    if (
+        cached is not None
+        and not _invalid_outputs(cached, outputs)
+        and (validate is None or validate(cached))
+    ):
         progress(stage, 1.0, "cached")
         return cached
+    cache_path.unlink(missing_ok=True)
     progress(stage, 0.0, "running")
     result = compute()
+    invalid = _invalid_outputs(result, outputs)
+    if invalid or (validate is not None and not validate(result)):
+        raise StageOutputError(stage, invalid)
     record = {
         "stage": stage,
         "version": version,
