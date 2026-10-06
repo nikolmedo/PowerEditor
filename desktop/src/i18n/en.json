@@ -9,5 +9,7 @@
   "menu.help": "Help",
   "error.stopped": "The editing engine stopped while PowerEditor was open (exit code {code}). Restart PowerEditor to keep working.",
   "action.restart": "Restart",
-  "action.quit": "Quit"
+  "action.quit": "Quit",
+  "update.installTitle": "The update could not be installed",
+  "update.installFailed": "The installer could not be started: {message}"
 }

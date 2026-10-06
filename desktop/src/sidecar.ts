@@ -60,6 +60,8 @@ export interface SidecarProcess extends EventEmitter {
   readonly stdout: Readable | null;
   readonly pid?: number | undefined;
   readonly exitCode: number | null;
+  /** The signal that ended the process; set instead of `exitCode` on POSIX. */
+  readonly signalCode?: NodeJS.Signals | null;
 }
 
 export type StartFailure = "timeout" | "exited" | "spawn";
@@ -183,10 +185,16 @@ export function killPlan(pid: number, platform: NodeJS.Platform): KillPlan {
   return { kind: "group", pid: -pid, signal: "SIGTERM" };
 }
 
+/** True while the process runs. Once it has ended its pid (and process group) may belong to
+ * another process, so nothing may be killed by that pid any more. */
+export function isAlive(child: SidecarProcess): boolean {
+  return child.pid !== undefined && child.exitCode === null && (child.signalCode ?? null) === null;
+}
+
 /** Kill the sidecar and everything it started (ffmpeg, the render Node and browser). */
 export function killTree(child: SidecarProcess): Promise<void> {
   return new Promise((resolve) => {
-    if (child.pid === undefined || child.exitCode !== null) {
+    if (!isAlive(child) || child.pid === undefined) {
       resolve();
       return;
     }

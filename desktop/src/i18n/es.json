@@ -9,5 +9,7 @@
   "menu.help": "Ayuda",
   "error.stopped": "El motor de edición se detuvo con PowerEditor abierto (código {code}). Reinicia PowerEditor para seguir trabajando.",
   "action.restart": "Reiniciar",
-  "action.quit": "Salir"
+  "action.quit": "Salir",
+  "update.installTitle": "No se pudo instalar la actualización",
+  "update.installFailed": "No se pudo iniciar el instalador: {message}"
 }

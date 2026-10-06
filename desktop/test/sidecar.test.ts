@@ -7,6 +7,7 @@ import {
   ReadyLineReader,
   SidecarStartError,
   awaitReady,
+  isAlive,
   killPlan,
   parseReadyLine,
   sidecarCommand,
@@ -165,5 +166,21 @@ describe("sidecarCommand", () => {
       args: ["run", "powereditor", ...args],
       cwd: path.join("C:/repo", "backend"),
     });
+  });
+});
+
+describe("isAlive", () => {
+  const proc = (state: {
+    pid?: number;
+    exitCode: number | null;
+    signalCode?: NodeJS.Signals | null;
+  }) => Object.assign(new EventEmitter(), { stdout: null, ...state });
+
+  it("is true only for a started process that has neither exited nor been killed", () => {
+    expect(isAlive(proc({ pid: 7, exitCode: null, signalCode: null }))).toBe(true);
+    expect(isAlive(proc({ pid: 7, exitCode: 0 }))).toBe(false);
+    // On POSIX a process killed by a signal keeps `exitCode` null; its pid may be reused.
+    expect(isAlive(proc({ pid: 7, exitCode: null, signalCode: "SIGTERM" }))).toBe(false);
+    expect(isAlive(proc({ exitCode: null }))).toBe(false);
   });
 });

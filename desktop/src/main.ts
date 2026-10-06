@@ -20,10 +20,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { aboutPanelOptions, APP_NAME, applicationMenuTemplate } from "./about";
 import { translator, type Translate } from "./messages";
+import { launchInstaller, restartApp } from "./lifecycle";
 import { isAllowedExternal, isAppUrl } from "./policy";
+import { releaseRequest } from "./releaseRequest";
 import {
   SidecarStartError,
   awaitReady,
+  isAlive,
   killTree,
   sidecarCommand,
   startSidecar,
@@ -67,6 +70,16 @@ function startMessage(t: Translate, error: SidecarStartError): string {
   return t("error.exited", { code: error.detail });
 }
 
+/** Stop the engine this instance started, if it still runs. */
+async function stopEngine(): Promise<void> {
+  const child = sidecar;
+  sidecar = null;
+  if (child && isAlive(child)) {
+    log("stopping the engine");
+    await killTree(child);
+  }
+}
+
 /** The engine stopped while the app was open: offer to restart the app or quit. */
 async function offerRestart(t: Translate, code: number | null): Promise<void> {
   const { response } = await dialog.showMessageBox({
@@ -79,8 +92,18 @@ async function offerRestart(t: Translate, code: number | null): Promise<void> {
     cancelId: 1,
     noLink: true,
   });
-  if (response === 0) app.relaunch();
-  app.quit();
+  quitting = true;
+  if (response !== 0) {
+    app.quit();
+    return;
+  }
+  log("restarting");
+  await restartApp({
+    stopEngine,
+    releaseLock: () => app.releaseSingleInstanceLock(),
+    relaunch: () => app.relaunch(),
+    quit: () => app.quit(),
+  });
 }
 
 /** Start the engine and resolve with its READY line; rejects on exit, error or timeout. */
@@ -142,12 +165,15 @@ function fromApp(event: IpcMainInvokeEvent): boolean {
 
 /** IPC for the web app's "Download" button: fetch and verify a release installer, then run
  * it and quit, so the per-user NSIS installer upgrades this installation in place. */
-function registerUpdater(): void {
+function registerUpdater(t: Translate): void {
+  const directory = path.join(app.getPath("temp"), "PowerEditor-update");
   const updates = new UpdateDownloader({
-    // Electron's fetch follows the system proxy settings, unlike Node's.
-    fetch: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
-    directory: path.join(app.getPath("temp"), "PowerEditor-update"),
-    onState: (state) => mainWindow?.webContents.send("updates:state", state),
+    request: releaseRequest((options) => net.request(options)),
+    directory,
+    onState: (state) => {
+      if (mainWindow && !mainWindow.isDestroyed())
+        mainWindow.webContents.send("updates:state", state);
+    },
   });
   ipcMain.handle("updates:download", (event, version: unknown) => {
     if (!fromApp(event) || typeof version !== "string") return null;
@@ -157,22 +183,23 @@ function registerUpdater(): void {
       return state;
     });
   });
-  ipcMain.handle("updates:installAndQuit", (event) => {
+  ipcMain.handle("updates:installAndQuit", async (event) => {
     const installer = updates.installerPath();
     if (!fromApp(event) || !installer) return false;
     log(`running installer ${installer}`);
-    return new Promise<boolean>((resolve) => {
-      const child = spawn(installer, [], { detached: true, stdio: "ignore" });
-      child.once("spawn", () => {
-        child.unref();
-        resolve(true);
-        app.quit();
-      });
-      child.once("error", (error) => {
-        log(`installer did not start: ${error.message}`);
-        resolve(false);
-      });
-    });
+    const launch = await launchInstaller(installer, directory, (file) =>
+      spawn(file, [], { detached: true, stdio: "ignore" }),
+    );
+    if (launch.started) {
+      app.quit();
+      return true;
+    }
+    log(`installer did not start (${launch.reason}): ${launch.detail}`);
+    dialog.showErrorBox(
+      t("update.installTitle"),
+      `${t("update.installFailed", { message: launch.detail })}\n\n${t("error.logHint", { path: logDir })}`,
+    );
+    return false;
   });
 }
 
@@ -220,7 +247,7 @@ async function start(): Promise<void> {
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
     callback(ALLOWED_PERMISSIONS.has(permission)),
   );
-  registerUpdater();
+  registerUpdater(t);
   app.on("web-contents-created", (_event, contents) => {
     contents.on("will-attach-webview", (event) => event.preventDefault());
   });
@@ -249,13 +276,10 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on("window-all-closed", () => app.quit());
   app.on("will-quit", (event) => {
-    const child = sidecar;
-    if (!child || child.exitCode !== null) return;
+    if (!sidecar || !isAlive(sidecar)) return;
     quitting = true;
     event.preventDefault();
-    sidecar = null;
-    log("stopping the engine");
-    void killTree(child).finally(() => app.quit());
+    void stopEngine().finally(() => app.quit());
   });
   void app.whenReady().then(start);
 }
