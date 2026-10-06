@@ -49,17 +49,17 @@ Talking-head videos (reels, tutorials, course lessons, YouTube) are cheap to rec
 
 ## Screenshots
 
-The app runs in your browser against the local PowerEditor server. The interface is in Spanish by default, with English one click away.
+The app runs in your browser against the local PowerEditor server. The interface speaks English and Spanish; the screenshots show it in English.
 
 **Review.** The timeline shows which source file is used when (one color per file), a badge on clips that have alternative takes, and the subtitle line. The preview player sits above it. Pick a clip to trim it by 0.1 s, change its speed or volume, remove or restore it, or switch to another take (the badge opens the take list; Alt-click cycles takes). Side panels set the transition of each cut or one for all cuts, the subtitle style and text, the audio (voice and music volume, a music file that ducks under speech, matched loudness between recordings) and the color (natural, warm, cool or black-and-white looks, four sliders, for every clip or one clip, and the automatic match between cameras). Every change is undoable (Ctrl+Z / Ctrl+Shift+Z) and saved automatically.
 
 ![Review step with timeline, take badge and source legend](docs/screenshots/review.jpg)
 
-**What comes out.** Frames from a real render of the demo project: karaoke subtitles follow each word, and the cut moves to the second camera on its own.
+**What comes out.** Frames from a real render of the demo project: karaoke subtitles follow each word, graphics animate in over the video (title, lower third, call to action, logo, progress bar), and the cut moves to the second camera on its own.
 
-| Source A, karaoke highlight                                                   | Source B after a cut                                                                |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| ![Rendered frame with karaoke subtitles](docs/screenshots/output-karaoke.jpg) | ![Rendered frame from the second source](docs/screenshots/output-second-source.jpg) |
+| Title and karaoke subtitles                                                               | Lower third                                                                   | Call to action on the second camera                                                |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| ![Rendered frame with a title and karaoke subtitles](docs/screenshots/output-karaoke.jpg) | ![Rendered frame with a lower third](docs/screenshots/output-lower-third.jpg) | ![Rendered frame with a call to action](docs/screenshots/output-second-source.jpg) |
 
 **Load.** Drop the recordings, pick Reel or YouTube format, optionally paste the script, and press Process.
 
