@@ -31,6 +31,7 @@ from powereditor.pipeline.vad import EnergyDetector, SileroDetector, SpeechDetec
 from powereditor.providers.config import FEATURE_IDS
 from powereditor.render import job as render_job
 from powereditor.render.node_runtime import NodeRuntimeError
+from powereditor.render.quality import RenderQuality
 from powereditor.render.remotion_render import RenderError
 from powereditor.settings_store import SettingsService
 from powereditor.transcribe.base import TranscriptionError
@@ -345,6 +346,9 @@ def render(
     output: Annotated[
         str, typer.Option(help="Export name under the project's exports/.")
     ] = "final",
+    quality: Annotated[
+        RenderQuality, typer.Option(help="draft (half size, fast), standard, or high.")
+    ] = "standard",
 ) -> None:
     """Render a project to MP4 with loudness normalization."""
     console = Console()
@@ -352,7 +356,9 @@ def render(
     try:
         layout = ProjectLayout.for_project(service.paths, project_id)
         with _progress_bar(console) as report:
-            result = render_job.render_project(layout, service, name=output, progress=report)
+            result = render_job.render_project(
+                layout, service, name=output, progress=report, quality=quality
+            )
     except (ValueError, *PIPELINE_ERRORS) as exc:
         raise _fail(console, exc) from exc
     console.print(f"Output: {result.output}", soft_wrap=True)
@@ -361,6 +367,7 @@ def render(
         f" (setup {result.timing.setup_s:.1f}s, render {result.timing.render_s:.1f}s):"
         f" {result.realtime_factor:.2f}x realtime"
     )
+    console.print(f"Quality {result.quality}, {result.concurrency} render tabs")
 
 
 @app.command("export-subtitles")

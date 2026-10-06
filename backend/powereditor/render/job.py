@@ -16,10 +16,12 @@ from powereditor.pipeline.ingest import probe_media
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress
 from powereditor.render.audio_mix import VoiceGraph, build_voice_filtergraph, render_voice
 from powereditor.render.base import Renderer, RenderSettings, RenderTiming
+from powereditor.render.concurrency import render_concurrency
 from powereditor.render.ducking import project_speech
 from powereditor.render.final_pass import finalize_export
 from powereditor.render.music_mix import render_mix
 from powereditor.render.node_runtime import resolve_render_node
+from powereditor.render.quality import QUALITY_PROFILES, RenderQuality
 from powereditor.render.remotion_render import RemotionRenderer
 from powereditor.settings_store import SettingsService
 from powereditor.timeline import timeline_layout
@@ -45,6 +47,8 @@ class RenderResult:
     video_seconds: float
     wall_s: float
     timing: RenderTiming
+    quality: RenderQuality = "standard"
+    concurrency: int | None = None
 
     @property
     def realtime_factor(self) -> float:
@@ -86,8 +90,9 @@ def render_project(
     renderer: Renderer | None = None,
     name: str = "final",
     progress: ProgressCallback = no_progress,
+    quality: RenderQuality = "standard",
 ) -> RenderResult:
-    """Render `layout`'s project to `exports/<name>.mp4`."""
+    """Render `layout`'s project to `exports/<name>.mp4` at `quality`."""
     if not _SAFE_NAME.fullmatch(name):
         raise ValueError(f"invalid export name: {name!r}")
     if not layout.project_file.is_file():
@@ -99,6 +104,7 @@ def render_project(
     video_seconds = frames / project.fps
     music = music_track(project, layout.media_dir)
     settings = service.get_effective()
+    concurrency = render_concurrency(frames, settings.render_max_concurrency)
     tools = MediaTools.from_settings(service)
     renderer = renderer or create_renderer(service)
     exports = layout.root / "exports"
@@ -139,6 +145,8 @@ def render_project(
             RenderSettings(
                 audio_crossfade_ms=settings.audio_crossfade_ms,
                 punch_in_scale=settings.punch_in_scale,
+                quality=quality,
+                concurrency=concurrency,
             ),
             lambda fraction: progress("render", fraction, "composition"),
         )
@@ -151,6 +159,7 @@ def render_project(
             settings.target_lufs,
             duration=video_seconds,
             on_progress=lambda fraction: progress("final-pass", fraction, "loudnorm"),
+            audio_bitrate=QUALITY_PROFILES[quality].audio_bitrate,
         )
         partial.replace(output)
     finally:
@@ -161,4 +170,6 @@ def render_project(
         video_seconds=video_seconds,
         wall_s=time.perf_counter() - started,
         timing=timing,
+        quality=quality,
+        concurrency=concurrency,
     )

@@ -29,6 +29,7 @@ from powereditor.jobs import (
 from powereditor.models import CamelModel, load_project, write_text_atomic
 from powereditor.pipeline.runner import ProgressCallback
 from powereditor.render.job import ProjectNotFoundError as RenderProjectNotFoundError
+from powereditor.render.quality import RenderQuality
 
 router = APIRouter(prefix="/api")
 
@@ -38,6 +39,7 @@ WS_JOB_NOT_FOUND = 4404
 
 class RenderRequest(CamelModel):
     export_name: str = Field(default="final", pattern=EXPORT_NAME_PATTERN, max_length=100)
+    quality: RenderQuality = "standard"
 
 
 class SubtitleExportRequest(CamelModel):
@@ -81,10 +83,10 @@ def start_render(
     layout = project_layout(store, project_id)
     if not layout.project_file.is_file():
         raise http_error(409, RenderProjectNotFoundError("the project is not analyzed yet"))
-    name = (body or RenderRequest()).export_name
+    request = body or RenderRequest()
 
     def work(progress: ProgressCallback) -> dict[str, object]:
-        return pipelines.render(layout, service, name, progress)
+        return pipelines.render(layout, service, request.export_name, progress, request.quality)
 
     return _submit(jobs, "render", project_id, project_id, work)
 

@@ -81,7 +81,13 @@ def loudnorm_filter(measurement: LoudnormMeasurement, target_lufs: float) -> str
     )
 
 
-def mux_args(video: Path, voice: Path, output: Path, audio_filter: str | None) -> list[str]:
+def mux_args(
+    video: Path,
+    voice: Path,
+    output: Path,
+    audio_filter: str | None,
+    audio_bitrate: str = AUDIO_BITRATE,
+) -> list[str]:
     """Copy the video of `video`, encode `voice` (optionally filtered) as AAC."""
     return [
         "-i", str(video), "-i", str(voice),
@@ -90,7 +96,7 @@ def mux_args(video: Path, voice: Path, output: Path, audio_filter: str | None) -
         *(["-af", audio_filter] if audio_filter else []),
         # loudnorm resamples to 192 kHz internally; bring it back to a delivery rate.
         "-ar", OUTPUT_SAMPLE_RATE,
-        "-c:a", "aac", "-b:a", AUDIO_BITRATE,
+        "-c:a", "aac", "-b:a", audio_bitrate,
         "-movflags", "+faststart",
         str(output),
     ]  # fmt: skip
@@ -104,6 +110,7 @@ def finalize_export(
     target_lufs: float,
     duration: float | None = None,
     on_progress: FractionCallback | None = None,
+    audio_bitrate: str = AUDIO_BITRATE,
 ) -> FinalPassResult:
     """Write `output`: `video`'s picture plus `voice` normalized to `target_lufs`."""
     measurement = parse_loudnorm_json(run_ffmpeg_stderr(ffmpeg, measure_args(voice, target_lufs)))
@@ -111,7 +118,7 @@ def finalize_export(
     audio_filter = loudnorm_filter(measurement, target_lufs) if normalized else None
     run_ffmpeg(
         ffmpeg,
-        mux_args(video, voice, output, audio_filter),
+        mux_args(video, voice, output, audio_filter, audio_bitrate),
         duration=duration,
         on_progress=on_progress,
     )

@@ -14,6 +14,7 @@ from powereditor.pipeline.analyze import analyze_project
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout
 from powereditor.projects import ProjectMeta, ProjectNotFoundError, ProjectStore
 from powereditor.render.job import render_project
+from powereditor.render.quality import RenderQuality
 from powereditor.settings_store import SettingsService
 from powereditor.transcribe.local_whisper import ensure_model, is_model_cached
 
@@ -21,7 +22,7 @@ type AnalyzeRunner = Callable[
     [ProjectLayout, SettingsService, ProjectMeta, ProgressCallback], dict[str, Any]
 ]
 type RenderRunner = Callable[
-    [ProjectLayout, SettingsService, str, ProgressCallback], dict[str, Any]
+    [ProjectLayout, SettingsService, str, ProgressCallback, RenderQuality], dict[str, Any]
 ]
 type Revealer = Callable[[Path], None]
 
@@ -60,13 +61,19 @@ def run_analyze(
 
 
 def run_render(
-    layout: ProjectLayout, service: SettingsService, name: str, progress: ProgressCallback
+    layout: ProjectLayout,
+    service: SettingsService,
+    name: str,
+    progress: ProgressCallback,
+    quality: RenderQuality = "standard",
 ) -> dict[str, Any]:
-    result = render_project(layout, service, name=name, progress=progress)
+    result = render_project(layout, service, name=name, progress=progress, quality=quality)
     return {
         "file": result.output.name,
         "videoSeconds": result.video_seconds,
         "wallSeconds": result.wall_s,
+        "quality": result.quality,
+        "concurrency": result.concurrency,
     }
 
 

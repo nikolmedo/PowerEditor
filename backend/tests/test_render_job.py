@@ -107,12 +107,27 @@ def test_render_project_writes_the_normalized_export_and_reports_speed(tmp_path:
     assert result.video_seconds == pytest.approx(160 / 30)
     assert result.realtime_factor == pytest.approx(result.video_seconds / result.wall_s)
     assert result.timing == RenderTiming(setup_s=0.5, render_s=1.0)
-    assert renderer.settings == RenderSettings(audio_crossfade_ms=15, punch_in_scale=1.1)
+    assert renderer.settings is not None
+    assert renderer.settings.quality == "standard"
+    assert 1 <= (renderer.settings.concurrency or 0) <= 8
     assert fractions[-1] == 1.0
     assert list(dict.fromkeys(stages)) == ["audio", "render", "final-pass"]
     video_s, audio_s = _durations(result.output)
     assert video_s == pytest.approx(160 / 30, abs=1 / 30)
     assert audio_s == pytest.approx(video_s, abs=1 / 30)
+
+
+def test_render_project_passes_the_quality_and_the_concurrency_override(tmp_path: Path) -> None:
+    layout = _project_layout(tmp_path)
+    service = SettingsService.default()
+    service.update({"renderMaxConcurrency": 3})
+    renderer = FakeRenderer()
+
+    result = render_project(layout, service, renderer=renderer, quality="draft")
+
+    assert renderer.settings is not None
+    assert (renderer.settings.quality, renderer.settings.concurrency) == ("draft", 3)
+    assert (result.quality, result.concurrency) == ("draft", 3)
 
 
 def _add_music(layout: ProjectLayout, file_name: str = "music.wav") -> None:

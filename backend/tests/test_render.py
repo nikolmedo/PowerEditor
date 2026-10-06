@@ -106,6 +106,8 @@ def test_mux_args_copy_remotion_video_and_encode_the_rebuilt_voice() -> None:
     assert args[args.index("-movflags") + 1] == "+faststart"
     assert args[-1] == "out.mp4"
     assert "-af" not in mux_args(Path("v.mp4"), Path("voice.wav"), Path("out.mp4"), None)
+    draft = mux_args(Path("v.mp4"), Path("voice.wav"), Path("out.mp4"), None, audio_bitrate="128k")
+    assert draft[draft.index("-b:a") + 1] == "128k"
 
 
 @pytest.mark.parametrize(
@@ -268,7 +270,7 @@ if mode == "ok":
     for fraction in (0.25, 0.5, 1.5):
         emit({"event": "progress", "fraction": fraction})
     with open(args[args.index("--output") + 1], "w", encoding="utf-8") as out:
-        json.dump(props, out)
+        json.dump({**props, "argv": args}, out)
     emit({"event": "done", "ms": 20, "frames": 3})
 elif mode == "error-event":
     emit({"event": "error", "message": "composition ProjectVideo crashed"})
@@ -311,6 +313,23 @@ def test_remotion_renderer_forwards_clamped_progress_and_passes_props(
     assert props["project"]["clips"][0]["id"] == "c1"
     assert sorted(p.name for p in output.parent.iterdir()) == ["video.mp4"]
     assert timing.setup_s >= 0 and timing.render_s >= 0
+
+
+def test_remotion_renderer_passes_quality_and_concurrency_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    renderer, project, media = _fake_renderer(tmp_path, monkeypatch, "ok")
+    output = tmp_path / "video.mp4"
+
+    renderer.render(project, media, output, RenderSettings(15, quality="draft", concurrency=3))
+    argv = json.loads(output.read_text(encoding="utf-8"))["argv"]
+    assert argv[argv.index("--concurrency") + 1] == "3"
+    assert argv[argv.index("--scale") + 1] == "0.5"
+    assert argv[argv.index("--x264-preset") + 1] == "veryfast"
+
+    renderer.render(project, media, output, RenderSettings(15))
+    argv = json.loads(output.read_text(encoding="utf-8"))["argv"]
+    assert "--scale" not in argv and "--concurrency" not in argv
 
 
 @pytest.mark.parametrize(

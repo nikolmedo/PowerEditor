@@ -1,5 +1,6 @@
 """SRT and ASS export of the timeline subtitles, and the export-subtitles command."""
 
+import pytest
 from typer.testing import CliRunner
 
 from powereditor import cli
@@ -84,3 +85,22 @@ def test_export_subtitles_command_reports_a_missing_project() -> None:
 
     assert result.exit_code == 1
     assert "project_not_found:" in result.output
+
+
+@pytest.mark.parametrize(
+    ("preset", "fallback"),
+    [
+        ("pill_karaoke", "karaoke_highlight"),
+        ("kinetic_slam", "bold_pop"),
+        ("emoji_pop", "clean"),
+        ("editorial_emphasis", "clean"),
+    ],
+)
+def test_ass_writes_animated_presets_as_their_closest_static_style(
+    preset: str, fallback: str
+) -> None:
+    project = rebuild_subtitles(_project())
+
+    assert write_ass(_styled(project, preset=preset)) == write_ass(
+        _styled(project, preset=fallback)
+    )
