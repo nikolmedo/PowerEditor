@@ -48,7 +48,33 @@ Talking-head videos (reels, tutorials, course lessons, YouTube) are cheap to rec
 
 ## Screenshots
 
-Screenshots of the app will be added soon.
+The app runs in your browser against the local PowerEditor server. The interface is in Spanish by default, with English one click away.
+
+**Review.** The timeline shows which source file is used when (one color per file), a badge on clips that have alternative takes, and the subtitle line. The preview player sits above it.
+
+![Review step with timeline, take badge and source legend](docs/screenshots/review.jpg)
+
+**What comes out.** Frames from a real render of the demo project: karaoke subtitles follow each word, and the cut moves to the second camera on its own.
+
+| Source A, karaoke highlight                                                   | Source B after a cut                                                                |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| ![Rendered frame with karaoke subtitles](docs/screenshots/output-karaoke.jpg) | ![Rendered frame from the second source](docs/screenshots/output-second-source.jpg) |
+
+**Load.** Drop the recordings, pick Reel or YouTube format, optionally paste the script, and press Process.
+
+![Load step](docs/screenshots/load.jpg)
+
+**Choose the model for each decision.** Register providers with an API key or a local subscription client, then pick which model answers each AI feature. Anything left on "built-in rules" never leaves your PC.
+
+| AI providers                                        | AI features                                       |
+| --------------------------------------------------- | ------------------------------------------------- |
+| ![Providers screen](docs/screenshots/providers.jpg) | ![Features screen](docs/screenshots/features.jpg) |
+
+**First run.** A checklist tells you what is missing and downloads the Whisper model for you.
+
+![Setup checklist](docs/screenshots/setup.jpg)
+
+_The screenshots use synthetic test footage (color bars) generated for the demo._
 
 ## Requirements
 
