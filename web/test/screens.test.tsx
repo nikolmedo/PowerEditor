@@ -55,6 +55,7 @@ const SETUP: SetupStatus = {
   transcriberReady: false,
   ready: false,
   whisperDownloadJobId: null,
+  runtimes: [],
 };
 
 describe("SetupScreen", () => {

@@ -3,6 +3,8 @@ import { api } from "./api/endpoints";
 import { LANGUAGES, useT, type Language } from "./i18n";
 import { parseRoute, type Route } from "./routes";
 import { FeaturesScreen } from "./settings/FeaturesScreen";
+import { needsOnboarding, onboardingSkipped } from "./settings/onboarding";
+import { OnboardingScreen } from "./settings/OnboardingScreen";
 import { ProvidersScreen } from "./settings/ProvidersScreen";
 import { SettingsScreen } from "./settings/SettingsScreen";
 import { SetupScreen } from "./settings/SetupScreen";
@@ -36,6 +38,8 @@ function screenFor(route: Route): ReactNode {
       return <ExportStep key={route.projectId} projectId={route.projectId} />;
     case "setup":
       return <SetupScreen />;
+    case "welcome":
+      return <OnboardingScreen />;
     case "settings":
       return <SettingsScreen />;
     case "providers":
@@ -48,7 +52,7 @@ function screenFor(route: Route): ReactNode {
 }
 
 export function App() {
-  const { path, theme, language, setLanguage, syncPath } = useAppStore();
+  const { path, theme, language, setLanguage, syncPath, navigate } = useAppStore();
   const route = parseRoute(path);
 
   useEffect(() => {
@@ -65,6 +69,18 @@ export function App() {
       })
       .catch(() => undefined); // Screens report an unreachable server themselves.
   }, [setLanguage]);
+
+  // First run: open the guided setup while the runtimes are missing (once per app start).
+  useEffect(() => {
+    api
+      .setup()
+      .then((status) => {
+        const here = window.location.pathname;
+        if (here !== "/welcome" && needsOnboarding(status, onboardingSkipped()))
+          navigate("/welcome");
+      })
+      .catch(() => undefined);
+  }, [navigate]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;

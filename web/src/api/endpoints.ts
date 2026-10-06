@@ -61,6 +61,8 @@ async function saveProject(
 export const api = {
   setup: () => request<SetupStatus>("GET", "/api/setup"),
   downloadWhisperModel: () => request<JobInfo>("POST", "/api/setup/whisper-model"),
+  installRuntime: (name: string) =>
+    request<JobInfo>("POST", `/api/setup/runtime/${encodeURIComponent(name)}`),
 
   settings: () => request<SettingsResponse>("GET", "/api/settings"),
   updateSettings: (changes: Partial<UserSettings>) =>
