@@ -8,10 +8,13 @@ Usage (from the repo root, any Python 3.12+):
 
 `set` writes the version into each file below; `check` fails when one of them (or the
 release tag, with `--tag`) disagrees with `VERSION`. Only the version field is touched, so
-formatting and line endings stay as they were. `pnpm-lock.yaml` stores no workspace versions.
+formatting and line endings stay as they were. `set` reads and checks every file before it
+writes any, writes each through a temporary file, and puts back the files it already replaced
+when a write fails, so a failure never leaves mixed versions. `pnpm-lock.yaml` stores no workspace versions.
 """
 
 import argparse
+import os
 import re
 import sys
 from collections.abc import Sequence
@@ -69,18 +72,46 @@ def mismatches(repo: Path = REPO) -> list[str]:
 
 def set_version(repo: Path, version: str) -> None:
     validate(version)
-    updates: dict[Path, str] = {}
+    originals: dict[Path, bytes] = {}
+    updates: dict[Path, bytes] = {}
     for relative, pattern in SPOTS.items():
-        text = _read(repo / relative)
+        path = repo / relative
+        originals[path] = path.read_bytes()
+        text = originals[path].decode("utf-8")  # bytes keep CRLF line endings intact
         match = pattern.search(text)
         if match is None:
             raise ValueError(f"{relative}: no version found")
-        updates[repo / relative] = (
+        updates[path] = (
             text[: match.start("version")] + version + text[match.end("version") :]
-        )
-    for path, text in updates.items():
-        path.write_bytes(text.encode("utf-8"))
-    (repo / VERSION_FILE).write_bytes(f"{version}\n".encode())
+        ).encode("utf-8")
+    version_file = repo / VERSION_FILE
+    originals[version_file] = version_file.read_bytes()
+    updates[version_file] = f"{version}\n".encode()
+    _write_all(updates, originals)
+
+
+def _temporary(path: Path) -> Path:
+    return path.with_name(f".{path.name}.version-tmp")
+
+
+def _write_all(updates: dict[Path, bytes], originals: dict[Path, bytes]) -> None:
+    """Write every file or none: stage all temporaries, then swap them in one by one; on a
+    failure put back the files already swapped and remove what is left over."""
+    replaced: list[Path] = []
+    try:
+        for path, data in updates.items():
+            _temporary(path).write_bytes(data)
+        for path in updates:
+            os.replace(_temporary(path), path)
+            replaced.append(path)
+    except OSError:
+        for path in replaced:
+            _temporary(path).write_bytes(originals[path])
+            os.replace(_temporary(path), path)
+        raise
+    finally:
+        for path in updates:
+            _temporary(path).unlink(missing_ok=True)
 
 
 def main(argv: Sequence[str] | None = None, repo: Path = REPO) -> int:

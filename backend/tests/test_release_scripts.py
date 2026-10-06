@@ -1,7 +1,10 @@
 import hashlib
 import importlib.util
+import subprocess
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 from powereditor.config import REPO_ROOT
 
@@ -53,6 +56,41 @@ def test_notes_without_a_previous_tag_or_matching_commits() -> None:
         "No feature, fix or documentation changes.\n\n"
         "First release. Check the installer against `SHA256SUMS.txt`.\n"
     )
+
+
+def test_the_newest_version_tag_compares_versions_not_text() -> None:
+    tags = ["v0.9.0", "v0.10.0", "v0.2.1", "nightly", "v1.0.0-rc.1"]
+
+    assert release_notes.newest_version_tag(tags) == "v0.10.0"
+    assert release_notes.newest_version_tag(["nightly"]) is None
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+
+@pytest.fixture
+def tagged_repo(tmp_path: Path) -> Path:
+    """v0.9.0 → v0.10.0 → a stray `nightly` tag → HEAD (the release being built)."""
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "test@example.com")
+    _git(tmp_path, "config", "user.name", "Test")
+    for message, tags in [
+        ("feat: first", ["v0.9.0"]),
+        ("feat: second", ["v0.10.0"]),
+        ("chore: nightly build", ["nightly"]),
+        ("fix: third", ["v0.11.0"]),
+    ]:
+        _git(tmp_path, "commit", "-q", "--allow-empty", "-m", message)
+        for tag in tags:
+            _git(tmp_path, "tag", tag)
+    return tmp_path
+
+
+def test_the_previous_tag_is_the_newest_earlier_version(tagged_repo: Path) -> None:
+    assert release_notes.previous_tag("v0.11.0", repo=tagged_repo) == "v0.10.0"
+    assert release_notes.previous_tag("v0.10.0", repo=tagged_repo) == "v0.9.0"
+    assert release_notes.previous_tag("v0.9.0", repo=tagged_repo) is None
 
 
 def test_notes_read_the_git_log_of_this_repository() -> None:

@@ -95,11 +95,21 @@ jobs:
           python scripts/checksums.py --output dist/release/SHA256SUMS.txt dist/release/PowerEditor-Setup-* dist/release/LICENSE dist/release/THIRD_PARTY_NOTICES.md
           python scripts/release_notes.py --until "$TAG" --version "$version" --output dist/release-notes.md
 
-      - name: Create the draft release
+      # Safe to re-run: a draft left by a failed run gets its files replaced (`--clobber`) and
+      # its notes updated instead of a second release; a published release is never touched.
+      - name: Create or update the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$TAG" --draft --verify-tag \
-            --title "PowerEditor ${TAG#v}" \
-            --notes-file dist/release-notes.md \
-            dist/release/*
+          title="PowerEditor ${TAG#v}"
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != "true" ]; then
+              echo "::error::Release $TAG is already published; refusing to change it."
+              exit 1
+            fi
+            gh release upload "$TAG" dist/release/* --clobber
+            gh release edit "$TAG" --draft --title "$title" --notes-file dist/release-notes.md
+          else
+            gh release create "$TAG" --draft --verify-tag --title "$title" \
+              --notes-file dist/release-notes.md dist/release/*
+          fi

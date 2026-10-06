@@ -88,6 +88,42 @@ def test_set_refuses_a_version_that_is_not_plain_semver(repo: Path, bad: str) ->
     assert version.read_version(repo) == "1.2.3"
 
 
+def test_a_failed_write_leaves_every_file_as_it_was(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = {name: (repo / name).read_bytes() for name in FILES}
+    real_replace = version.os.replace
+    calls = 0
+
+    def replace_then_fail(source: str, target: str) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise OSError("disk full")
+        real_replace(source, target)
+
+    monkeypatch.setattr(version.os, "replace", replace_then_fail)
+
+    with pytest.raises(OSError, match="disk full"):
+        version.set_version(repo, "2.0.0")
+
+    monkeypatch.undo()
+    assert {name: (repo / name).read_bytes() for name in FILES} == before
+    left = sorted(str(path.relative_to(repo)) for path in repo.rglob("*") if path.is_file())
+    assert left == sorted(str(Path(name)) for name in FILES)
+
+
+def test_set_writes_nothing_when_one_file_has_no_version(repo: Path) -> None:
+    before = {name: (repo / name).read_bytes() for name in FILES}
+    (repo / "desktop" / "package.json").write_bytes(b"{}\n")
+    before["desktop/package.json"] = b"{}\n"
+
+    with pytest.raises(ValueError, match=r"desktop/package.json: no version found"):
+        version.set_version(repo, "2.0.0")
+
+    assert {name: (repo / name).read_bytes() for name in FILES} == before
+
+
 def test_check_command_compares_the_release_tag(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

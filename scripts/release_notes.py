@@ -4,8 +4,8 @@ Usage (from the repo root, any Python 3.12+):
 
     python scripts/release_notes.py [--since <ref>] [--until <ref>] [--output notes.md]
 
-`--since` defaults to the newest tag before `--until` (default `HEAD`), or the whole history
-when there is none. Commits are grouped into Features (`feat`), Fixes (`fix`) and Docs
+`--since` defaults to the highest version tag (`vX.Y.Z`, compared as numbers) reachable from
+the parent of `--until` (default `HEAD`), or the whole history when there is none. Commits are grouped into Features (`feat`), Fixes (`fix`) and Docs
 (`docs`); other types (chore, test, refactor, ...) are left out.
 """
 
@@ -18,21 +18,35 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 GROUPS = {"feat": "Features", "fix": "Fixes", "docs": "Docs"}
+VERSION_TAG = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
 SUBJECT = re.compile(r"(?P<type>\w+)(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?: (?P<text>.+)")
 
 
-def git(*args: str) -> str:
+def git(*args: str, repo: Path = REPO) -> str:
     result = subprocess.run(
-        ["git", *args], cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=True
+        ["git", *args], cwd=repo, capture_output=True, text=True, encoding="utf-8", check=True
     )
     return result.stdout.strip()
 
 
-def previous_tag(until: str) -> str | None:
+def newest_version_tag(tags: Sequence[str]) -> str | None:
+    """The highest `vX.Y.Z` tag by version number (v0.10.0 after v0.9.0); others are ignored."""
+    versions: dict[str, tuple[int, ...]] = {}
+    for tag in tags:
+        match = VERSION_TAG.fullmatch(tag.strip())
+        if match is not None:
+            versions[tag.strip()] = tuple(int(part) for part in match.groups())
+    return max(versions, key=versions.__getitem__, default=None)
+
+
+def previous_tag(until: str, repo: Path = REPO) -> str | None:
+    """The newest release before `until`. Not `git describe`, which takes the nearest tag of
+    any name, and picks by name when several tags share a commit."""
     try:
-        return git("describe", "--tags", "--abbrev=0", f"{until}^") or None
+        tags = git("tag", "--list", "v*", "--merged", f"{until}^", repo=repo)
     except subprocess.CalledProcessError:
-        return None  # no earlier tag, or `until` is the first commit
+        return None  # `until` is the first commit
+    return newest_version_tag(tags.splitlines())
 
 
 def commit_subjects(since: str | None, until: str) -> list[str]:
