@@ -6,7 +6,8 @@ from pathlib import Path
 
 from powereditor.decide.base import DecisionEngine
 from powereditor.decide.factory import create_engine
-from powereditor.models import Project, ProjectPreset, Transcript
+from powereditor.decide.model_engine import ModelUsageReport
+from powereditor.models import Project, ProjectPreset, Transcript, write_text_atomic
 from powereditor.pipeline.clustering import create_similarity
 from powereditor.pipeline.color_stats import measure_color
 from powereditor.pipeline.draft_builder import DraftSource, build_draft, write_draft
@@ -36,6 +37,28 @@ class AnalyzeResult:
     original_seconds: float
     kept_seconds: float
     takes: TakeSelection
+    model_usage: ModelUsageReport | None = None
+    """Model calls made by this run; None when the takes came from the cache or no
+    feature uses a model."""
+
+
+MODEL_USAGE_FILE = "model_usage.json"
+
+
+def record_model_usage(layout: ProjectLayout, engine: DecisionEngine) -> ModelUsageReport | None:
+    """Write `cache/model_usage.json` when this run called a model; a cache hit keeps the
+    previous report."""
+    usage_report = getattr(engine, "usage_report", None)
+    if usage_report is None:
+        return None
+    report: ModelUsageReport = usage_report()
+    if not report.calls:
+        return None
+    write_text_atomic(
+        layout.cache_dir / MODEL_USAGE_FILE,
+        report.model_dump_json(by_alias=True, indent=2) + "\n",
+    )
+    return report
 
 
 def _select_sources(
@@ -166,9 +189,9 @@ def analyze_project(
         )
         for entry in entries
     ]
-    takes = _select_takes(
-        layout, drafts, settings, engine or create_engine(settings), script, progress
-    )
+    engine = engine or create_engine(service)
+    takes = _select_takes(layout, drafts, settings, engine, script, progress)
+    model_usage = record_model_usage(layout, engine)
     progress("draft", 0.0, "building")
     project = build_draft(
         drafts,
@@ -185,4 +208,5 @@ def analyze_project(
         original_seconds=sum(entry.probe.duration for entry in entries),
         kept_seconds=kept,
         takes=takes,
+        model_usage=model_usage,
     )

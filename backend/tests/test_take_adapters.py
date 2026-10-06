@@ -4,12 +4,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from powereditor.config import Settings
 from powereditor.decide.factory import create_engine
 from powereditor.models import Take
+from powereditor.paths import AppPaths
 from powereditor.pipeline import visual
 from powereditor.pipeline.clustering import TextSimilarity, create_similarity
 from powereditor.pipeline.visual import NullVisualExtractor, create_visual_extractor
-from powereditor.settings_store import TakeWeights, UserSettings
+from powereditor.settings_store import InMemorySecretStore, SettingsService, TakeWeights
 
 
 def test_text_similarity_is_the_default() -> None:
@@ -36,10 +38,16 @@ def test_visual_features_are_skipped_without_opencv(monkeypatch: pytest.MonkeyPa
     )
 
 
-def test_engine_factory_falls_back_to_heuristic_with_user_weights() -> None:
-    settings = UserSettings(decision_engine="jev", take_weights=TakeWeights(last_take=0.0))
+def test_engine_factory_falls_back_to_heuristic_with_user_weights(tmp_path: Path) -> None:
+    service = SettingsService(
+        paths=AppPaths(data_dir=tmp_path),
+        secrets=InMemorySecretStore(),
+        env=Settings(_env_file=None),
+        cuda_available=lambda: False,
+    )
+    service.update({"decisionEngine": "jev", "takeWeights": TakeWeights(last_take=0.0)})
 
-    engine = create_engine(settings)
+    engine = create_engine(service)
 
     assert engine.name == "heuristic"
     assert engine.fingerprint()["weights"]["lastTake"] == 0.0

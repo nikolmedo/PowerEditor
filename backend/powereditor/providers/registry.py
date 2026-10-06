@@ -13,11 +13,13 @@ from powereditor.providers.api.openai import create_openai
 from powereditor.providers.base import (
     ModelProvider,
     ProviderContext,
+    ProviderError,
     ProviderFactory,
     ProviderKind,
     Transport,
 )
-from powereditor.providers.config import ProviderConfig
+from powereditor.providers.config import ProviderConfig, base_url_problem
+from powereditor.providers.jev import create_jev
 from powereditor.providers.local_cli.claude import ClaudeCliProvider
 from powereditor.providers.local_cli.codex import CodexCliProvider
 from powereditor.providers.local_cli.gemini import GeminiCliProvider
@@ -67,6 +69,8 @@ class ProviderRegistry:
         factory = self._factories.get((config.kind, config.transport))
         if factory is None:
             raise KeyError(f"no provider registered for {config.kind!r} over {config.transport!r}")
+        if config.transport == "api" and (problem := base_url_problem(config)):
+            raise ProviderError("provider_unavailable", problem)
         return factory(config, context)
 
 
@@ -79,4 +83,5 @@ def default_registry() -> ProviderRegistry:
     registry.register("anthropic", "api", create_anthropic, label="Anthropic Claude")
     registry.register("anthropic", "local_cli", ClaudeCliProvider.from_config)
     registry.register("deepseek", "api", create_deepseek, label="DeepSeek")
+    registry.register("typesafe", "api", create_jev, label="TypeSafe Jev")
     return registry

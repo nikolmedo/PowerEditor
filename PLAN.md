@@ -126,10 +126,13 @@ PowerEditor/
         factory.py
         local_whisper.py     # faster-whisper
         openai_whisper.py    # whisper-1, verbose_json, word granularity
-      decide/                # planned (Phases 3-4)
+      decide/
         base.py              # DecisionEngine protocol
         heuristic.py
-      providers/             # planned (Phase 4): ModelProvider registry and adapters
+        prompts.py           # feature prompts as typed questions
+        model_engine.py      # per-feature model routing with heuristic fallback
+        factory.py
+      providers/             # ModelProvider registry, API/CLI adapters, questions, Jev
       render/
         base.py
         job.py               # voice rebuild → video render → final pass → export
@@ -181,10 +184,10 @@ WHISPER_DEVICE=auto          # auto | cuda | cpu
 WHISPER_LANGUAGE=es
 OPENAI_API_KEY=              # dev only; users store keys in the OS keyring
 
-DECISION_ENGINE=heuristic    # heuristic | jev (replaced by per-feature selection in Phase 4)
-TYPESAFE_API_KEY=
+DECISION_ENGINE=heuristic    # legacy, ignored: features are routed per model (Phase 4)
+TYPESAFE_API_KEY=            # legacy fallback key for a `typesafe` provider without its own key
 JEV_MODEL=jev-1.13
-JEV_MIN_CONFIDENCE=0.8
+JEV_MIN_CONFIDENCE=0.8       # legacy name of MODEL_MIN_CONFIDENCE (setting `modelMinConfidence`)
 
 SILENCE_PADDING_MS=120
 AUDIO_CROSSFADE_MS=15
@@ -291,7 +294,7 @@ These started as Jev rules (documented limits of jev-1.13) and now apply to ever
 
 ### Confidence gating
 
-- Apply automatically when confidence ≥ the feature's minimum (`JEV_MIN_CONFIDENCE` today) **and** both Choice orders agree.
+- Apply automatically when confidence ≥ `modelMinConfidence` (default 0.8; formerly `jevMinConfidence`) **and** both Choice orders agree.
 - Otherwise apply the best heuristic and set a low `decisionConfidence` → highlighted in the UI for review.
 - Final take score = weights in code × (deterministic features + model scores). Weights live in config, never in prompts.
 
@@ -470,7 +473,7 @@ interface ColorGrade {
 
 ### Phase 4: AI providers and per-feature model selection
 
-**Status:** 4a (provider registry) done: `backend/powereditor/providers/` with API adapters (OpenAI, Gemini, Anthropic, DeepSeek over plain `httpx`) and local CLI adapters (Codex, Gemini CLI, Claude Code), per-provider keys in the secret store, `providers` and `featureModels` settings, and `/api/providers*` + `/api/features/models` routes. 4b (Jev adapter, LLM decision engine wired to features, confidence gating, benchmark per provider) is pending.
+**Status:** 4a (provider registry) done: `backend/powereditor/providers/` with API adapters (OpenAI, Gemini, Anthropic, DeepSeek over plain `httpx`) and local CLI adapters (Codex, Gemini CLI, Claude Code), per-provider keys in the secret store, `providers` and `featureModels` settings, and `/api/providers*` + `/api/features/models` routes. 4b done: feature prompts as typed questions (`decide/prompts.py`), `ModelDecisionEngine` routing each feature to its model with the heuristic as fallback, confidence gating with `modelMinConfidence`, double-order best-take Choice, model scores weighted in code, per-feature call and token counts in `cache/model_usage.json`, the Jev adapter (`typesafe` kind, System One HTTP API), and the `providers list` / `features` CLI commands. Pending: the benchmark per provider (needs real, opt-in model calls and hand-labelled footage) and cost in money (only tokens are tracked).
 
 Users bring their own models. Some subscriptions cannot be used through an API, so a provider can be reached in two ways: an **API key**, or a **local subscription client** (a CLI app already logged in on the machine).
 
@@ -512,7 +515,7 @@ The deterministic heuristic engine stays the default and the always-available fa
 
 - Terms of use of each local CLI client when driven by another app.
 - Stability of each CLI's output format and flags across versions; pin and detect versions.
-- Which providers expose a model list endpoint.
+- Which providers expose a model list endpoint (Jev: `GET /v1/models` exists but its body is undocumented; the adapter falls back to `jev-latest` and `jev-1.13.0`).
 
 ### Phase 5: Subtitles and transitions
 

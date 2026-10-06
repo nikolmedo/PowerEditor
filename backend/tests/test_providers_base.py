@@ -70,8 +70,10 @@ def test_default_registry_lists_builtin_kinds_and_transports() -> None:
     assert registry.available_transports("gemini") == ["api", "local_cli"]
     assert registry.available_transports("anthropic") == ["api", "local_cli"]
     assert registry.available_transports("deepseek") == ["api"]
+    assert registry.available_transports("typesafe") == ["api"]
     assert registry.available_transports("unknown") == []
-    assert [info.kind for info in registry.kinds()] == ["anthropic", "deepseek", "gemini", "openai"]
+    kinds = [info.kind for info in registry.kinds()]
+    assert kinds == ["anthropic", "deepseek", "gemini", "openai", "typesafe"]
 
 
 def test_registry_accepts_new_kinds_without_touching_builtins() -> None:
