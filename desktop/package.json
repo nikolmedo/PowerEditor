@@ -47,6 +47,10 @@
       {
         "from": "../THIRD_PARTY_NOTICES.md",
         "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "licenses/GPL-2.0.txt",
+        "to": "licenses/GPL-2.0.txt"
       }
     ],
     "npmRebuild": false,
