@@ -11,6 +11,7 @@ from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedCo
 from rich.table import Table
 
 from powereditor import doctor as doctor_module
+from powereditor.decide.model_engine import ModelUsageReport
 from powereditor.eval.takes_eval import DEFAULT_BENCHMARK, evaluate_takes, load_benchmark
 from powereditor.models import ProjectPreset
 from powereditor.pipeline.analyze import analyze_project
@@ -19,6 +20,7 @@ from powereditor.pipeline.ingest import ingest_files, load_manifest
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, StageOutputError
 from powereditor.pipeline.transcription import transcribe_project
 from powereditor.pipeline.vad import EnergyDetector, SileroDetector, SpeechDetector
+from powereditor.providers.config import FEATURE_IDS
 from powereditor.render import job as render_job
 from powereditor.render.node_runtime import NodeRuntimeError
 from powereditor.render.remotion_render import RenderError
@@ -206,6 +208,70 @@ def analyze(
         f" of {result.original_seconds:.1f}s"
     )
     console.print(f"Project file: {result.project_path}", soft_wrap=True)
+    if result.model_usage is not None:
+        _print_model_usage(console, result.model_usage)
+
+
+def _print_model_usage(console: Console, report: ModelUsageReport) -> None:
+    table = Table("Feature", "Model", "Calls", "Failed", "Heuristic used", "Tokens in/out")
+    for feature, usage in report.features.items():
+        table.add_row(
+            feature,
+            f"{usage.provider_id}/{usage.model}",
+            str(usage.calls),
+            str(usage.failures),
+            str(usage.fallbacks),
+            f"{usage.input_tokens}/{usage.output_tokens}",
+        )
+    console.print(table)
+
+
+providers_app = typer.Typer(no_args_is_help=True, help="Registered model providers.")
+app.add_typer(providers_app, name="providers")
+
+
+@providers_app.command("list")
+def list_providers() -> None:
+    """List registered providers and whether their credentials are set."""
+    service = SettingsService.default()
+    console = Console()
+    configs = service.get_effective().providers
+    if not configs:
+        console.print("No providers registered; every feature uses the heuristic engine.")
+        return
+    table = Table("Id", "Kind", "Transport", "Label", "Credentials", "Enabled models")
+    for config in configs:
+        if config.transport == "local_cli":
+            credentials = "local client sign-in"
+        else:
+            credentials = "set" if service.provider_api_key(config.id) else "missing"
+        table.add_row(
+            config.id,
+            config.kind,
+            config.transport,
+            config.label,
+            credentials,
+            ", ".join(config.enabled_models) or "-",
+        )
+    console.print(table)
+
+
+@app.command()
+def features() -> None:
+    """Show which model answers each AI feature (heuristic when none)."""
+    service = SettingsService.default()
+    console = Console()
+    settings = service.get_effective()
+    table = Table("Feature", "Provider", "Model")
+    for feature in FEATURE_IDS:
+        assigned = service.feature_model(feature)
+        if assigned is None:
+            table.add_row(feature, "heuristic", "-")
+        else:
+            config, model = assigned
+            table.add_row(feature, config.id, model)
+    console.print(table)
+    console.print(f"Minimum model confidence: {settings.model_min_confidence:.2f}")
 
 
 @app.command("eval-takes")

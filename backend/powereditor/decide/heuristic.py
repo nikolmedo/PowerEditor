@@ -57,6 +57,7 @@ def take_score(features: TakeFeatures, weights: TakeWeights) -> float:
         (weights.word_prob, features.mean_word_prob),
         (weights.face_centered, features.face_centered),
         (weights.sharpness, features.sharpness),
+        (weights.fluency, features.fluency),
     )
     score += sum(weight * value for weight, value in optional if value is not None)
     return score

@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     typesafe_api_key: SecretStr | None = None
     jev_model: str | None = None
     jev_min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    """Legacy name of `model_min_confidence`; the new name wins when both are set."""
+    model_min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
     silence_padding_ms: int | None = Field(default=None, ge=0)
     audio_crossfade_ms: int | None = Field(default=None, ge=0)

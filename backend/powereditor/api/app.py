@@ -7,9 +7,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from powereditor import doctor, settings_store
+from powereditor.api.routes_providers import router as providers_router
 from powereditor.api.routes_settings import get_service
 from powereditor.api.routes_settings import router as settings_router
 from powereditor.paths import AppPaths
+from powereditor.providers.registry import ProviderRegistry, default_registry
 from powereditor.settings_store import SettingsService
 
 
@@ -27,6 +29,8 @@ def create_app(
     paths: AppPaths | None = None,
     openai_transport: httpx.BaseTransport | None = None,
     doctor_runner: doctor.Runner | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    provider_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     if settings_service is None:
         settings_service = SettingsService(
@@ -38,6 +42,8 @@ def create_app(
     app.state.settings_service = settings_service
     app.state.openai_transport = openai_transport
     app.state.doctor_runner = doctor_runner
+    app.state.provider_registry = provider_registry or default_registry()
+    app.state.provider_transport = provider_transport
     app.add_exception_handler(RequestValidationError, _validation_error_without_input)
 
     @app.get("/api/health")
@@ -51,4 +57,5 @@ def create_app(
         return doctor.run_checks(runner=runner, locate=service.locate_executable)
 
     app.include_router(settings_router)
+    app.include_router(providers_router)
     return app
