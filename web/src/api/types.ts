@@ -104,12 +104,11 @@ export interface ModelInfo {
 export type FeatureModels = Record<FeatureId, ModelRef | null>;
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export type JobKind = "analyze" | "render" | "export_subtitles" | "whisper_model";
 
-export interface JobInfo {
-  id: string;
-  status: JobStatus;
-  stage: string | null;
-  fraction: number;
+export interface JobError {
+  code: string;
+  message: string;
 }
 
 export interface JobEvent {
@@ -118,7 +117,28 @@ export interface JobEvent {
   stage: string | null;
   fraction: number;
   message: string;
-  error: { code: string; message: string } | null;
+  error: JobError | null;
+  result: Record<string, unknown> | null;
+}
+
+export interface JobInfo {
+  id: string;
+  kind: JobKind;
+  status: JobStatus;
+  stage: string | null;
+  fraction: number;
+  message: string;
+  error: JobError | null;
+  result: Record<string, unknown> | null;
+}
+
+export type ProjectPreset = "reel_9x16" | "landscape_16x9";
+
+export interface ProjectOptions {
+  name?: string;
+  preset?: ProjectPreset;
+  language?: string;
+  script?: string;
 }
 
 export interface ProjectListItem {
@@ -129,4 +149,15 @@ export interface ProjectListItem {
   durationSeconds: number | null;
   thumbnailUrl: string | null;
   activeJobId: string | null;
+  activeJobKind: JobKind | null;
+  lastError: JobError | null;
 }
+
+export interface ExportFile {
+  name: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  url: string;
+}
+
+export type SubtitleFormat = "srt" | "ass";

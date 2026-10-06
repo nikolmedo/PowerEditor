@@ -22,6 +22,7 @@ vi.mock("../src/api/endpoints", () => ({
       "providerKinds",
       "providers",
       "createProvider",
+      "updateProvider",
       "storeProviderKey",
       "featureModels",
       "saveFeatureModels",
@@ -61,9 +62,13 @@ describe("SetupScreen", () => {
     vi.mocked(api.setup).mockResolvedValue(SETUP);
     vi.mocked(api.downloadWhisperModel).mockResolvedValue({
       id: "job-1",
+      kind: "whisper_model",
       status: "queued",
       stage: null,
       fraction: 0,
+      message: "",
+      error: null,
+      result: null,
     });
     vi.mocked(watchJob).mockImplementation((_id, onEvent) => {
       onEvent({
@@ -73,6 +78,7 @@ describe("SetupScreen", () => {
         fraction: 0.4,
         message: "",
         error: null,
+        result: null,
       });
       return () => undefined;
     });
@@ -245,5 +251,84 @@ describe("FeaturesScreen", () => {
       best_take_choice: { providerId: "openai-api", model: "gpt-a" },
     });
     expect(await screen.findByText(t("common.saved"))).toBeTruthy();
+  });
+});
+
+describe("settings follow-ups", () => {
+  it("retries only the API key when the provider was saved but the key was not", async () => {
+    vi.mocked(api.providerKinds).mockResolvedValue([
+      { kind: "openai", label: "OpenAI", transports: ["api"] },
+    ]);
+    vi.mocked(api.providers).mockResolvedValue([]);
+    vi.mocked(api.createProvider).mockResolvedValue(provider({ id: "openai-api" }));
+    vi.mocked(api.updateProvider).mockResolvedValue(provider({ id: "openai-api" }));
+    vi.mocked(api.storeProviderKey)
+      .mockRejectedValueOnce(new ApiError(503, "keyring_unavailable", "keyring locked"))
+      .mockResolvedValueOnce({ set: true });
+    render(<ProvidersScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: t("providers.add") }));
+    await userEvent.type(screen.getByLabelText(t("providers.apiKey")), "sk-test");
+    await userEvent.click(screen.getByRole("button", { name: t("providers.create") }));
+
+    expect(
+      await screen.findByText(t("providers.keyNotSaved", { reason: "keyring locked" })),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: t("common.save") }));
+
+    await waitFor(() => expect(api.storeProviderKey).toHaveBeenCalledTimes(2));
+    expect(api.createProvider).toHaveBeenCalledTimes(1);
+    expect(api.updateProvider).toHaveBeenCalledWith("openai-api", expect.any(Object));
+  });
+
+  it("keeps a choice made while an earlier save was still in flight", async () => {
+    const none = Object.fromEntries(
+      ["off_take_detection", "idea_completeness", "same_take_grey_zone", "fluency_score"]
+        .concat(["best_take_choice", "topic_change", "cta_detection"])
+        .map((id) => [id, null]),
+    ) as FeatureModels;
+    let finishSave: (value: { features: FeatureModels }) => void = () => undefined;
+    vi.mocked(api.providers).mockResolvedValue([provider()]);
+    vi.mocked(api.featureModels).mockResolvedValue({ features: none });
+    vi.mocked(api.saveFeatureModels).mockReturnValue(
+      new Promise((resolve) => (finishSave = resolve)),
+    );
+    render(<FeaturesScreen />);
+
+    const select = (await screen.findByLabelText(
+      t("feature.best_take_choice"),
+    )) as HTMLSelectElement;
+    await userEvent.click(screen.getByRole("button", { name: t("common.save") }));
+    await userEvent.selectOptions(select, "openai-api/gpt-a");
+    finishSave({ features: none });
+
+    await waitFor(() => expect(api.saveFeatureModels).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(select.value).toBe("openai-api/gpt-a");
+    expect(screen.queryByText(t("common.saved"))).toBeNull();
+  });
+
+  it("follows a download job once and stops when it ends", async () => {
+    vi.mocked(api.setup).mockResolvedValue({ ...SETUP, whisperDownloadJobId: "job-9" });
+    const stops: (() => void)[] = [];
+    vi.mocked(watchJob).mockImplementation((_id, onEvent) => {
+      const stop = vi.fn();
+      stops.push(stop);
+      onEvent({
+        jobId: "job-9",
+        status: "succeeded",
+        stage: "download",
+        fraction: 1,
+        message: "",
+        error: null,
+        result: null,
+      });
+      return stop;
+    });
+    render(<SetupScreen />);
+
+    await waitFor(() => expect(api.setup).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(watchJob).toHaveBeenCalledTimes(1);
   });
 });

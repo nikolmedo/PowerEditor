@@ -84,3 +84,22 @@ describe("error mapping", () => {
     expect(errorMessage(await failure(), t)).toBe(t("error.network"));
   });
 });
+
+describe("request with a non-JSON body", () => {
+  function respondText(status: number, text: string): void {
+    const response = new Response(text, { status, headers: { "Content-Type": "text/plain" } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+  }
+
+  it("turns a plain-text error page into an ApiError with the server's text", async () => {
+    respondText(502, "Bad Gateway");
+    const error = await failure();
+    expect([error.status, error.code, error.message]).toEqual([502, null, "Bad Gateway"]);
+  });
+
+  it("reports a success response that is not JSON as a bad response", async () => {
+    respondText(200, "<html>");
+    const error = await failure();
+    expect([error.status, error.code]).toEqual([200, "bad_response"]);
+  });
+});

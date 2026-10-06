@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/endpoints";
 import { FEATURE_IDS, type FeatureModels } from "../api/types";
 import { useT } from "../i18n";
@@ -13,6 +13,8 @@ export function FeaturesScreen() {
   const [features, setFeatures] = useState<FeatureModels | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
+  // Bumped on every edit, so a save that answers after a newer edit cannot undo it.
+  const revision = useRef(0);
 
   useEffect(() => {
     if (assigned.data) setFeatures(assigned.data.features);
@@ -20,8 +22,11 @@ export function FeaturesScreen() {
 
   const save = async () => {
     if (!features) return;
+    const savedRevision = revision.current;
     try {
-      setFeatures((await api.saveFeatureModels(features)).features);
+      const response = await api.saveFeatureModels(features);
+      if (savedRevision !== revision.current) return;
+      setFeatures(response.features);
       setError(null);
       setSaved(true);
     } catch (caught) {
@@ -58,6 +63,7 @@ export function FeaturesScreen() {
                       aria-label={label}
                       value={current ? encodeRef(current) : HEURISTIC}
                       onChange={(event) => {
+                        revision.current += 1;
                         setFeatures({ ...features, [feature]: decodeRef(event.target.value) });
                         setSaved(false);
                       }}

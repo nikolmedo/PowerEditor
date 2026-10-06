@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../api/endpoints";
-import { watchJob } from "../api/jobs";
-import type { DependencyCheck, JobEvent } from "../api/types";
+import type { DependencyCheck } from "../api/types";
 import { isMessageKey, useT } from "../i18n";
+import { isRunning, useJob } from "../jobs/useJob";
 import { Link } from "../shell/AppShell";
 import { ErrorNotice, Status } from "../ui/primitives";
 import { useResource } from "../ui/useResource";
@@ -25,18 +25,6 @@ function CheckRow({ check }: { check: DependencyCheck }) {
   );
 }
 
-function useJobProgress(jobId: string | null, onDone: () => void): JobEvent | null {
-  const [event, setEvent] = useState<JobEvent | null>(null);
-  useEffect(() => {
-    if (!jobId) return;
-    return watchJob(jobId, (next) => {
-      setEvent(next);
-      if (next.status === "succeeded") onDone();
-    });
-  }, [jobId, onDone]);
-  return event;
-}
-
 export function SetupScreen() {
   const t = useT();
   const setup = useResource(useCallback(() => api.setup(), []));
@@ -44,11 +32,10 @@ export function SetupScreen() {
   const [startError, setStartError] = useState<unknown>(null);
   const { reload } = setup;
   const activeJob = jobId ?? setup.data?.whisperDownloadJobId ?? null;
-  const progress = useJobProgress(
-    activeJob,
-    useCallback(() => void reload(), [reload]),
-  );
-  const downloading = progress !== null && ["queued", "running"].includes(progress.status);
+  const progress = useJob(activeJob, (ended) => {
+    if (ended.status === "succeeded") void reload();
+  });
+  const downloading = isRunning(progress);
 
   const download = async () => {
     try {

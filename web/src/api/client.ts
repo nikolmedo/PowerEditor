@@ -52,8 +52,25 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
   } catch {
     throw new ApiError(0, "network", "The local server is not reachable.");
   }
+  return readBody<T>(response);
+}
+
+const MAX_TEXT_MESSAGE = 200;
+
+/** The JSON body of a response; a proxy or crash page that is not JSON still becomes an
+ * `ApiError` instead of a parse exception. */
+export async function readBody<T>(response: Response): Promise<T> {
   const text = await response.text();
-  const parsed: unknown = text ? JSON.parse(text) : undefined;
+  let parsed: unknown;
+  try {
+    parsed = text ? JSON.parse(text) : undefined;
+  } catch {
+    if (response.ok) {
+      throw new ApiError(response.status, "bad_response", "The server sent an unreadable answer.");
+    }
+    const message = text.trim().slice(0, MAX_TEXT_MESSAGE) || `HTTP ${response.status}`;
+    throw new ApiError(response.status, null, message);
+  }
   if (!response.ok) throw parseError(response.status, parsed);
   return parsed as T;
 }

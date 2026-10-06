@@ -1,10 +1,8 @@
 import type { MouseEvent, ReactNode } from "react";
 import { api } from "../api/endpoints";
 import { LANGUAGES, useT, type Language, type MessageKey } from "../i18n";
+import { STEPS, stepPath, type Step } from "../routes";
 import { useAppStore } from "../store/app";
-
-export type Step = "load" | "review" | "export";
-const STEPS: readonly Step[] = ["load", "review", "export"];
 
 const NAV: readonly { path: string; key: MessageKey; nested?: boolean }[] = [
   { path: "/", key: "nav.projects" },
@@ -73,21 +71,41 @@ function Preferences() {
   );
 }
 
-export function AppShell({ step, children }: { step: Step | null; children: ReactNode }) {
+interface ShellProps {
+  step: Step | null;
+  projectId: string | null;
+  children: ReactNode;
+}
+
+export function AppShell({ step, projectId, children }: ShellProps) {
   const t = useT();
   return (
     <div className="shell">
       <header className="topbar">
         <span className="brand">{t("app.name")}</span>
         <ol className="steps" aria-label={t("steps.label")}>
-          {STEPS.map((name, index) => (
-            <li key={name}>
-              <Link to={`/${name}`} className="step">
+          {STEPS.map((name, index) => {
+            const to = stepPath(name, projectId);
+            const label = (
+              <>
                 <span className="step-index mono">{String(index + 1).padStart(2, "0")}</span>
                 {t(`steps.${name}`)}
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+            return (
+              <li key={name}>
+                {to ? (
+                  <Link to={to} className="step">
+                    {label}
+                  </Link>
+                ) : (
+                  <span className="step" aria-disabled="true" title={t("steps.needsProject")}>
+                    {label}
+                  </span>
+                )}
+              </li>
+            );
+          })}
         </ol>
         <Preferences />
       </header>

@@ -1,4 +1,5 @@
 import { useCallback, useState, type FormEvent } from "react";
+import { errorMessage } from "../api/client";
 import { api } from "../api/endpoints";
 import type {
   ModelInfo,
@@ -54,8 +55,13 @@ function ProviderEditor({ kinds, provider, onDone }: EditorProps) {
   });
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const [keyError, setKeyError] = useState<unknown>(null);
+  // Set once a new provider exists, so a retry after a failed key save updates it instead
+  // of creating a duplicate.
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   if (!draft) return null;
+  const existingId = provider?.id ?? savedId;
 
   const errors = touched ? validateDraft(draft) : {};
   const kind = kinds.find((candidate) => candidate.kind === draft.kind);
@@ -69,18 +75,30 @@ function ProviderEditor({ kinds, provider, onDone }: EditorProps) {
     event.preventDefault();
     setTouched(true);
     if (Object.keys(validateDraft(draft)).length > 0) return;
+    let saved: Provider;
     try {
       const payload = draftPayload(draft);
       // Kind, transport and models are not edited here: models are toggled on the card.
       const { label, cliPath, baseUrl, customBaseUrlConfirmed } = payload;
-      const saved = provider
-        ? await api.updateProvider(provider.id, { label, cliPath, baseUrl, customBaseUrlConfirmed })
+      saved = existingId
+        ? await api.updateProvider(existingId, { label, cliPath, baseUrl, customBaseUrlConfirmed })
         : await api.createProvider(payload);
-      if (apiKey.trim() && draft.transport === "api") await api.storeProviderKey(saved.id, apiKey);
-      onDone();
+      setSavedId(saved.id);
+      setError(null);
     } catch (caught) {
       setError(caught);
+      return;
     }
+    if (apiKey.trim() && draft.transport === "api") {
+      setKeyError(null);
+      try {
+        await api.storeProviderKey(saved.id, apiKey);
+      } catch (caught) {
+        setKeyError(caught);
+        return;
+      }
+    }
+    onDone();
   };
 
   return (
@@ -89,14 +107,14 @@ function ProviderEditor({ kinds, provider, onDone }: EditorProps) {
         <SelectField
           label={t("providers.kind")}
           value={draft.kind}
-          disabled={provider !== null}
+          disabled={existingId !== null}
           onChange={changeKind}
           options={kinds.map((option) => ({ value: option.kind, label: option.label }))}
         />
         <SelectField
           label={t("providers.transport")}
           value={draft.transport}
-          disabled={provider !== null}
+          disabled={existingId !== null}
           onChange={(value) => set({ transport: value as Transport })}
           options={(kind?.transports ?? [draft.transport]).map((value) => ({
             value,
@@ -159,9 +177,14 @@ function ProviderEditor({ kinds, provider, onDone }: EditorProps) {
         />
       )}
       <ErrorNotice error={error} />
+      {keyError !== null && (
+        <p className="notice notice-bad" role="alert">
+          {t("providers.keyNotSaved", { reason: errorMessage(keyError, t) })}
+        </p>
+      )}
       <div className="row">
         <button type="submit" className="primary">
-          {provider ? t("common.save") : t("providers.create")}
+          {existingId ? t("common.save") : t("providers.create")}
         </button>
         <button type="button" className="quiet" onClick={onDone}>
           {t("common.cancel")}
