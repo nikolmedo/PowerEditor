@@ -11,7 +11,7 @@ import keyring.errors
 from pydantic import AliasChoices, Field, ValidationError, field_validator
 
 from powereditor import doctor
-from powereditor.config import DecisionEngine, Settings, Transcriber, WhisperDevice
+from powereditor.config import DecisionEngine, Settings, Transcriber, WhisperDevice, env_files
 from powereditor.models import CamelModel, write_text_atomic
 from powereditor.paths import AppPaths
 from powereditor.providers.config import (
@@ -155,7 +155,7 @@ def default_secret_store() -> SecretStore:
 
 
 def default_env_settings() -> Settings:
-    return Settings()
+    return Settings(_env_file=env_files())
 
 
 class SettingsService:

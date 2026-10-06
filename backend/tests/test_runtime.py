@@ -1,7 +1,10 @@
 import hashlib
 import io
+import stat
 import sys
+import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -9,6 +12,7 @@ import pytest
 from typer.testing import CliRunner
 
 from powereditor import cli
+from powereditor.runtime import manager
 from powereditor.runtime.manager import (
     RuntimeChecksumError,
     RuntimeInstallError,
@@ -70,6 +74,11 @@ def redirecting_transport(archive: bytes) -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
+def entries(bin_dir: Path) -> list[str]:
+    """What an install left in `bin_dir`, without the per-runtime lock files."""
+    return sorted(p.name for p in bin_dir.iterdir() if p.suffix != ".lock")
+
+
 def files_under(folder: Path) -> list[str]:
     return sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
 
@@ -88,7 +97,7 @@ def test_install_follows_redirects_verifies_and_extracts_only_kept_files(tmp_pat
     assert target == bin_dir / "tool-1.0"
     assert files_under(target) == ["LICENSE.txt", "bin/tool.exe"]
     assert (target / "bin" / "tool.exe").read_bytes() == b"binary"
-    assert [p.name for p in bin_dir.iterdir()] == ["tool-1.0"]
+    assert entries(bin_dir) == ["tool-1.0"]
     assert fractions[-1] == 1.0
     assert fractions == sorted(fractions)
 
@@ -100,7 +109,7 @@ def test_install_rejects_a_checksum_mismatch_and_leaves_nothing(tmp_path: Path) 
         install_download(spec, tmp_path / "bin", transport=redirecting_transport(ARCHIVE))
 
     assert excinfo.value.code == "runtime_checksum_mismatch"
-    assert list((tmp_path / "bin").iterdir()) == []
+    assert entries(tmp_path / "bin") == []
 
 
 def test_install_refuses_members_that_escape_the_target(tmp_path: Path) -> None:
@@ -112,7 +121,73 @@ def test_install_refuses_members_that_escape_the_target(tmp_path: Path) -> None:
         )
 
     assert not (tmp_path / "evil.exe").exists()
-    assert list((tmp_path / "bin").iterdir()) == []
+    assert entries(tmp_path / "bin") == []
+
+
+def test_install_refuses_symbolic_links(tmp_path: Path) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("tool-1.0/bin/tool.exe", b"x")
+        link = zipfile.ZipInfo("tool-1.0/bin/link")
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        archive.writestr(link, "../../../../evil")
+    data = buffer.getvalue()
+
+    with pytest.raises(RuntimeInstallError, match="symbolic link"):
+        install_download(
+            spec_for(data, keep=()), tmp_path / "bin", transport=redirecting_transport(data)
+        )
+
+    assert entries(tmp_path / "bin") == []
+
+
+def test_install_retries_a_rename_blocked_by_another_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Antivirus and indexers briefly lock fresh files on Windows."""
+    real_rename = Path.rename
+    failures = [PermissionError("locked"), PermissionError("locked")]
+
+    def flaky_rename(self: Path, target: Path) -> Path:
+        if failures:
+            raise failures.pop()
+        return real_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", flaky_rename)
+    monkeypatch.setattr(manager, "RENAME_RETRY_DELAY_S", 0.0)
+
+    target = install_download(
+        spec_for(ARCHIVE), tmp_path / "bin", transport=redirecting_transport(ARCHIVE)
+    )
+
+    assert failures == []
+    assert (target / "bin" / "tool.exe").read_bytes() == b"binary"
+
+
+def test_concurrent_installs_download_once(tmp_path: Path) -> None:
+    downloads: list[str] = []
+    inner = redirecting_transport(ARCHIVE)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == MIRROR:
+            downloads.append(str(request.url))
+            time.sleep(0.3)
+        return inner.handle_request(request)
+
+    transport = httpx.MockTransport(handler)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(
+                lambda _: install_download(
+                    spec_for(ARCHIVE), tmp_path / "bin", transport=transport
+                ),
+                range(2),
+            )
+        )
+
+    assert results == [tmp_path / "bin" / "tool-1.0"] * 2
+    assert len(downloads) == 1
+    assert files_under(results[0]) == ["LICENSE.txt", "bin/tool.exe"]
 
 
 def test_install_fails_when_the_archive_lacks_a_tool(tmp_path: Path) -> None:

@@ -17,6 +17,7 @@ vi.mock("../src/api/endpoints", () => ({
     [
       "setup",
       "downloadWhisperModel",
+      "health",
       "settings",
       "updateSettings",
       "providerKinds",
@@ -55,6 +56,7 @@ const SETUP: SetupStatus = {
   transcriberReady: false,
   ready: false,
   whisperDownloadJobId: null,
+  runtimes: [],
 };
 
 describe("SetupScreen", () => {
@@ -120,6 +122,39 @@ const SETTINGS: SettingsResponse = {
 };
 
 describe("SettingsScreen", () => {
+  it("ends with an About section: version, copyright, license summary and links", async () => {
+    vi.mocked(api.settings).mockResolvedValue(SETTINGS);
+    vi.mocked(api.health).mockResolvedValue({ status: "ok", version: "1.2.3" });
+    render(<SettingsScreen />);
+
+    const about = await screen.findByRole("region", { name: t("about.title") });
+    expect(await within(about).findByText(t("about.version", { version: "1.2.3" }))).toBeTruthy();
+    expect(within(about).getByText(t("about.license"))).toBeTruthy();
+    const author = within(about).getByRole("link", { name: t("about.copyright") });
+    expect(author.getAttribute("href")).toBe("https://nolmedo.dev");
+    expect(author.getAttribute("target")).toBe("_blank");
+    expect(
+      within(about)
+        .getByRole("link", { name: t("about.licenseLink") })
+        .getAttribute("href"),
+    ).toBe("https://github.com/nikolmedo/PowerEditor/blob/main/LICENSE");
+    expect(
+      within(about)
+        .getByRole("link", { name: t("about.noticesLink") })
+        .getAttribute("href"),
+    ).toBe("https://github.com/nikolmedo/PowerEditor/blob/main/THIRD_PARTY_NOTICES.md");
+  });
+
+  it("still shows the About section when the version cannot be read", async () => {
+    vi.mocked(api.settings).mockResolvedValue(SETTINGS);
+    vi.mocked(api.health).mockRejectedValue(new ApiError(0, "network", "down"));
+    render(<SettingsScreen />);
+
+    const about = await screen.findByRole("region", { name: t("about.title") });
+    expect(within(about).getByRole("link", { name: t("about.copyright") })).toBeTruthy();
+    expect(within(about).queryByText(/1\.2\.3/)).toBeNull();
+  });
+
   it("sends only the changed fields with numbers as numbers", async () => {
     vi.mocked(api.settings).mockResolvedValue(SETTINGS);
     vi.mocked(api.updateSettings).mockResolvedValue(SETTINGS);

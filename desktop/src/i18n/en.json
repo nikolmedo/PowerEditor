@@ -1,0 +1,10 @@
+{
+  "splash.starting": "Starting PowerEditor…",
+  "error.title": "PowerEditor could not start",
+  "error.timeout": "The editing engine did not start within {seconds} seconds.",
+  "error.exited": "The editing engine stopped unexpectedly (exit code {code}).",
+  "error.spawn": "The editing engine could not be started: {message}",
+  "error.webMissing": "The web app is not built. Run: corepack pnpm --filter @powereditor/web build",
+  "error.logHint": "Details are in the log folder: {path}",
+  "menu.help": "Help"
+}

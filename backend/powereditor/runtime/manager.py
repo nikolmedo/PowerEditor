@@ -3,7 +3,8 @@
 A download is streamed to a temporary folder inside `<data dir>/bin`, checked against its
 pinned SHA-256, extracted (only the files the app uses, with the archive's top-level folder
 stripped) and renamed into `bin/<name>-<version>/` in one step, so a folder with that name
-is always a complete install.
+is always a complete install. A lock file per runtime keeps a second installer (the CLI
+next to the app, say) waiting instead of downloading the same archive again.
 
 The Chrome Headless Shell Remotion renders with is installed by Remotion itself
 (`ensure-browser.mjs` under the render Node), into `bin/remotion/node_modules/.remotion`.
@@ -11,12 +12,16 @@ The Chrome Headless Shell Remotion renders with is installed by Remotion itself
 
 import hashlib
 import json
+import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
@@ -35,6 +40,10 @@ Progress = Callable[[float], None]
 
 CHUNK_BYTES = 1 << 20
 DOWNLOAD_TIMEOUT = httpx.Timeout(30.0, read=120.0)
+RENAME_ATTEMPTS = 5
+RENAME_RETRY_DELAY_S = 0.5
+LOCK_POLL_S = 0.2
+LOCK_TIMEOUT_S = 30 * 60.0
 BROWSER = "browser"
 BROWSER_CACHE_DIR = "remotion"
 _BROWSER_EXECUTABLES = {
@@ -90,11 +99,14 @@ def _download(
     progress(1.0)
 
 
-def _member_path(name: str) -> PurePosixPath:
-    """The member's path below the archive's top-level folder, refusing unsafe names."""
+def _member_path(info: zipfile.ZipInfo) -> PurePosixPath:
+    """The member's path below the archive's top-level folder, refusing unsafe members."""
+    name = info.filename
     path = PurePosixPath(name.replace("\\", "/"))
     if path.is_absolute() or ".." in path.parts or ":" in name:
         raise RuntimeInstallError(f"archive member has an unsafe path: {name}")
+    if stat.S_ISLNK(info.external_attr >> 16):
+        raise RuntimeInstallError(f"archive member is a symbolic link: {name}")
     return PurePosixPath(*path.parts[1:])
 
 
@@ -106,7 +118,7 @@ def _kept(path: PurePosixPath, keep: Sequence[str]) -> bool:
 
 def _extract(archive: Path, destination: Path, spec: RuntimeDownload) -> None:
     with zipfile.ZipFile(archive) as zipped:
-        members = [(info, _member_path(info.filename)) for info in zipped.infolist()]
+        members = [(info, _member_path(info)) for info in zipped.infolist()]
         for info, path in members:
             if info.is_dir() or not path.parts or not _kept(path, spec.keep):
                 continue
@@ -117,6 +129,62 @@ def _extract(archive: Path, destination: Path, spec: RuntimeDownload) -> None:
     missing = [tool for tool in spec.tools.values() if not (destination / tool).is_file()]
     if missing:
         raise RuntimeInstallError(f"{spec.name} archive lacks {', '.join(missing)}")
+
+
+@contextmanager
+def _install_lock(lock_path: Path) -> Iterator[None]:
+    """Hold an exclusive lock on `lock_path` (between processes and between threads)."""
+    deadline = time.monotonic() + LOCK_TIMEOUT_S
+    with lock_path.open("a+b") as handle:
+        while not _try_lock(handle.fileno()):
+            if time.monotonic() > deadline:
+                raise RuntimeInstallError(f"another install holds {lock_path.name}")
+            time.sleep(LOCK_POLL_S)
+        try:
+            yield
+        finally:
+            _unlock(handle.fileno())
+
+
+if sys.platform == "win32":
+    import msvcrt
+
+    def _try_lock(fd: int) -> bool:
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+        return True
+
+    def _unlock(fd: int) -> None:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    def _try_lock(fd: int) -> bool:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return False
+        return True
+
+    def _unlock(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+def _rename_with_retry(source: Path, target: Path) -> None:
+    """Rename, retrying while Windows reports the fresh files as in use (antivirus, indexer)."""
+    for attempt in range(1, RENAME_ATTEMPTS + 1):
+        try:
+            source.rename(target)
+            return
+        except PermissionError:
+            if attempt == RENAME_ATTEMPTS:
+                raise
+            time.sleep(RENAME_RETRY_DELAY_S * attempt)
 
 
 def install_download(
@@ -134,24 +202,23 @@ def install_download(
     if target.is_dir():
         return target
     bin_dir.mkdir(parents=True, exist_ok=True)
-    with (
-        tempfile.TemporaryDirectory(dir=bin_dir, prefix=f".{spec.dir_name}-") as scratch,
-        httpx.Client(
-            transport=transport, follow_redirects=True, timeout=DOWNLOAD_TIMEOUT
-        ) as client,
-    ):
-        archive = Path(scratch) / "download.zip"
-        try:
-            _download(spec, archive, client, progress or (lambda _: None))
-        except httpx.HTTPError as exc:
-            raise RuntimeInstallError(f"downloading {spec.name} failed: {exc}") from exc
-        staging = Path(scratch) / "extracted"
-        _extract(archive, staging, spec)
-        try:
-            staging.rename(target)
-        except OSError:
-            if not target.is_dir():  # another install finished first
-                raise
+    with _install_lock(bin_dir / f".{spec.dir_name}.lock"):
+        if target.is_dir():  # another install finished while this one waited
+            return target
+        with (
+            tempfile.TemporaryDirectory(dir=bin_dir, prefix=f".{spec.dir_name}-") as scratch,
+            httpx.Client(
+                transport=transport, follow_redirects=True, timeout=DOWNLOAD_TIMEOUT
+            ) as client,
+        ):
+            archive = Path(scratch) / "download.zip"
+            try:
+                _download(spec, archive, client, progress or (lambda _: None))
+            except httpx.HTTPError as exc:
+                raise RuntimeInstallError(f"downloading {spec.name} failed: {exc}") from exc
+            staging = Path(scratch) / "extracted"
+            _extract(archive, staging, spec)
+            _rename_with_retry(staging, target)
     return target
 
 

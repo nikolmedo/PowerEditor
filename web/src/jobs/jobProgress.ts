@@ -6,6 +6,8 @@ export const JOB_STAGES: Record<JobKind, readonly string[]> = {
   render: ["audio", "render", "final-pass"],
   export_subtitles: ["subtitles"],
   whisper_model: ["download"],
+  // A runtime install reports the runtime's name (ffmpeg, node, browser) as its stage.
+  runtime: [],
 };
 const KNOWN_STAGES = new Set(Object.values(JOB_STAGES).flat());
 

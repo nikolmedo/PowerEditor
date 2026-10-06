@@ -45,7 +45,7 @@ FFMPEG = RuntimeDownload(
     size=170_611_883,
     tools={"ffmpeg": "bin/ffmpeg.exe", "ffprobe": "bin/ffprobe.exe"},
     keep=("bin/ffmpeg.exe", "bin/ffprobe.exe", "LICENSE.txt"),
-    license="LGPL-2.1-or-later",
+    license="LGPL-3.0-or-later",
 )
 
 NODE = RuntimeDownload(

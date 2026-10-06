@@ -85,7 +85,7 @@ a {
 
 .shell {
   display: grid;
-  grid-template: "top top" 52px "nav main" 1fr / 208px 1fr;
+  grid-template: "top top" 52px "nav main" 1fr "foot main" auto / 208px 1fr;
   min-height: 100vh;
 }
 
@@ -175,6 +175,33 @@ a {
 .sidebar-link[aria-current="page"] {
   background: var(--surface-2);
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.app-footer {
+  grid-area: foot;
+  padding: 12px 20px;
+  border-right: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.app-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.app-footer a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.about {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.about p {
+  margin: 0 0 8px;
 }
 
 .content {
@@ -1601,4 +1628,72 @@ textarea {
 
 .result {
   border-color: var(--ok);
+}
+
+/* Guided first-run setup */
+
+.onboarding {
+  max-width: 760px;
+}
+
+.onboarding-steps {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+  margin: 8px 0 24px;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+}
+
+.onboarding-step[aria-current="step"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.onboarding-step[aria-current="step"] .step-index {
+  color: var(--accent);
+}
+
+.onboarding-body .checks {
+  margin-bottom: var(--gap);
+}
+
+.onboarding-body .check {
+  grid-template-columns: 1fr 180px 80px;
+}
+
+.onboarding-progress {
+  display: grid;
+  gap: 6px;
+  margin-bottom: var(--gap);
+}
+
+.onboarding-progress progress {
+  width: 100%;
+}
+
+.onboarding-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.onboarding-choices .panel {
+  align-content: start;
+}
+
+.onboarding-choices h3 {
+  margin: 0;
 }

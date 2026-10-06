@@ -104,6 +104,7 @@ beforeEach(() => {
   useAppStore.setState({ language: "en", path: "/" });
   vi.mocked(api.setup).mockResolvedValue({
     doctor: { system: "Windows", machine: "AMD64", checks: [], ok: true },
+    runtimes: [],
     transcriber: "local",
     whisperModel: "small",
     whisperModelDownloaded: true,

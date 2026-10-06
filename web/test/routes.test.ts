@@ -10,6 +10,7 @@ describe("routes", () => {
     expect(parseRoute("/projects/p-1/export/")).toEqual({ screen: "export", projectId: "p-1" });
     expect(parseRoute("/load")).toEqual({ screen: "load", projectId: null });
     expect(parseRoute("/settings/providers")).toEqual({ screen: "providers" });
+    expect(parseRoute("/welcome")).toEqual({ screen: "welcome" });
     expect(parseRoute("/projects/p-1/edit")).toEqual({ screen: "home" });
   });
 

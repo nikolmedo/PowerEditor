@@ -10,7 +10,7 @@ import uvicorn
 from typer.testing import CliRunner
 
 from powereditor import cli
-from powereditor.api.app import ENV_DEV_CORS, create_app, resolve_web_dir
+from powereditor.api.app import ENV_DEV_CORS, ENV_SESSION_TOKEN, create_app, resolve_web_dir
 from powereditor.config import REPO_ROOT
 from powereditor.resources import ENV_WEB_DIR
 from tests.api_client import local_client, make_client, make_service
@@ -85,22 +85,26 @@ def test_cors_only_for_the_vite_dev_server(tmp_path: Path, dev: bool, allowed: s
 
 
 def test_serve_open_and_dev_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    opened: list[str] = []
+    opened: list[tuple[str, str | None]] = []
     started: list[int] = []
 
     def fake_run(self: uvicorn.Server, sockets: list[socket.socket]) -> None:
         started.append(sockets[0].getsockname()[1])
         sockets[0].close()
 
-    monkeypatch.setattr(cli, "open_when_ready", opened.append)
+    monkeypatch.setattr(cli, "open_when_ready", lambda url, token: opened.append((url, token)))
     monkeypatch.setattr(uvicorn.Server, "run", fake_run)
-    monkeypatch.setenv(ENV_DEV_CORS, "0")  # restored after the test, as serve sets it
+    # Restored after the test, as serve sets them.
+    monkeypatch.setenv(ENV_DEV_CORS, "0")
+    monkeypatch.setenv(ENV_SESSION_TOKEN, "")
 
     result = CliRunner().invoke(cli.app, ["serve", "--port", "0", "--open", "--dev"])
 
     assert result.exit_code == 0, result.output
     assert len(started) == 1 and started[0] > 0
-    assert opened == [f"http://127.0.0.1:{started[0]}"]
+    token = os.environ[ENV_SESSION_TOKEN]
+    assert len(token) >= 32
+    assert opened == [(f"http://127.0.0.1:{started[0]}", token)]
     assert os.environ[ENV_DEV_CORS] == "1"
 
 
@@ -111,7 +115,7 @@ def test_open_when_ready_waits_for_health(monkeypatch: pytest.MonkeyPatch) -> No
     ]
     opened: list[str] = []
 
-    def fake_get(url: str, timeout: float) -> httpx.Response:
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> httpx.Response:
         answer = answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
@@ -124,3 +128,20 @@ def test_open_when_ready_waits_for_health(monkeypatch: pytest.MonkeyPatch) -> No
     cli.open_when_ready("http://127.0.0.1:1").join(5)
 
     assert opened == ["http://127.0.0.1:1/"]
+
+
+def test_open_when_ready_signs_in_with_the_session_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[dict[str, str]] = []
+    opened: list[str] = []
+
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> httpx.Response:
+        sent.append(headers)
+        return httpx.Response(200)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+
+    cli.open_when_ready("http://127.0.0.1:1", "tok").join(5)
+
+    assert sent == [{"X-PowerEditor-Token": "tok"}]
+    assert opened == ["http://127.0.0.1:1/?token=tok"]

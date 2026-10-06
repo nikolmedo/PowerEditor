@@ -1,5 +1,11 @@
 /** Shapes of the local API (`backend/powereditor/api/`), camelCase as the backend sends them. */
 
+/** `GET /api/health`. */
+export interface HealthStatus {
+  status: string;
+  version: string;
+}
+
 export type Transport = "api" | "local_cli";
 export type Transcriber = "local" | "openai";
 export type WhisperDevice = "auto" | "cuda" | "cpu";
@@ -59,6 +65,17 @@ export interface DependencyCheck {
   detail: string | null;
 }
 
+/** A runtime the app downloads into its data dir (`GET /api/setup`). */
+export interface RuntimeStatus {
+  name: string;
+  version: string | null;
+  supported: boolean;
+  installed: boolean;
+  /** The installed executable. */
+  path: string | null;
+  downloadBytes: number | null;
+}
+
 export interface SetupStatus {
   doctor: { system: string; machine: string; checks: DependencyCheck[]; ok: boolean };
   transcriber: Transcriber;
@@ -68,6 +85,7 @@ export interface SetupStatus {
   transcriberReady: boolean;
   ready: boolean;
   whisperDownloadJobId: string | null;
+  runtimes: RuntimeStatus[];
 }
 
 export interface ProviderKindInfo {
@@ -107,7 +125,7 @@ export interface ModelInfo {
 export type FeatureModels = Record<FeatureId, ModelRef | null>;
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type JobKind = "analyze" | "render" | "export_subtitles" | "whisper_model";
+export type JobKind = "analyze" | "render" | "export_subtitles" | "whisper_model" | "runtime";
 
 export interface JobError {
   code: string;

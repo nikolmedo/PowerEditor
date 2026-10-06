@@ -24,6 +24,7 @@ from powereditor.api.routes_settings import get_service
 from powereditor.api.routes_settings import router as settings_router
 from powereditor.api.routes_setup import router as setup_router
 from powereditor.api.services import Pipelines, Revealer, default_revealer
+from powereditor.api.session_token import SessionTokenGuard
 from powereditor.jobs import JobManager
 from powereditor.paths import AppPaths
 from powereditor.projects import ProjectStore
@@ -43,6 +44,8 @@ def _validation_error_without_input(_: Request, exc: Exception) -> JSONResponse:
 
 
 ENV_DEV_CORS = "POWEREDITOR_DEV_CORS"
+ENV_SESSION_TOKEN = "POWEREDITOR_SESSION_TOKEN"
+"""Set by `serve --port 0` (sidecar mode): the API then requires this token."""
 VITE_DEV_ORIGIN = "http://localhost:5173"
 
 
@@ -90,6 +93,7 @@ def create_app(
     dev_cors: bool | None = None,
     runtime_downloads: Sequence[RuntimeDownload] | None = None,
     runtime_transport: httpx.BaseTransport | None = None,
+    session_token: str | None = None,
 ) -> FastAPI:
     if settings_service is None:
         settings_service = SettingsService(
@@ -114,6 +118,9 @@ def create_app(
             allow_headers=["*"],
             expose_headers=["ETag"],
         )
+    token = session_token if session_token is not None else os.environ.get(ENV_SESSION_TOKEN)
+    if token:
+        app.add_middleware(SessionTokenGuard, token=token)
     # Added last, so it runs first: a refused request never reaches CORS or a route.
     app.add_middleware(
         LocalOriginGuard, extra_origins=frozenset({VITE_DEV_ORIGIN} if dev else set())

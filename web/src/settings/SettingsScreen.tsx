@@ -5,6 +5,7 @@ import type { SettingsResponse, UserSettings } from "../api/types";
 import { isMessageKey, useT } from "../i18n";
 import { ErrorNotice, SecretField, SelectField, TextField } from "../ui/primitives";
 import { useResource } from "../ui/useResource";
+import { About } from "./About";
 
 type Form = Record<string, string>;
 
@@ -201,6 +202,7 @@ export function SettingsScreen() {
           onClear={() => updateKey(api.clearOpenAiKey())}
         />
       </fieldset>
+      <About />
     </section>
   );
 }

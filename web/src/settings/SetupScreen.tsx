@@ -51,6 +51,11 @@ export function SetupScreen() {
     <section className="screen">
       <h1>{t("setup.title")}</h1>
       <p className="lede">{t("setup.intro")}</p>
+      <p>
+        <Link to="/welcome" className="button">
+          {t("setup.guided")}
+        </Link>
+      </p>
       <ErrorNotice error={setup.error} />
       {status && (
         <>

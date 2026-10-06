@@ -13,12 +13,15 @@ standalone renderer (`build/composition`), run PyInstaller through `uv run --wit
 import argparse
 import json
 import os
+import queue
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
+from typing import IO
 
 REPO = Path(__file__).resolve().parents[1]
 BACKEND = REPO / "backend"
@@ -27,6 +30,7 @@ BUILD = REPO / "build"
 DIST = REPO / "dist" / "backend"
 PYINSTALLER = "pyinstaller==6.22.3"
 READY_PREFIX = "POWEREDITOR_READY"
+TOKEN_HEADER = "X-PowerEditor-Token"
 SMOKE_TIMEOUT_S = 120
 
 
@@ -62,9 +66,39 @@ def build(skip_web: bool, skip_bundle: bool) -> Path:
     run(pyinstaller, BACKEND, env)
     app = DIST / "powereditor"
     # Copied as is (see powereditor.spec): Resources.composition_dir() reads it from here.
-    shutil.copytree(staged, app / "_internal" / "composition")
+    target = app / "_internal" / "composition"
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(staged, target)
     print(f"built {app} ({folder_size(app) / 2**20:.0f} MiB)")
     return app
+
+
+def read_lines(stream: IO[str]) -> "queue.Queue[str | None]":
+    """Lines of `stream` from a reader thread (pipes cannot be polled on Windows); None at EOF."""
+    lines: queue.Queue[str | None] = queue.Queue()
+
+    def pump() -> None:
+        for line in stream:
+            lines.put(line)
+        lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    return lines
+
+
+def wait_for_ready(lines: "queue.Queue[str | None]", timeout_s: float) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_s
+    while (left := deadline - time.monotonic()) > 0:
+        try:
+            line = lines.get(timeout=left)
+        except queue.Empty:
+            break
+        if line is None:
+            sys.exit("the sidecar exited before printing its READY line")
+        if line.startswith(READY_PREFIX):
+            ready: dict[str, object] = json.loads(line.split(" ", 1)[1])
+            return ready
+    sys.exit(f"the sidecar printed no READY line within {timeout_s:.0f}s")
 
 
 def smoke(app: Path) -> None:
@@ -77,20 +111,23 @@ def smoke(app: Path) -> None:
     )
     try:
         assert server.stdout is not None
-        line = ""
-        while not line.startswith(READY_PREFIX):
-            line = server.stdout.readline()
-            if not line or time.monotonic() - started > SMOKE_TIMEOUT_S:
-                sys.exit("the sidecar exited or never printed its READY line")
-        port = json.loads(line.split(" ", 1)[1])["port"]
+        ready = wait_for_ready(read_lines(server.stdout), SMOKE_TIMEOUT_S)
+        port, token = ready["port"], str(ready["token"])
         print(f"ready on port {port} after {time.monotonic() - started:.1f}s")
         for path in ("/api/health", "/"):
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=30) as response:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{port}{path}", headers={TOKEN_HEADER: token}
+            )
+            with urllib.request.urlopen(request, timeout=30) as response:
                 body = response.read(200).decode("utf-8", "replace")
                 print(f"GET {path}: {response.status} {body[:80]!r}")
     finally:
         server.terminate()
-        server.wait(30)
+        try:
+            server.wait(30)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(30)
 
 
 def main() -> None:

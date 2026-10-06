@@ -2,9 +2,11 @@
 
 The shell starts `powereditor serve --port 0 --parent-pid <its pid>` and reads stdout until
 one line `POWEREDITOR_READY {"port": N, "token": "..."}`: the server binds a free loopback
-port itself, so the line is printed only once it accepts connections. With `--parent-pid`
-the server polls the parent and shuts down cleanly (running jobs are cancelled) once it is
-gone, so a crashed shell never leaves an orphan backend.
+port itself, so the line is printed only once the ASGI lifespan startup finished and the
+socket accepts connections. With `--parent-pid` the server watches the parent and shuts down
+cleanly (running jobs are cancelled) once it is gone, so a crashed shell never leaves an
+orphan backend. The watch holds the parent's process handle on Windows (and follows
+`getppid()` elsewhere), so a new process that reuses the PID is never taken for the parent.
 """
 
 import json
@@ -17,11 +19,15 @@ from collections.abc import Callable
 
 import uvicorn
 
+# Waits up to the given seconds for the parent to exit; True once it is gone.
+ExitWaiter = Callable[[float], bool]
+
 READY_PREFIX = "POWEREDITOR_READY"
 PARENT_POLL_S = 1.0
 
 
-def ready_line(port: int, token: str) -> str:
+def ready_line(port: int, token: str | None) -> str:
+    """The READY line; `token` is None when the server does not require one."""
     return f"{READY_PREFIX} {json.dumps({'port': port, 'token': token})}"
 
 
@@ -48,8 +54,10 @@ if sys.platform == "win32":
     from ctypes import wintypes
 
     _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    _SYNCHRONIZE = 0x00100000
     _STILL_ACTIVE = 259
     _ERROR_ACCESS_DENIED = 5
+    _WAIT_TIMEOUT = 0x102
 
     def _process_alive(pid: int) -> bool:
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -64,7 +72,34 @@ if sys.platform == "win32":
         finally:
             kernel32.CloseHandle(handle)
 
+    def _exit_waiter(pid: int) -> ExitWaiter | None:
+        """Wait on the parent's handle, opened now: a reused PID cannot fool it."""
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        handle = kernel32.OpenProcess(_SYNCHRONIZE, False, pid)
+        if not handle:
+            return None
+
+        def wait(timeout_s: float) -> bool:
+            gone = kernel32.WaitForSingleObject(handle, int(timeout_s * 1000)) != _WAIT_TIMEOUT
+            if gone:
+                kernel32.CloseHandle(handle)
+            return bool(gone)
+
+        return wait
+
 else:
+
+    def _exit_waiter(pid: int) -> ExitWaiter | None:
+        """When `pid` is the real parent, its death reparents this process."""
+        if pid != os.getppid():
+            return None
+
+        def wait(timeout_s: float) -> bool:
+            time.sleep(timeout_s)
+            return os.getppid() != pid
+
+        return wait
 
     def _process_alive(pid: int) -> bool:
         try:
@@ -84,10 +119,19 @@ def watch_parent(
     pid: int, on_exit: Callable[[], None], poll_s: float = PARENT_POLL_S
 ) -> threading.Thread:
     """Call `on_exit` (once, from a daemon thread) when process `pid` is gone."""
+    waiter = _exit_waiter(pid) if pid > 0 else None
+
+    def poll_pid(timeout_s: float) -> bool:
+        if not parent_alive(pid):
+            return True
+        time.sleep(timeout_s)
+        return False
+
+    wait = waiter or poll_pid
 
     def poll() -> None:
-        while parent_alive(pid):
-            time.sleep(poll_s)
+        while not wait(poll_s):
+            pass
         on_exit()
 
     thread = threading.Thread(target=poll, name="parent-watch", daemon=True)

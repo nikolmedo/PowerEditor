@@ -3,6 +3,7 @@ import { api } from "../api/endpoints";
 import { LANGUAGES, useT, type Language, type MessageKey } from "../i18n";
 import { STEPS, stepPath, type Step } from "../routes";
 import { useAppStore } from "../store/app";
+import { AUTHOR_URL } from "../ui/projectLinks";
 
 const NAV: readonly { path: string; key: MessageKey; nested?: boolean }[] = [
   { path: "/", key: "nav.projects" },
@@ -124,6 +125,11 @@ export function AppShell({ step, projectId, children }: ShellProps) {
       <main className="content" data-step={step ?? undefined}>
         {children}
       </main>
+      <footer className="app-footer">
+        <a href={AUTHOR_URL} target="_blank" rel="noreferrer">
+          {t("about.copyright")}
+        </a>
+      </footer>
     </div>
   );
 }

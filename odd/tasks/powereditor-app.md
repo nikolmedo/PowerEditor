@@ -165,7 +165,14 @@ Reviewed boundary: `f35332a` (phase-0).
 
 ### Slice 10b — `feat/phase-10-packaging`
 - [x] 10a Standalone backend bundle (see progress).
-- [ ] 10b Electron shell, onboarding UI, Windows installer, 10a follow-ups.
+- [x] 10b Electron shell, onboarding UI, Windows installer, 10a follow-ups.
+
+- PR #15 (10a) merged.
+- 10b done (delegated): 10a follow-ups (zip symlinks rejected, per-runtime install lock, rename retry, READY after lifespan, parent handle watch, no .env when frozen, bounded build smoke), session token (header or HttpOnly SameSite=Strict cookie via one-time `/?token=` redirect; only with `--port 0`), guided `/welcome` onboarding, sandboxed Electron 44 shell (sidecar spawn, splash, single instance, allowlisted external links, logs in %APPDATA%), per-user x64 NSIS installer built on ARM64 (228 MiB). Acceptance: install 104 s no admin → onboarding → runtimes 22 s → Whisper 16 s → analyze → draft render → uninstall clean. Evidence: pytest 620, vitest 282.
+- Commits 54aaab0..ffbeaf1 (all approved). Follow-ups: Windows MAX_PATH for Chrome under deep data dirs; unsigned installer (SmartScreen); desktop: sidecar left running on READY timeout, exit-after-ready not handled; onboarding job hang + OpenAI error + skip persistence.
+- User decisions (2026-10-06): license PolyForm Noncommercial 1.0.0 + output permission ("your videos are yours"); copyright `Copyright 2026 Nicolás Olmedo (https://nolmedo.dev)` in README and software; GitHub repo description + topics set; README banner (docs/banner/banner.html → docs/banner.png).
+- License slice done (delegated): LICENSE (byte-exact PolyForm text), THIRD_PARTY_NOTICES.md, package metadata, About section + footer in the web app, Electron About panel, `--version`, NSIS license page (BOM+CRLF generated file), README banner/License/footer.
+- **Licensing findings (open, need a decision before any public build):** BtbN LGPL FFmpeg is LGPL-3.0-or-later (manifest fixed); Remotion's compositor ships a GPL FFmpeg (`--enable-gpl --enable-libx264`) inside the installer; PyAV 19 wheel bundles GPL libx264/libx265 DLLs loaded in-process by the frozen backend; OpenH264 built from source by BtbN is not covered by Cisco's patent license.
 
 ## Next step
-PR for 10a, then 10b. LICENSE still awaits the user's choice.
+PR for 10b + license, then Phase 11 (release workflow as draft releases until licensing findings are resolved, update check).

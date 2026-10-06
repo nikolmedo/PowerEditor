@@ -3,12 +3,13 @@ export const STEPS: readonly Step[] = ["load", "review", "export"];
 
 export type Route =
   | { screen: "home" }
-  | { screen: "setup" | "settings" | "providers" | "features" }
+  | { screen: "setup" | "welcome" | "settings" | "providers" | "features" }
   | { screen: "load"; projectId: string | null }
   | { screen: "review" | "export"; projectId: string };
 
 const STATIC: Record<string, Route> = {
   "/setup": { screen: "setup" },
+  "/welcome": { screen: "welcome" },
   "/settings": { screen: "settings" },
   "/settings/providers": { screen: "providers" },
   "/settings/features": { screen: "features" },
