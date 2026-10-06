@@ -3,8 +3,19 @@
  * down window. The window only ever loads the sidecar's loopback origin; any other link opens
  * in the default browser when its site is on the allowlist, and is dropped otherwise.
  */
-import { app, BrowserWindow, dialog, Menu, session, shell, type WebContents } from "electron";
-import type { ChildProcess } from "node:child_process";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  net,
+  session,
+  shell,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from "electron";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { aboutPanelOptions, APP_NAME, applicationMenuTemplate } from "./about";
@@ -19,6 +30,7 @@ import {
   type Ready,
 } from "./sidecar";
 import { showSplash } from "./splash";
+import { UpdateDownloader } from "./updater";
 import { rememberWindowState, savedWindowOptions } from "./windowState";
 
 const READY_TIMEOUT_S = 90;
@@ -32,6 +44,7 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 
 let sidecar: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
+let appOrigin: string | null = null;
 let quitting = false;
 
 function openLog(name: string): fs.WriteStream {
@@ -122,8 +135,50 @@ function lockDown(contents: WebContents, origin: string): void {
   });
 }
 
+/** Only the sidecar's own pages may drive the updater. */
+function fromApp(event: IpcMainInvokeEvent): boolean {
+  return appOrigin !== null && isAppUrl(event.senderFrame?.url ?? "", appOrigin);
+}
+
+/** IPC for the web app's "Download" button: fetch and verify a release installer, then run
+ * it and quit, so the per-user NSIS installer upgrades this installation in place. */
+function registerUpdater(): void {
+  const updates = new UpdateDownloader({
+    // Electron's fetch follows the system proxy settings, unlike Node's.
+    fetch: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
+    directory: path.join(app.getPath("temp"), "PowerEditor-update"),
+    onState: (state) => mainWindow?.webContents.send("updates:state", state),
+  });
+  ipcMain.handle("updates:download", (event, version: unknown) => {
+    if (!fromApp(event) || typeof version !== "string") return null;
+    log(`downloading update ${version}`);
+    return updates.download(version).then((state) => {
+      log(`update ${version}: ${state.status === "failed" ? state.error : state.status}`);
+      return state;
+    });
+  });
+  ipcMain.handle("updates:installAndQuit", (event) => {
+    const installer = updates.installerPath();
+    if (!fromApp(event) || !installer) return false;
+    log(`running installer ${installer}`);
+    return new Promise<boolean>((resolve) => {
+      const child = spawn(installer, [], { detached: true, stdio: "ignore" });
+      child.once("spawn", () => {
+        child.unref();
+        resolve(true);
+        app.quit();
+      });
+      child.once("error", (error) => {
+        log(`installer did not start: ${error.message}`);
+        resolve(false);
+      });
+    });
+  });
+}
+
 function createMainWindow(ready: Ready, splash: BrowserWindow): void {
   const origin = `http://127.0.0.1:${ready.port}`;
+  appOrigin = origin;
   const stateFile = path.join(app.getPath("userData"), "window-state.json");
   const { bounds, maximized } = savedWindowOptions(stateFile);
   const window = new BrowserWindow({
@@ -165,6 +220,7 @@ async function start(): Promise<void> {
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
     callback(ALLOWED_PERMISSIONS.has(permission)),
   );
+  registerUpdater();
   app.on("web-contents-created", (_event, contents) => {
     contents.on("will-attach-webview", (event) => event.preventDefault());
   });
