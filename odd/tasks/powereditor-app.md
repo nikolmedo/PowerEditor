@@ -87,5 +87,11 @@ Reviewed boundary: `f35332a` (phase-0).
 - Phase 2 measurement (ARM64 host, x64 Node+Chrome emulated, 1080p30, 12.1 s output): 114 s wall = 0.11x realtime (~30 s fixed startup + ~0.17 s/frame). A/V sync pass (17 ms). Loudness pass (-14.0 LUFS). **Clicks at cuts FAIL**: Remotion volume callbacks only change gain at video-frame boundaries.
 - Fix path for clicks (needed under any render engine): rebuild audio sample-accurately with ffmpeg in the final pass (atrim/atempo/afade/concat) and drop Remotion audio.
 
+- User decision (2026-10-06): keep Remotion as render engine (WYSIWYG); fix clicks by rebuilding audio with ffmpeg in the final pass.
+- Delivery: PRs #1 (phase-0), #2 (slice 1), #3 (slice 2) created and merged into `main` in order with merge commits (retargeted to main before each merge). Next slices branch from `main`.
+
+### Slice 2c — `feat/phase-2c-audio`
+- [ ] 2c Sample-accurate audio rebuild in final pass (drop Remotion audio) + 2b WARNING follow-ups.
+
 ## Next step
-User decision: keep Remotion (WYSIWYG, slow on ARM64) vs plan B (FFmpeg render). Then 2c audio rebuild.
+2c via delegated writer.
