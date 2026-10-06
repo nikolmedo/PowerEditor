@@ -159,5 +159,13 @@ Reviewed boundary: `f35332a` (phase-0).
 - PR #13 (9b) merged (a CI-only flaky test pinned the core count; fixed in a follow-up commit before merge).
 - 9c done: README screenshots retaken with the UI in English (review, load, providers, features, setup) and English render frames (title + karaoke, lower third, CTA). Found and fixed while capturing: Graphics track drew overlapping overlays on one lane and let long overlays overflow the timeline (now lane packing + clipping with a "continues" edge, and a click without movement no longer truncates); plural strings ("1 models enabled") via `key.one`/`key.other`. Evidence: vitest web 165.
 
+- PR #14 (9c) merged. Follow-up from its review: moving an overlay longer than the timeline truncates it (OverlayBlock.tsx:76).
+- 10a done (delegated): `resources.py` (frozen/source resource + tool resolution), runtime manager (pinned FFmpeg 8.1.3 LGPL BtbN month-end build + Node 24.21.0 x64, SHA-256 verified; Chrome headless shell via `ensure-browser.mjs`) with `/api/setup/runtime/{name}` jobs and CLI, prebuilt Remotion bundle (`render.mjs --bundle`, setup 0.4-0.8 s vs ~30 s), staged standalone renderer (72 MB), sidecar contract (`serve --port 0`, `POWEREDITOR_READY {port, token}`, `--parent-pid`), PyInstaller onedir (415 MiB; console + windowed exe). Bugs found and fixed: LGPL ffmpeg has no libx264 → OpenH264 fallback; local Whisper crashed (faster-whisper 1.2.1 vs PyAV 19 `metadata_errors`) → decode 16 kHz WAV directly. Evidence: pytest 602 (parent re-run); frozen exe ran analyze + render with PATH limited to C:\Windows and only downloaded runtimes.
+- Commits d462ad4, 42989e2, 21d45b3, e7e8e59 (approved), 039fa6d docs. Follow-ups for 10b: zip symlink safety, install race/rename retry, READY before lifespan, parent PID reuse, build smoke timeout, token not enforced, web types for `runtime` job/setup runtimes, `.env` read by frozen exe, duplicated ctranslate2.dll, OpenH264 patent + LGPL/PyAV notices.
+
+### Slice 10b — `feat/phase-10-packaging`
+- [x] 10a Standalone backend bundle (see progress).
+- [ ] 10b Electron shell, onboarding UI, Windows installer, 10a follow-ups.
+
 ## Next step
-PR for 9c, then Phase 10 (needs the license decision).
+PR for 10a, then 10b. LICENSE still awaits the user's choice.
