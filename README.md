@@ -81,7 +81,7 @@ _The screenshots use synthetic test footage (color bars) generated for the demo.
 
 ## Download and install
 
-> No public download yet: release builds arrive with Phase 11 (GitHub Releases). Until then, build the installer with `python scripts/build_installer.py` (see [Desktop app and installer](#desktop-app-and-installer)).
+> Installers are published on [GitHub Releases](https://github.com/nikolmedo/PowerEditor/releases). Until the first release is published (licensing items are still under review, see `PLAN.md`), build the installer with `python scripts/build_installer.py` (see [Desktop app and installer](#desktop-app-and-installer)).
 
 1. Run `PowerEditor-Setup-<version>-x64.exe`. It installs **for your user only**, needs no administrator rights, and lets you pick the folder (default `%LOCALAPPDATA%\Programs\PowerEditor`). It adds Start menu and desktop shortcuts. Windows on ARM runs the x64 app under emulation.
 2. Start PowerEditor. The first time, a guided setup opens by itself:
@@ -94,6 +94,12 @@ _The screenshots use synthetic test footage (color bars) generated for the demo.
 3. Load a recording and follow the three steps (Load, Review, Export).
 
 **Where things go.** The app lives in the install folder (the Electron shell and the bundled engine). Downloads, projects, models and settings live in `%LOCALAPPDATA%\PowerEditor` (`bin\`, `models\`, `projects\`, `settings.json`): plan for about 1 GB plus your projects. The desktop shell keeps its window position and logs in `%APPDATA%\PowerEditor` (`logs\desktop.log`, `logs\engine.log`). API keys stay in Windows Credential Locker. Uninstalling from **Settings › Apps** removes the app and keeps both data folders; delete them by hand to remove everything.
+
+## Releases and updates
+
+Each release on [GitHub Releases](https://github.com/nikolmedo/PowerEditor/releases) carries the installer (`PowerEditor-Setup-<version>-x64.exe`), `SHA256SUMS.txt`, `LICENSE` and `THIRD_PARTY_NOTICES.md`. To check a download by hand: `certutil -hashfile PowerEditor-Setup-<version>-x64.exe SHA256` and compare with its line in `SHA256SUMS.txt`.
+
+PowerEditor asks GitHub for the newest published release at most every six hours (the answer is cached in the data folder; nothing about you or your projects is sent). When a newer version exists, a banner offers **What's new** and **Download**; hide it with **×** and it stays hidden until the next version. In the desktop app, **Download** fetches the installer, checks it against `SHA256SUMS.txt`, then **Install and restart** closes PowerEditor and runs the installer, which upgrades the installation in place and keeps your data. In a browser, **Download** opens the release page. **Settings › General › Updates** turns automatic checks off; **About › Check now** still checks on request.
 
 ## Requirements
 
@@ -209,6 +215,7 @@ Dense reference for coding agents. Read this before exploring; it should save mo
 | `backend/powereditor/sidecar.py`               | Desktop-shell contract: free-port bind, `POWEREDITOR_READY` line after the lifespan startup, parent watch (process handle on Windows)                                                                                                                                                                                                                                                                                                      |
 | `backend/packaging/`                           | PyInstaller spec (`powereditor.spec`, onedir, console + windowed exe) and its entry script                                                                                                                                                                                                                                                                                                                                                 |
 | `scripts/build_backend.py`                     | Standalone backend build (web, composition bundle, staged renderer, PyInstaller, `--smoke` with a bounded wait)                                                                                                                                                                                                                                                                                                                            |
+| `scripts/version.py`                           | `VERSION` checks and `set`; `release_notes.py` (notes from Conventional Commits) and `checksums.py` (`SHA256SUMS.txt`) for the release workflow                                                                                                                                                                                                                                                                                            |
 | `scripts/build_installer.py`                   | Backend build, then the `desktop` compile and electron-builder into `dist/installer/`; `scripts/render_icon.py` redraws the app icon (`uv run --with pillow`)                                                                                                                                                                                                                                                                              |
 | `desktop/`                                     | Electron shell (`@powereditor/desktop`): `main.ts` (sidecar start, splash, window, single instance, logs, quit), `sidecar.ts` (command, READY parsing, tree kill), `policy.ts` (allowed URLs, window bounds), `about.ts` (About panel, Help menu), `preload.ts`, `i18n/` (shell messages); electron-builder config under `build` in `package.json` (copyright, NSIS license page from the generated `build/license.txt`), icon in `build/` |
 | `backend/powereditor/doctor.py`                | Dependency probes                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -263,6 +270,7 @@ Other web pages can reach `127.0.0.1`, so `LocalOriginGuard` (`api/origin_guard.
 | Route                                                                                                | Purpose                                                                                                                                                                                                                                                                |
 | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/health`, `GET /api/doctor`                                                                 | Version; dependency probes                                                                                                                                                                                                                                             |
+| `GET /api/updates?force=`                                                                            | Newest published release vs. the running version (`latest`, `updateAvailable`, release, installer and checksum URLs, `notes`, `checkedAt`, `enabled`); cached 6 h; offline gives `error: update_check_failed`; `force=true` skips the cache and the setting            |
 | `GET /api/setup`, `POST /api/setup/whisper-model`, `POST /api/setup/runtime/{name}`                  | First-run checklist (doctor, transcriber ready, model downloaded, OpenAI key set, `runtimes`: ffmpeg, node, browser with `installed`/`path`); download the Whisper model or install a runtime (job kind `runtime`, 404 `unknown_runtime`) as a job                     |
 | `GET/PATCH /api/settings`, `PUT/DELETE /api/secrets/{name}`                                          | Settings and secrets (see Configuration)                                                                                                                                                                                                                               |
 | `/api/providers*`, `/api/features/models`                                                            | Model providers and per-feature assignment                                                                                                                                                                                                                             |
@@ -342,9 +350,25 @@ corepack pnpm -r test
 corepack pnpm -r check:types
 corepack pnpm --filter @powereditor/web build
 corepack pnpm format:check
+python scripts/version.py check   # every version string equals VERSION
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same commands on Windows and Linux.
+
+### Versioning and releases
+
+`VERSION` (semver `x.y.z`) is the single version source. `python scripts/version.py set x.y.z` writes it into `backend/pyproject.toml`, `backend/powereditor/__init__.py`, `backend/uv.lock` and the `package.json` of `packages/composition`, `web` and `desktop` (electron-builder names the installer from the desktop one); `show` prints it and `check` fails on any disagreement (CI runs it).
+
+To cut a release:
+
+1. `python scripts/version.py set x.y.z`, then commit (`chore: release x.y.z`) and merge to `main`.
+2. `git tag vx.y.z` on that commit and `git push origin vx.y.z`.
+3. `.github/workflows/release.yml` (windows-latest x64; also `workflow_dispatch` with a `tag`) checks the tag against `VERSION`, runs the backend and pnpm test suites, runs `python scripts/build_installer.py --smoke`, writes `SHA256SUMS.txt` (`scripts/checksums.py`) and the notes (`scripts/release_notes.py`: Features, Fixes and Docs from the Conventional Commits since the previous tag), and creates a **draft** release with the installer, the checksums, `LICENSE` and `THIRD_PARTY_NOTICES.md`.
+4. A maintainer reviews the draft (notes, assets, the licensing items open in `PLAN.md`) and publishes it. Only then do installed apps see it: `releases/latest` never returns drafts or prereleases.
+
+The installer is unsigned for now, so Windows SmartScreen warns on first run.
+
+Update path: the backend's `updates.py` (`UpdateChecker`, injectable `httpx` transport, `User-Agent: PowerEditor/<version>`) answers `GET /api/updates`; the web app shows `updates/UpdateBanner.tsx` in the shell and the status in About. In the desktop app the preload exposes `window.powereditor.updates` (`download(version)`, `onState(listener)`, `installAndQuit()`); `desktop/src/updater.ts` builds both asset URLs from the version (only `https://github.com/nikolmedo/PowerEditor/releases/download/v<semver>/<file>`), streams the installer to `%TEMP%\PowerEditor-update`, accepts it only when its SHA-256 matches `SHA256SUMS.txt`, and `main.ts` spawns it detached and quits (IPC calls are honored only from the sidecar's origin). Without the bridge the web app opens the release page.
 
 ### How to extend
 
