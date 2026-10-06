@@ -149,12 +149,15 @@ Reviewed boundary: `f35332a` (phase-0).
 - HyperFrames research (user request): Apache-2.0; adopted as Phase 9b (overlay/caption looks, export quality presets, RAM-aware concurrency), Phase 10 additions (error hints, memory ceiling, LICENSE + THIRD_PARTY_NOTICES), and a backlog (overlay-only render + ffmpeg composite, Parakeet, carve ducking, shader transitions, matted captions). Open user decision: project license.
 
 ### Slice 9b — `feat/phase-9b-looks`
-- [ ] 9c Retake README screenshots with the UI in English (user rule: docs and screenshots in English) after 9b merges.
+- [x] 9c Retake README screenshots with the UI in English (user rule: docs and screenshots in English) after 9b merges.
 - [x] 9b Overlay variants and caption presets inspired by HyperFrames, export quality presets, RAM-aware render concurrency, Phase 9 follow-ups.
 
 - PR #12 (phase 9) merged after green CI.
 - 9b done (delegated): overlay variants (title headline_slam; lower third kicker_name/mask_reveal/soft_pill; CTA lockup/close) + new templates count_up and progress_ring; subtitle presets pill_karaoke, kinetic_slam, emoji_pop, editorial_emphasis (ASS fallbacks); export quality draft/standard/high; RAM-aware concurrency (7 on this machine, frames cap); Phase 9 follow-ups (upload reset, typed invalid audio errors, null overlay props, drag cancel). No HyperFrames code copied (designs ported). Evidence: pytest 568, vitest 246 (parent re-run); draft render -41% vs standard; concurrency 6 vs 7 no measurable change on an 8 s clip.
 - Follow-ups: kinetic_slam landing overlap; re-measure concurrency on long/low-RAM timelines; optional `Project.language` for stopwords.
 
+- PR #13 (9b) merged (a CI-only flaky test pinned the core count; fixed in a follow-up commit before merge).
+- 9c done: README screenshots retaken with the UI in English (review, load, providers, features, setup) and English render frames (title + karaoke, lower third, CTA). Found and fixed while capturing: Graphics track drew overlapping overlays on one lane and let long overlays overflow the timeline (now lane packing + clipping with a "continues" edge, and a click without movement no longer truncates); plural strings ("1 models enabled") via `key.one`/`key.other`. Evidence: vitest web 165.
+
 ## Next step
-PR for 9b, then 9c (English screenshots); Phase 10 needs the license decision.
+PR for 9c, then Phase 10 (needs the license decision).

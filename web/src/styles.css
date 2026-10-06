@@ -1375,6 +1375,12 @@ textarea {
   height: 44px;
 }
 
+/* A track with stacked lanes (Graphics) grows a compact row per lane. */
+.track[data-lanes] {
+  --lane-pitch: 22px;
+  height: max(30px, calc(var(--lanes) * var(--lane-pitch) + 6px));
+}
+
 .track-label {
   color: var(--muted);
   font-size: 12px;
@@ -1479,6 +1485,23 @@ textarea {
   cursor: grab;
   touch-action: none;
   user-select: none;
+}
+
+.track[data-lanes] .overlay-block {
+  top: calc(4px + var(--lane) * var(--lane-pitch));
+  bottom: auto;
+  height: calc(var(--lane-pitch) - 2px);
+  line-height: calc(var(--lane-pitch) - 2px);
+}
+
+/* The overlay runs past the end of the video: its cut edge fades out instead of closing. */
+.overlay-block[data-continues] {
+  border-right: 2px dashed var(--accent);
+  background-image: linear-gradient(
+    to right,
+    transparent calc(100% - 16px),
+    color-mix(in srgb, var(--accent) 30%, transparent)
+  );
 }
 
 .overlay-block[data-auto] {
