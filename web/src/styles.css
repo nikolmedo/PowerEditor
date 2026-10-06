@@ -1,0 +1,518 @@
+/* PowerEditor: a calm, tool-like surface. Graphite like an editing suite, one "tally light"
+   amber accent for what is live (active step, focus, primary action), IBM Plex Mono for
+   technical values (paths, versions, model ids). */
+
+:root {
+  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", Consolas, monospace;
+  --radius: 4px;
+  --gap: 16px;
+  color-scheme: dark;
+  --bg: #121315;
+  --surface: #1a1c1f;
+  --surface-2: #22252a;
+  --line: #2e3238;
+  --text: #e6e4df;
+  --muted: #9a9ea6;
+  --accent: #e9a23b;
+  --accent-ink: #1a1206;
+  --ok: #6cc28c;
+  --warn: #e9a23b;
+  --bad: #ef7a6d;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f1f0ed;
+  --surface: #fbfaf8;
+  --surface-2: #e9e7e3;
+  --line: #d3d0ca;
+  --text: #1c1d20;
+  --muted: #5d6068;
+  --accent: #9a5b00;
+  --accent-ink: #ffffff;
+  --ok: #1f7a45;
+  --warn: #8a5200;
+  --bad: #b3261e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 var(--font-sans);
+  min-width: 1024px;
+}
+
+h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+
+a {
+  color: var(--accent);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.meta,
+.field-hint {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 2px 0 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Layout */
+
+.shell {
+  display: grid;
+  grid-template: "top top" 52px "nav main" 1fr / 208px 1fr;
+  min-height: 100vh;
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 0 var(--gap);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  width: 176px;
+}
+
+.steps {
+  display: flex;
+  list-style: none;
+  margin: 0 auto 0 0;
+  padding: 0;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 20px;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.step:hover {
+  color: var(--text);
+}
+
+.step[aria-current="page"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.step-index {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.step[aria-current="page"] .step-index {
+  color: var(--accent);
+}
+
+.preferences {
+  display: flex;
+  gap: 8px;
+}
+
+.sidebar {
+  grid-area: nav;
+  padding: var(--gap) 8px;
+  border-right: 1px solid var(--line);
+}
+
+.sidebar-group {
+  margin: 20px 12px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sidebar-link {
+  display: block;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sidebar-link:hover {
+  background: var(--surface-2);
+}
+
+.sidebar-link[aria-current="page"] {
+  background: var(--surface-2);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.content {
+  grid-area: main;
+  padding: 28px 32px 64px;
+  overflow-x: hidden;
+}
+
+.screen {
+  max-width: 880px;
+}
+
+.screen-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0 0 20px;
+  max-width: 64ch;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.spread {
+  justify-content: space-between;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--gap);
+  margin: 0 0 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.panel h2 {
+  margin: 0;
+}
+
+.panel > button,
+.panel > .button {
+  justify-self: start;
+}
+
+/* Controls */
+
+button,
+.button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--muted);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 500;
+}
+
+.quiet {
+  background: transparent;
+}
+
+.danger {
+  color: var(--bad);
+}
+
+input:not([type="checkbox"]),
+select {
+  height: 32px;
+  padding: 0 10px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.preferences select {
+  width: auto;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
+fieldset {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0 0 8px;
+  padding: 16px 0 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+}
+
+legend {
+  float: left;
+  grid-column: 1 / -1;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.field label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field[data-invalid] input {
+  border-color: var(--bad);
+}
+
+.field-error {
+  color: var(--bad);
+  font-size: 12.5px;
+  margin: 0;
+}
+
+.subhead {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 8px 0 0;
+}
+
+.grid-weights {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.secret {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  max-width: 480px;
+}
+
+.sticky-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+
+progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+
+/* Status */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-ok::before {
+  background: var(--ok);
+}
+
+.status-bad::before {
+  background: var(--bad);
+}
+
+.notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--muted);
+  background: var(--surface-2);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.notice-ok {
+  border-left-color: var(--ok);
+}
+
+.notice-warn {
+  border-left-color: var(--warn);
+}
+
+.notice-bad {
+  border-left-color: var(--bad);
+}
+
+/* Lists and tables */
+
+.checks,
+.projects,
+.model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.check {
+  display: grid;
+  grid-template-columns: 120px 120px 1fr;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.check-hint {
+  grid-column: 2 / -1;
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.project {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  align-items: center;
+  gap: var(--gap);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.thumb {
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.project-name {
+  margin: 0;
+  font-weight: 500;
+}
+
+.model-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+}
+
+.model-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.models {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.features {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.features th,
+.features td {
+  text-align: left;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.features thead th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.features tbody th {
+  font-weight: 400;
+  width: 45%;
+}
