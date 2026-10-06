@@ -1,8 +1,9 @@
 """Shared HTTP plumbing for API providers: auth check, bounded retry, error mapping.
 
-Only rate limits (429), server errors (5xx) and failed connections are retried, with
-exponential backoff. A read timeout is not retried: the request may already be running
-and billing on the provider side.
+Only rate limits (429), overload and server errors (5xx, 529) and failed connections are
+retried, with exponential backoff. A read timeout, or a connection that broke after a
+POST was sent, is not retried: the request may already be running and billing on the
+provider side. The API key only ever goes in request headers, never in messages.
 """
 
 from typing import Any
@@ -20,7 +21,7 @@ from powereditor.providers.base import (
 REQUEST_TIMEOUT_S = 60.0
 MAX_ATTEMPTS = 3
 BACKOFF_S = 1.0
-RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504, 529})
 
 
 class ApiProvider:
@@ -73,6 +74,8 @@ class ApiProvider:
                     raise ProviderError("provider_timeout", message) from exc
                 except httpx.TransportError as exc:
                     last_error = self._unavailable(f"connection failed ({type(exc).__name__})")
+                    if method != "GET" and not isinstance(exc, httpx.ConnectError):
+                        raise last_error from exc
                     continue
                 if response.status_code in RETRYABLE_STATUS:
                     last_error = self._unavailable(f"HTTP {response.status_code}")

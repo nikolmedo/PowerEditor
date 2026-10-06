@@ -34,9 +34,15 @@ from powereditor.providers.config import ProviderConfig
 
 JUDGE_TIMEOUT_S = 180.0
 CHECK_TIMEOUT_S = 30.0
+KILL_GRACE_S = 5.0
 DETAIL_CHARS = 300
+CLI_SUFFIXES = ("", ".exe", ".cmd", ".bat")
 _SAFE_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@\[\]-]{0,199}$")
-_AUTH_HINTS = ("unauthorized", "401", "not logged in", "log in", "login", "auth")
+_AUTH_FAILURE = re.compile(
+    r"\b(unauthori[sz]ed|not (logged|signed) in|please (log ?in|sign in)"
+    r"|authentication (failed|required)|invalid api key)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -72,18 +78,39 @@ def run_cli(
         try:
             stdout, stderr = process.communicate(stdin, timeout=timeout_s)
         except subprocess.TimeoutExpired as exc:
-            kill_tree(process)
-            process.communicate()
+            _stop(process)
             message = f"The client did not finish within {timeout_s:.0f} s."
             raise ProviderError("provider_timeout", message) from exc
     return CliOutput(process.returncode, stdout, stderr)
 
 
+def _stop(process: "subprocess.Popen[str]") -> None:
+    """Kill the client tree; if a survivor still holds the pipes, close them instead of
+    waiting for it."""
+    kill_tree(process)
+    try:
+        process.communicate(timeout=KILL_GRACE_S)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        for pipe in (process.stdin, process.stdout, process.stderr):
+            if pipe is not None:
+                pipe.close()
+
+
 def resolve_command(
     executable: str, cli_path: str | None, which: Callable[[str], str | None]
 ) -> list[str] | None:
+    """The client command, or None when it is missing. A configured `cli_path` must be
+    the expected client (`codex`, `codex.exe`, ...), never an arbitrary program."""
     if cli_path:
-        return [cli_path] if Path(cli_path).is_file() else None
+        path = Path(cli_path)
+        allowed = {f"{executable}{suffix}" for suffix in CLI_SUFFIXES}
+        if path.name.lower() not in allowed:
+            raise ProviderError(
+                "cli_not_found",
+                f"The client path must point to {executable} (got {path.name!r}).",
+            )
+        return [cli_path] if path.is_file() else None
     found = which(executable)
     return [found] if found else None
 
@@ -172,9 +199,11 @@ class LocalCliProvider:
         text = (output.stderr.strip() or output.stdout.strip())[-DETAIL_CHARS:]
         return f"{self.label} exited with code {output.returncode}: {text or 'no output'}"
 
-    def _failure(self, output: CliOutput, message: str | None = None) -> ProviderError:
+    def _failure(
+        self, output: CliOutput, message: str | None = None, *, auth: bool = False
+    ) -> ProviderError:
+        """Map a failed run; `auth` is set by adapters that get a structured auth error."""
         detail = message or self._describe(output)
-        lowered = detail.lower()
-        if any(hint in lowered for hint in _AUTH_HINTS):
+        if auth or _AUTH_FAILURE.search(detail):
             return ProviderError("provider_unauthorized", detail)
         return ProviderError("provider_unavailable", detail)

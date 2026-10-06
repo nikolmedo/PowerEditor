@@ -258,3 +258,21 @@ def test_take_weights_are_user_settings(tmp_path: Path) -> None:
     assert service.get_effective().take_weights == effective.take_weights
     with pytest.raises(ValidationError):
         service.update({"takeWeights": {"fillers": -1.0}})
+
+
+def test_legacy_jev_min_confidence_migrates_to_model_min_confidence(tmp_path: Path) -> None:
+    (tmp_path / "settings.json").write_text(json.dumps({"jevMinConfidence": 0.65}), "utf-8")
+    service = _service(tmp_path)
+
+    assert service.get_effective().model_min_confidence == 0.65
+
+    service.update({"silencePaddingMs": 90})
+
+    stored = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    assert stored == {"modelMinConfidence": 0.65, "silencePaddingMs": 90}
+
+
+def test_env_jev_min_confidence_still_sets_the_model_minimum(tmp_path: Path) -> None:
+    service = _service(tmp_path, env=Settings(_env_file=None, jev_min_confidence=0.7))
+
+    assert service.get_effective().model_min_confidence == 0.7

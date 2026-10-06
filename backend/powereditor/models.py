@@ -14,7 +14,7 @@ SubtitlePosition = Literal["bottom", "center", "top"]
 OverlayTemplateId = Literal["title", "lower_third", "cta", "logo", "progress_bar", "image"]
 ColorPreset = Literal["natural", "warm", "cool", "bw"]
 TranscriberProvider = Literal["local", "openai"]
-DecisionEngineName = Literal["heuristic", "jev"]
+DecisionEngineName = Literal["heuristic", "jev", "model"]
 
 
 class CamelModel(BaseModel):
@@ -173,6 +173,8 @@ class TakeFeatures(CamelModel):
     face_centered: float | None = None
     sharpness: float | None = None
     is_last_take: bool
+    fluency: float | None = None
+    """Model fluency score 0..1, set only when a model answers `fluency_score`."""
 
 
 class ClusterDecision(CamelModel):

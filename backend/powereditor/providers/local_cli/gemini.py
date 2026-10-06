@@ -20,6 +20,7 @@ from powereditor.providers.base import (
 )
 from powereditor.providers.local_cli.base import LocalCliProvider, json_object
 
+AUTH_ERROR_TYPE = "AuthError"
 HEADLESS_INSTRUCTION = "Follow the instructions above and answer with the JSON object only."
 _NOTE = "Common Gemini model; any model name the Gemini CLI accepts also works."
 
@@ -48,8 +49,9 @@ class GeminiCliProvider(LocalCliProvider):
         body = json_object(output.stdout)
         error = body.get("error") if body else None
         if output.returncode != 0 or error:
-            message = _error_message(error) if isinstance(error, dict) else None
-            raise self._failure(output, message)
+            details = error if isinstance(error, dict) else {}
+            message = _error_message(details) if details else None
+            raise self._failure(output, message, auth=details.get("type") == AUTH_ERROR_TYPE)
         response = body.get("response") if body else None
         if not isinstance(response, str):
             raise ProviderError("provider_bad_output", "Gemini CLI printed no response.")

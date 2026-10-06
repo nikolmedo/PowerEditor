@@ -40,10 +40,7 @@ class AnthropicApiProvider(ApiProvider):
         params: dict[str, Any] = {"limit": 1000}
         for _ in range(MAX_PAGES):
             data = self._request("GET", "/models", params=params)
-            models.extend(
-                ModelInfo(id=item["id"], label=item.get("display_name"))
-                for item in data.get("data", [])
-            )
+            models.extend(_model_info(item) for item in _items(data.get("data")))
             if not data.get("has_more") or not data.get("last_id"):
                 break
             params = {**params, "after_id": data["last_id"]}
@@ -74,6 +71,19 @@ class AnthropicApiProvider(ApiProvider):
             output_tokens=as_int(usage.get("output_tokens")),
         )
         return build_result(text, request.output_schema, started, tokens)
+
+
+def _items(value: Any) -> list[Any]:
+    if not isinstance(value, list):
+        raise ProviderError("provider_bad_output", "Anthropic sent an unexpected model list.")
+    return value
+
+
+def _model_info(item: Any) -> ModelInfo:
+    if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+        raise ProviderError("provider_bad_output", "Anthropic sent a model without an id.")
+    label = item.get("display_name")
+    return ModelInfo(id=item["id"], label=label if isinstance(label, str) else None)
 
 
 def create_anthropic(config: ProviderConfig, context: ProviderContext) -> AnthropicApiProvider:

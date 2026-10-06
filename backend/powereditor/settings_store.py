@@ -8,7 +8,7 @@ from typing import Any, Literal, Protocol, get_args
 
 import keyring
 import keyring.errors
-from pydantic import Field, ValidationError, field_validator
+from pydantic import AliasChoices, Field, ValidationError, field_validator
 
 from powereditor import doctor
 from powereditor.config import DecisionEngine, Settings, Transcriber, WhisperDevice
@@ -32,7 +32,10 @@ SECRET_NAMES: tuple[SecretName, ...] = get_args(SecretName)
 SecretSource = Literal["env", "keyring"]
 TakeSimilarity = Literal["text", "embeddings"]
 
-_ENV_FIELD_TO_SETTING = {"whisper_language": "language"}
+_ENV_FIELD_TO_SETTING = {
+    "whisper_language": "language",
+    "jev_min_confidence": "model_min_confidence",
+}
 
 _FILE_LOCKS: dict[str, threading.Lock] = {}
 _FILE_LOCKS_GUARD = threading.Lock()
@@ -57,6 +60,8 @@ class TakeWeights(CamelModel):
     face_centered: float = Field(default=0.5, ge=0.0)
     sharpness: float = Field(default=0.5, ge=0.0)
     last_take: float = Field(default=0.75, ge=0.0)
+    fluency: float = Field(default=1.0, ge=0.0)
+    """Model fluency score (0-1); only counts when a model answers `fluency_score`."""
 
 
 class UserSettings(CamelModel):
@@ -66,7 +71,17 @@ class UserSettings(CamelModel):
     language: str | None = "es"
     decision_engine: DecisionEngine = "heuristic"
     jev_model: str = "jev-1.13"
-    jev_min_confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    model_min_confidence: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        validation_alias=AliasChoices(
+            "modelMinConfidence", "model_min_confidence", "jevMinConfidence", "jev_min_confidence"
+        ),
+        serialization_alias="modelMinConfidence",
+    )
+    """A model answer is applied only at or above this confidence (formerly
+    `jevMinConfidence`, still accepted and migrated on the next save)."""
     take_weights: TakeWeights = Field(default_factory=TakeWeights)
     take_similarity: TakeSimilarity = "text"
     silence_padding_ms: int = Field(default=120, ge=0)

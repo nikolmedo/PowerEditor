@@ -28,6 +28,7 @@ from powereditor.providers.config import (
     ModelRef,
     ProviderConfig,
     ProviderId,
+    base_url_problem,
 )
 from powereditor.providers.registry import ProviderKindInfo, ProviderRegistry
 from powereditor.settings_store import SettingsService, UserSettings
@@ -43,6 +44,7 @@ class ProviderCreate(CamelModel):
     enabled_models: list[str] = Field(default_factory=list)
     cli_path: str | None = None
     base_url: str | None = None
+    custom_base_url_confirmed: bool = False
 
 
 class ProviderUpdate(CamelModel):
@@ -50,6 +52,7 @@ class ProviderUpdate(CamelModel):
     enabled_models: list[str] | None = None
     cli_path: str | None = None
     base_url: str | None = None
+    custom_base_url_confirmed: bool | None = None
 
 
 class ProviderView(ProviderConfig):
@@ -96,6 +99,12 @@ def _unprocessable(exc: ValidationError) -> HTTPException:
     return HTTPException(status_code=422, detail=errors)
 
 
+def _trusted(config: ProviderConfig) -> ProviderConfig:
+    if config.transport == "api" and (problem := base_url_problem(config)):
+        raise HTTPException(status_code=422, detail=problem)
+    return config
+
+
 def _free_id(base: str, taken: set[str]) -> str:
     candidate, suffix = base, 2
     while candidate in taken:
@@ -139,7 +148,7 @@ def create_provider(
         if body.id is not None and body.id in taken:
             raise HTTPException(status_code=409, detail=f"Provider '{body.id}' already exists")
         provider_id = body.id or _free_id(f"{body.kind}-{body.transport}".replace("_", "-"), taken)
-        config = ProviderConfig(**body.model_dump(exclude={"id"}), id=provider_id)
+        config = _trusted(ProviderConfig(**body.model_dump(exclude={"id"}), id=provider_id))
         created.append(config)
         return {"providers": [*current.providers, config]}
 
@@ -162,7 +171,7 @@ def update_provider(provider_id: str, body: ProviderUpdate, service: ServiceDep)
 
     def patch(current: UserSettings) -> dict[str, Any]:
         providers = [
-            ProviderConfig(**{**p.model_dump(), **changes}) if p.id == provider_id else p
+            _trusted(ProviderConfig(**{**p.model_dump(), **changes})) if p.id == provider_id else p
             for p in current.providers
         ]
         return {"providers": providers}
@@ -179,6 +188,9 @@ def delete_provider(provider_id: str, service: ServiceDep) -> Response:
     _require(service, provider_id)
 
     def remove(current: UserSettings) -> dict[str, Any]:
+        # Under the settings lock and before anything is written: if the secret cannot be
+        # cleared, the provider and its feature assignments stay untouched.
+        service.clear_provider_api_key(provider_id)
         features = {
             feature: None if ref is not None and ref.provider_id == provider_id else ref
             for feature, ref in current.feature_models.items()
@@ -187,10 +199,9 @@ def delete_provider(provider_id: str, service: ServiceDep) -> Response:
         return {"providers": providers, "feature_models": features}
 
     try:
-        service.clear_provider_api_key(provider_id)
+        service.mutate(remove)
     except keyring.errors.KeyringError as exc:
         raise HTTPException(status_code=503, detail="Secure storage is unavailable") from exc
-    service.mutate(remove)
     return Response(status_code=204)
 
 
@@ -221,11 +232,10 @@ def test_provider(provider_id: str, request: Request, service: ServiceDep) -> Pr
     """API transports list models with the stored key; local clients report version and
     sign-in state. Neither sends a prompt."""
     config = _require(service, provider_id)
-    provider = _build(request, service, config)
-    if config.transport == "local_cli":
-        check = provider.check()
-        return ProviderTestResult(**check.model_dump())
     try:
+        provider = _build(request, service, config)
+        if config.transport == "local_cli":
+            return ProviderTestResult(**provider.check().model_dump())
         count = len(provider.list_models())
     except ProviderError as exc:
         return ProviderTestResult(ok=False, detail=exc.message, code=exc.code)
@@ -236,9 +246,9 @@ def test_provider(provider_id: str, request: Request, service: ServiceDep) -> Pr
 def list_provider_models(
     provider_id: str, request: Request, service: ServiceDep
 ) -> list[ModelInfo]:
-    provider = _build(request, service, _require(service, provider_id))
+    config = _require(service, provider_id)
     try:
-        return provider.list_models()
+        return _build(request, service, config).list_models()
     except ProviderError as exc:
         raise HTTPException(
             status_code=502, detail={"code": exc.code, "message": exc.message}
