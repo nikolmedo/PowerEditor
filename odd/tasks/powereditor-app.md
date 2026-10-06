@@ -46,7 +46,7 @@ Reviewed boundary: `f35332a` (phase-0).
 
 ### Slice 4 — `feat/phase-4-providers`
 - [x] 4a Provider registry (`ModelProvider`, transports `api` / `local_cli`): OpenAI (API + Codex CLI), Gemini (API + Gemini CLI), Claude (API + Claude Code CLI), DeepSeek (API), Jev; per-feature model assignment with heuristic fallback; settings/API for providers and feature mapping.
-- [ ] 4b LLM decision engine (structured JSON + Pydantic, double-order choice, confidence gating, token/cost tracking) wired into take/segment/transition decisions.
+- [x] 4b LLM decision engine (structured JSON + Pydantic, double-order choice, confidence gating, token/cost tracking) wired into take/segment/transition decisions.
 
 ### Slice 5 — `feat/phase-5-subtitles`
 - [ ] 5a Word remap to timeline, subtitle presets, topic transitions, SRT/ASS + OTIO export.
@@ -118,5 +118,8 @@ Reviewed boundary: `f35332a` (phase-0).
 - Commits: `9b06c8b` deps (not due, under budget), `1d82aec` registry+adapters (high, 4 lenses approved), `8328d70` settings+routes (medium, approved). Follow-ups for 4b: base_url can leak API key to arbitrary host; cli_path executes arbitrary binary; overbroad auth hints; anthropic model list KeyError; CLI timeout hang; ReadError retry on POST; provider delete order; test endpoint for CLI untested.
 - **Terms risk (reported to user):** Anthropic (Feb 2026) allows consumer subscription OAuth only in Claude Code/Claude.ai, not routed by third-party apps; Gemini CLI personal terms with 1000 req/day; Codex under ChatGPT terms. Must be surfaced in docs/UI.
 
+- 4b done (delegated): 4a follow-ups (base URL trust per kind + `customBaseUrlConfirmed`, CLI basename check, auth regex, anthropic bad output, CLI kill/close, no POST ReadError retry, delete under lock); `model_min_confidence` (legacy `jev_min_confidence` accepted); typed questions (Noul/Choice/Score) over any provider with strict schemas; `ModelDecisionEngine` routing per feature with heuristic fallback, double-order best-take, confidence gating, usage report `cache/model_usage.json`; Jev provider (`typesafe`, HTTP `POST /v1/systemone`); CLI `providers list`, `features`; README terms section. Evidence: pytest 369 passed (parent re-run); eval-takes unchanged.
+- Commits `139c9a9` (hardening, high, 4 lenses approved), `5c5734f` (engine, medium, approved). Follow-ups: Jev score div-by-zero (jev.py:119), bad-output retry not memoized (model_engine.py:272), base URL check only at write time for stored configs, `.env.example` needs `MODEL_MIN_CONFIDENCE`/`FFMPEG_PATH`/`FFPROBE_PATH` (file not readable by agent), per-provider benchmark pending real footage.
+
 ## Next step
-4b: LLM decision engine + Jev + wiring + 4a follow-ups.
+PR for phase 4, then Phase 5 (subtitles + transitions).
