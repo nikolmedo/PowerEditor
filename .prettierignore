@@ -3,3 +3,5 @@ PLAN.md
 odd/
 backend/
 projects/
+packages/composition/schema/
+packages/composition/src/types.generated.ts

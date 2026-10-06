@@ -1,5 +1,5 @@
 [project]
-name = "autocut"
+name = "powereditor"
 version = "0.1.0"
 description = "Local automatic video editor backend"
 requires-python = ">=3.12"
@@ -10,10 +10,14 @@ dependencies = [
     "pydantic-settings>=2.4",
     "typer>=0.12",
     "rich>=13.7",
+    "platformdirs>=4.12.3",
+    "keyring>=25.7.0",
+    "httpx>=0.28.1",
+    "faster-whisper>=1.2.1",
 ]
 
 [project.scripts]
-autocut = "autocut.cli:app"
+powereditor = "powereditor.cli:app"
 
 [dependency-groups]
 dev = [
@@ -27,7 +31,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["autocut"]
+packages = ["powereditor"]
 
 [tool.ruff]
 line-length = 100
@@ -41,5 +45,14 @@ strict = true
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+module = ["faster_whisper", "faster_whisper.*", "ctranslate2", "ctranslate2.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = [
+    "ffmpeg: requires ffmpeg and ffprobe on PATH or configured",
+    "slow: downloads models or runs heavy inference; run with -m slow",
+]

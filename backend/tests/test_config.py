@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from autocut.config import REPO_ROOT, Settings
+from powereditor.config import REPO_ROOT, Settings
 
 
 def test_env_example_parses_with_inline_comments() -> None:

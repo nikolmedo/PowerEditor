@@ -1,4 +1,4 @@
-# AutoCut — Plan de desarrollo
+# PowerEditor — Plan de desarrollo
 
 App local para Windows que edita videos casi 100% en automático: elige la mejor toma cuando hay repeticiones, elimina silencios, aplica transiciones, genera subtítulos y permite retoques simples desde una interfaz gráfica.
 
@@ -61,10 +61,10 @@ packages/composition (Remotion) → render MP4 → FFmpeg final pass (loudnorm)
 ## Estructura del repo
 
 ```
-autocut/
+powereditor/
   backend/
     pyproject.toml
-    autocut/
+    powereditor/
       config.py              # pydantic-settings, reads .env
       models.py              # Word, Segment, Take, TakeCluster, Project, Clip...
       api/
@@ -361,7 +361,7 @@ interface ColorGrade {
 ### Fase 0 — Setup
 - Monorepo (uv + pnpm), lint, typecheck, tests corriendo, `.env.example`.
 - Script que verifica dependencias: FFmpeg, ffprobe, Node, CUDA (opcional).
-- **Aceptación:** `uv run autocut doctor` reporta estado de cada dependencia.
+- **Aceptación:** `uv run powereditor doctor` reporta estado de cada dependencia.
 
 ### Fase 1 — Ingest y transcripción
 - Ingest (mezzanine, proxy, WAV) + ambos transcriptores.
@@ -370,7 +370,7 @@ interface ColorGrade {
 ### Fase 2 — Silencios y render mínimo
 - VAD, segmentación, corte de silencios, draft `project.json`.
 - Composición Remotion mínima: clips en secuencia + crossfade de audio.
-- **Aceptación:** CLI `autocut render <project>` produce MP4 sin silencios, sin clicks en cortes, A/V sincronizado. **Medir velocidad de render** (si es inaceptable, evaluar plan B: Remotion solo preview + render FFmpeg).
+- **Aceptación:** CLI `powereditor render <project>` produce MP4 sin silencios, sin clicks en cortes, A/V sincronizado. **Medir velocidad de render** (si es inaceptable, evaluar plan B: Remotion solo preview + render FFmpeg).
 
 ### Fase 3 — Tomas (heurística)
 - Clustering + features + `HeuristicEngine`.
