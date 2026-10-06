@@ -8,7 +8,6 @@ from typing import Any
 import httpx
 import keyring.errors
 import pytest
-from fastapi.testclient import TestClient
 
 from powereditor.api.app import create_app
 from powereditor.config import Settings
@@ -28,6 +27,7 @@ from powereditor.providers.local_cli.base import CliOutput, LocalCliProvider, re
 from powereditor.providers.local_cli.claude import ClaudeCliProvider
 from powereditor.providers.registry import default_registry
 from powereditor.settings_store import InMemorySecretStore, SettingsService
+from tests.api_client import local_client
 
 FAKE_CLI = Path(__file__).parent / "fixtures" / "fake_cli.py"
 KEY = "sk-hardening-key"
@@ -245,7 +245,7 @@ def test_delete_keeps_provider_and_assignments_when_the_secret_cannot_be_cleared
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path, _FailingDeleteStore())
-    client = TestClient(create_app(settings_service=service))
+    client = local_client(create_app(settings_service=service))
     client.post("/api/providers", json={"kind": "openai", "transport": "api", "label": "O"})
     ref = {"providerId": "openai-api", "model": "gpt-a"}
     client.put("/api/features/models", json={"features": {"topic_change": ref}})
@@ -258,7 +258,7 @@ def test_delete_keeps_provider_and_assignments_when_the_secret_cannot_be_cleared
 
 
 def test_create_rejects_an_untrusted_base_url(tmp_path: Path) -> None:
-    client = TestClient(create_app(settings_service=_service(tmp_path, InMemorySecretStore())))
+    client = local_client(create_app(settings_service=_service(tmp_path, InMemorySecretStore())))
     body = {"kind": "openai", "transport": "api", "label": "O"}
 
     rejected = client.post("/api/providers", json={**body, "baseUrl": "https://evil.example"})
@@ -290,7 +290,7 @@ def test_test_endpoint_checks_a_local_cli_provider(tmp_path: Path) -> None:
     registry = default_registry()
     registry.register("stubkind", "local_cli", lambda config, context: _StubCli(None))
     service = _service(tmp_path, InMemorySecretStore())
-    client = TestClient(create_app(settings_service=service, provider_registry=registry))
+    client = local_client(create_app(settings_service=service, provider_registry=registry))
     client.post(
         "/api/providers", json={"kind": "stubkind", "transport": "local_cli", "label": "Stub"}
     )
@@ -309,7 +309,7 @@ def test_test_endpoint_checks_a_local_cli_provider(tmp_path: Path) -> None:
 def test_test_endpoint_reports_a_rejected_cli_path(tmp_path: Path) -> None:
     impostor = tmp_path / "evil.exe"
     impostor.write_text("", encoding="utf-8")
-    client = TestClient(create_app(settings_service=_service(tmp_path, InMemorySecretStore())))
+    client = local_client(create_app(settings_service=_service(tmp_path, InMemorySecretStore())))
     client.post(
         "/api/providers",
         json={

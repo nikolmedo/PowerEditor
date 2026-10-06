@@ -24,6 +24,7 @@ class BurstTranscriber:
 
     def __init__(self) -> None:
         self.calls = 0
+        self.languages: list[str | None] = []
 
     @property
     def provider(self) -> TranscriberProvider:
@@ -35,6 +36,7 @@ class BurstTranscriber:
 
     def transcribe(self, audio_path: Path, language: str | None) -> Transcript:
         self.calls += 1
+        self.languages.append(language)
         words = [
             word
             for k in range(BURSTS)
@@ -91,6 +93,24 @@ def test_analyze_project_removes_silence_end_to_end(burst_clip: Path, tmp_path: 
         layout, service, files=[burst_clip], transcriber=fake, detector=EnergyDetector()
     )
     assert fake.calls == 1
+
+
+def test_project_language_overrides_the_setting(burst_clip: Path, tmp_path: Path) -> None:
+    service = SettingsService.default()
+    layout = ProjectLayout.for_project(AppPaths(data_dir=tmp_path), "demo")
+    fake = BurstTranscriber()
+
+    analyze_project(
+        layout,
+        service,
+        files=[burst_clip],
+        transcriber=fake,
+        detector=EnergyDetector(),
+        language="en",
+    )
+
+    assert service.get_effective().language == "es"
+    assert fake.languages == ["en"]
 
 
 def test_analyze_cli_prints_summary(

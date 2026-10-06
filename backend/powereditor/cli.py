@@ -1,9 +1,14 @@
+import os
+import threading
+import time
+import webbrowser
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
+import httpx
 import typer
 import uvicorn
 from rich.console import Console
@@ -11,6 +16,7 @@ from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedCo
 from rich.table import Table
 
 from powereditor import doctor as doctor_module
+from powereditor.api.app import ENV_DEV_CORS
 from powereditor.decide.model_engine import ModelUsageReport
 from powereditor.eval.takes_eval import DEFAULT_BENCHMARK, evaluate_takes, load_benchmark
 from powereditor.export.subtitle_files import SubtitleFormat, write_subtitles
@@ -86,9 +92,40 @@ def doctor() -> None:
         raise typer.Exit(code=1)
 
 
+def open_when_ready(base_url: str, timeout_s: float = 30.0) -> threading.Thread:
+    """Open the browser once the server answers its health check (in the background)."""
+
+    def wait_and_open() -> None:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                if httpx.get(f"{base_url}/api/health", timeout=1.0).is_success:
+                    break
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.25)
+        webbrowser.open(f"{base_url}/")
+
+    thread = threading.Thread(target=wait_and_open, daemon=True)
+    thread.start()
+    return thread
+
+
 @app.command()
-def serve(port: int = typer.Option(DEFAULT_PORT, help="Port to listen on.")) -> None:
-    """Start the local API server."""
+def serve(
+    port: Annotated[int, typer.Option(help="Port to listen on.")] = DEFAULT_PORT,
+    open_browser: Annotated[
+        bool, typer.Option("--open", help="Open the app in the default browser.")
+    ] = False,
+    dev: Annotated[
+        bool, typer.Option(help="Allow the Vite dev server origin (CORS) for UI development.")
+    ] = False,
+) -> None:
+    """Start the local server: the API under /api and the built web app at /."""
+    if dev:
+        os.environ[ENV_DEV_CORS] = "1"
+    if open_browser:
+        open_when_ready(f"http://{DEFAULT_HOST}:{port}")
     uvicorn.run("powereditor.api.app:create_app", factory=True, host=DEFAULT_HOST, port=port)
 
 

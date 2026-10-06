@@ -63,6 +63,17 @@ def ensure_model(name: str, models_dir: Path) -> Path:
     return Path(download_model(name, cache_dir=str(models_dir)))
 
 
+def is_model_cached(name: str, models_dir: Path) -> bool:
+    """Whether `ensure_model` would find the model locally, without touching the network."""
+    from faster_whisper import download_model
+
+    try:
+        download_model(name, cache_dir=str(models_dir), local_files_only=True)
+    except Exception:  # huggingface_hub raises several error types for a missing model
+        return False
+    return True
+
+
 def resolve_device(device: WhisperDevice, cuda_available: bool) -> tuple[str, str]:
     use_cuda = device == "cuda" or (device == "auto" and cuda_available)
     return ("cuda", "float16") if use_cuda else ("cpu", "int8")

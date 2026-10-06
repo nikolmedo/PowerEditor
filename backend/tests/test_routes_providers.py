@@ -11,6 +11,7 @@ from powereditor.config import Settings
 from powereditor.paths import AppPaths
 from powereditor.providers.config import ProviderConfig
 from powereditor.settings_store import InMemorySecretStore, SettingsService
+from tests.api_client import local_client
 
 KEY = "sk-provider-secret"
 
@@ -40,7 +41,7 @@ def client(service: SettingsService) -> TestClient:
     app = create_app(
         settings_service=service, provider_transport=httpx.MockTransport(_models_handler)
     )
-    return TestClient(app)
+    return local_client(app)
 
 
 def _create(client: TestClient, **body: Any) -> dict[str, Any]:

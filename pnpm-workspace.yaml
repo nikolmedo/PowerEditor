@@ -1,5 +1,6 @@
 packages:
   - "packages/*"
+  - "web"
 
 minimumReleaseAgeExclude:
   - "@remotion/bundler@4.0.533"
@@ -32,6 +33,7 @@ minimumReleaseAgeExclude:
   - "@remotion/web-renderer@4.0.533"
   - "@remotion/zod-types@4.0.533"
   - remotion@4.0.533
+  - "@vitejs/plugin-react@6.1.2"
 
 # Remotion ships no win32-arm64 compositor, so on ARM64 Windows renders run under an
 # emulated x64 Node (see backend/powereditor/render/node_runtime.py). That Node loads

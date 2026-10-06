@@ -52,7 +52,7 @@ Reviewed boundary: `f35332a` (phase-0).
 - [x] 5a Word remap to timeline, subtitle presets, topic transitions, SRT/ASS + OTIO export.
 
 ### Slice 6 — `feat/phase-6-ui`
-- [ ] 6a Web app: settings page (keys + test connection), first-run setup check, Load/Review(read-only)/Export steps, jobs WebSocket, media range serving.
+- [x] 6a Web app: settings page (keys + test connection), first-run setup check, Load/Review(read-only)/Export steps, jobs WebSocket, media range serving.
 
 ### Slice 7–9 — `feat/phase-7-editing`, `feat/phase-8-audio-color`, `feat/phase-9-graphics`
 - [ ] 7a Editing: change take, trim, remove/restore, transitions, subtitle edit, undo/redo.
@@ -62,7 +62,7 @@ Reviewed boundary: `f35332a` (phase-0).
 ### Slice 11 — docs, CI/CD, releases, auto-update
 - [x] 11a PLAN.md rewritten in English with new Phases 4 and 11; README.md (humans + agents); CLAUDE.md/AGENTS.md pointers; `.github/workflows/ci.yml` (windows + ubuntu). Branch `docs/plan-readme`.
 - [ ] 11b Release workflow on `v*` tags (build installer, GitHub Release), single version source, in-app update check (GitHub latest release API) — after packaging.
-- [ ] 11c Screenshots in README once the UI lands; README kept current every phase.
+- [x] 11c Screenshots in README once the UI lands; README kept current every phase.
 
 ### Slice 10 — `feat/phase-10-packaging`
 - [ ] 10a Electron shell + PyInstaller backend sidecar, first-run onboarding (ffmpeg, Whisper model download, API key), installer.
@@ -125,5 +125,15 @@ Reviewed boundary: `f35332a` (phase-0).
 - Phase 5 done (delegated): follow-ups (Jev single-level score, bad-output memo, stored base URL rejected at build); `Subtitles.sourceWords` + `TimelineWord.wordIndex` schema change; `rebuild_subtitles`, `retime_words`, `edit_subtitle_text`, `group_lines` with TS mirror and shared fixture; 4 presets in Inter (bundled, OFL) with reel safe areas; heuristic topic transitions (new source → slide, long pause → fade) alternating cut/punch_in, all non-overlapping; SRT/ASS (karaoke `\k`), optional `nle` extra for OTIO/FCPXML (speed dropped in FCPXML). Acceptance: after speed 1.5 + take swap, word starts within half a frame of audio (−2..−15 ms); render 0.10–0.19x realtime. Evidence: pytest 397 passed, vitest 29 passed (parent re-run).
 - Commits `7cb75ea` deps (not due), `ec45214` backend (approved, no findings), `fae43e7` composition (approved; follow-up: font load not awaited in font.ts).
 
+- PR #8 (phase 5) merged after green CI.
+- Phase 6 done on `feat/phase-6-ui` (delegated, 3 writers):
+  - 6a backend API: ProjectStore (ETag saves), JobManager (cancellable process scopes), routes for projects/upload/media (Range)/jobs (WebSocket)/setup (Whisper download), SPA serving, `serve --open/--dev`. Commits c49fb80..75befbd, reviewed.
+  - 6b-1: LocalOriginGuard (Host/Origin check, closes review R1), React+Vite web app (`web/`), typed API client, i18n es/en, shell, Setup/General/Providers/Features screens, CI web build. Commits a8a92e1..2e6e411, reviewed (security commit force-reviewed).
+  - 6b-2: Load/Review/Export steps, Remotion Player on proxies, timeline from `timelineLayout`, follow-ups (client JSON errors, useResource race, watchJob polling fallback, save/analyze lock, bounded shutdown). Commits ee5af27..29c79f3, reviewed.
+  - Evidence: pytest 481 passed, vitest 93 passed; full flow create → analyze → render → exports exercised through the API with silent sources; UI pages verified in Chrome.
+  - Player playback not observable in the automated (hidden) Chrome tab; the UI and media URL are correct (206). Needs a manual check with real footage.
+- README screenshots: real UI captures (review, load, providers, features, setup) and real render frames of a synthetic demo project, in `docs/screenshots/`.
+- Follow-ups: upload.ts untested; LoadStep swallows analyze failure / upload failed dispatch (LoadStep.tsx:83-110); Remotion license prop on Player.
+
 ## Next step
-Phase 6 UI.
+PR for phase 6, then Phase 7 (editing).

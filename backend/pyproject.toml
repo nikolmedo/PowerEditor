@@ -17,6 +17,8 @@ dependencies = [
     "numpy>=2.0",
     "rapidfuzz>=3.14.6",
     "jsonschema>=4.23",
+    "python-multipart>=0.0.20",
+    "websockets>=15",
 ]
 
 [project.scripts]

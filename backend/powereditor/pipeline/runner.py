@@ -62,6 +62,20 @@ class ProjectLayout:
     def project_file(self) -> Path:
         return self.root / "project.json"
 
+    @property
+    def sources_dir(self) -> Path:
+        """Uploaded originals (files added by path are read where they are)."""
+        return self.root / "sources"
+
+    @property
+    def exports_dir(self) -> Path:
+        return self.root / "exports"
+
+    @property
+    def meta_file(self) -> Path:
+        """Name, creation time, sources and analyze options of a project."""
+        return self.root / "meta.json"
+
     def cache_file(self, stage: str) -> Path:
         return self.cache_dir / f"{stage}.json"
 
