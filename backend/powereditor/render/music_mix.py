@@ -30,18 +30,27 @@ def _num(value: float) -> str:
 def build_mix_filtergraph(
     track: AudioTrack, speech: Sequence[Interval], total_samples: int, sample_rate: int
 ) -> str:
-    """Filtergraph mixing input 1 (the music) under input 0 (the voice)."""
+    """Filtergraph mixing input 1 (the music) under input 0 (the voice).
+
+    The fades share the timeline, each taking at most half of it; a timeline too short for
+    a one-sample fade gets none (`afade` refuses zero samples).
+    """
+    if total_samples <= 0:
+        raise ValueError("the voice has no samples to mix music under")
     fade_in = min(round(FADE_IN_S * sample_rate), total_samples // 2)
     fade_out = min(round(FADE_OUT_S * sample_rate), total_samples // 2)
     duck = ducking_expression(speech, track.ducking_db) if track.ducking_enabled else "1"
     gain = _num(track.volume) if duck == "1" else f"{_num(track.volume)}*{duck}"
+    fades = [
+        *([f"afade=t=in:ss=0:ns={fade_in}"] if fade_in > 0 else []),
+        *([f"afade=t=out:ss={total_samples - fade_out}:ns={fade_out}"] if fade_out > 0 else []),
+    ]
     music = ",".join(
         [
             f"aformat=sample_fmts=fltp:sample_rates={sample_rate}:channel_layouts=stereo",
             "asetpts=N/SR/TB",
             f"atrim=end_sample={total_samples}",
-            f"afade=t=in:ss=0:ns={fade_in}",
-            f"afade=t=out:ss={total_samples - fade_out}:ns={fade_out}",
+            *fades,
             f"asetnsamples=n={ENVELOPE_FRAME_SAMPLES}:p=0",
             f"volume=volume='{gain}':eval=frame",
         ]

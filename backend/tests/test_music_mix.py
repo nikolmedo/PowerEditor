@@ -129,3 +129,14 @@ def test_rendered_mix_ducks_music_under_speech_with_exact_length(tmp_path: Path)
         FFMPEG or "ffmpeg", ["-i", str(final), "-af", "ebur128=framelog=quiet", "-f", "null", "-"]
     )
     assert parse_integrated_lufs(stderr) == pytest.approx(-14.0, abs=1.0)
+
+
+def test_timelines_too_short_for_fades_mix_without_them() -> None:
+    graph = build_mix_filtergraph(MUSIC, [], total_samples=1, sample_rate=RATE)
+    assert "afade" not in graph
+    assert "atrim=end_sample=1," in graph
+
+
+def test_an_empty_voice_cannot_be_mixed() -> None:
+    with pytest.raises(ValueError, match="no samples"):
+        build_mix_filtergraph(MUSIC, [], total_samples=0, sample_rate=RATE)

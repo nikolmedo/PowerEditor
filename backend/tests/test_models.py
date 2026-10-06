@@ -163,3 +163,27 @@ def test_transcript_word_probability_is_optional() -> None:
     )
 
     assert transcript.words == [Word(text="hola", start=0.0, end=0.4, prob=None)]
+
+
+def test_projects_saved_before_color_bounds_load_with_clamped_values(tmp_path: Path) -> None:
+    payload = _project_payload()
+    payload["colorGrade"] |= {"brightness": 3.0, "temperature": -4.0}
+    payload["clips"][0]["colorOverride"] = {"contrast": 2.5, "saturation": None}
+    path = tmp_path / "project.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    project = load_project(path)
+
+    assert project.color_grade.brightness == 2.0
+    assert project.color_grade.temperature == -1.0
+    override = project.clips[0].color_override
+    assert override is not None
+    assert (override.contrast, override.saturation) == (2.0, None)
+
+
+def test_new_writes_still_reject_out_of_range_color_values() -> None:
+    payload = _project_payload()
+    payload["colorGrade"] |= {"brightness": 3.0}
+
+    with pytest.raises(ValidationError):
+        Project.model_validate(payload)

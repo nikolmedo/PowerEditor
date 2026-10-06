@@ -1,6 +1,7 @@
 import type { AudioTrack, Project } from "@powereditor/composition";
-import { useReducer, useRef, useState } from "react";
-import { uploadFraction, uploadMusic, uploadReducer } from "../api/upload";
+import { useCallback, useRef } from "react";
+import type { MusicFile } from "../api/types";
+import { uploadFraction, uploadMusic } from "../api/upload";
 import {
   DUCKING_DB_RANGE,
   musicTrack,
@@ -15,6 +16,7 @@ import { useT } from "../i18n";
 import { useProjectStore } from "../store/project";
 import { ErrorNotice, Slider } from "../ui/primitives";
 import { fileLabel } from "./timelineModel";
+import { useLatestUpload } from "./useLatestUpload";
 
 const MUSIC_TYPES = "audio/*,.mp3,.wav,.m4a,.aac,.ogg,.opus,.flac";
 const percent = (volume: number) => `${Math.round(volume * 100)} %`;
@@ -57,38 +59,22 @@ function VoiceSection({ project }: { project: Project }) {
   );
 }
 
-/** Pick a file, upload it to the project's media folder, then put it on the timeline. */
+/** Pick a file, upload it to the project's media folder, then put it on the timeline. Picking
+ * another file while one uploads replaces it: only the newest upload reaches the project. */
 function MusicPicker({ projectId, replacing }: { projectId: string; replacing: boolean }) {
   const t = useT();
   const edit = useProjectStore((state) => state.edit);
   const picker = useRef<HTMLInputElement>(null);
-  const [upload, dispatch] = useReducer(uploadReducer, { phase: "idle" });
-  const [error, setError] = useState<unknown>(null);
+  const onStored = useCallback(
+    (stored: MusicFile) => edit((p) => setMusic(p, stored.fileName)),
+    [edit],
+  );
+  const { state: upload, error, send } = useLatestUpload(projectId, uploadMusic, onStored);
   const label = replacing ? t("audio.replaceMusic") : t("audio.addMusic");
-
-  const send = async (file: File) => {
-    setError(null);
-    dispatch({ type: "start", total: file.size });
-    try {
-      const sent = uploadMusic(projectId, file, (loaded, total) =>
-        dispatch({ type: "progress", loaded, total }),
-      );
-      const stored = await sent.done;
-      dispatch({ type: "done" });
-      edit((p) => setMusic(p, stored.fileName));
-    } catch (caught) {
-      setError(caught);
-      dispatch({ type: "done" });
-    }
-  };
 
   return (
     <>
-      <button
-        type="button"
-        disabled={upload.phase === "uploading"}
-        onClick={() => picker.current?.click()}
-      >
+      <button type="button" onClick={() => picker.current?.click()}>
         {label}
       </button>
       <input
