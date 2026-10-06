@@ -42,7 +42,7 @@ Reviewed boundary: `f35332a` (phase-0).
 - [ ] 2b Remotion composition (clips + audio crossfade), render CLI + loudnorm final pass, render-speed measurement.
 
 ### Slice 3 — `feat/phase-3-takes`
-- [ ] 3a Clustering, deterministic features, HeuristicEngine, synthetic benchmark (clearly labelled synthetic) + eval script.
+- [x] 3a Clustering, deterministic features, HeuristicEngine, synthetic benchmark (clearly labelled synthetic) + eval script.
 
 ### Slice 4 — `feat/phase-4-providers`
 - [ ] 4a Provider registry (`ModelProvider`, transports `api` / `local_cli`): OpenAI (API + Codex CLI), Gemini (API + Gemini CLI), Claude (API + Claude Code CLI), DeepSeek (API), Jev; per-feature model assignment with heuristic fallback; settings/API for providers and feature mapping.
@@ -106,5 +106,9 @@ Reviewed boundary: `f35332a` (phase-0).
 - User requests (2026-10-06): all docs in English; tidy readable code; README for humans (marketing, screenshots) and agents (token-saving guide); release workflow + in-app update check; multi-provider AI (API or local subscription CLIs: OpenAI, Gemini, Claude; DeepSeek API only), extensible registry, Providers screen + Features screen for per-feature model choice. Added to PLAN.md as Phase 4 (providers, absorbs Jev) and Phase 11 (docs/CI/release/update).
 - Follow-up: `.env.example` lacks `FFMPEG_PATH`/`FFPROBE_PATH` (present in `config.py`).
 
+- PR #4 (2c) and #5 (docs/CI) merged into `main` (user approved, 2026-10-06). First CI run green on windows + ubuntu. Accumulated #4+#5 range review approved; follow-ups: POSIX kill-tree on render timeout, per-clip voice decode from file start, crossfade naming, VoiceGraph dual representation, fade on short source audio.
+- 3a done (delegated): text clustering (rapidfuzz, window of 6 takes; optional `embeddings` extra), deterministic features (fillers, restarts, cut-off, rate, prob, RMS dBFS, last-take bonus; optional `vision` extra with OpenCV <5), `decide/` with `DecisionEngine` protocol (+ `same_take`, `name`, `fingerprint`) and `HeuristicEngine`, takes stage cached, draft builder keeps best take and stores alternatives as removed clips sharing `takeGroupId` (no schema change), `powereditor eval-takes`. Evidence: pytest 246 passed / 1 skipped (vision extra) (parent re-run); SYNTHETIC benchmark 25 clusters: clustering 100%, best take 100%, off-take 100%, 72% automatic decisions (optimistic: fixture written with the heuristic).
+- Follow-ups: takes stage loads whole WAV; proxies not in cache key; zero-length chosen clip vanishes; eval doesn't validate one `best` per group.
+
 ## Next step
-Slice 3 (takes heuristic) on a branch stacked on `docs/plan-readme`.
+Phase 4 (providers) on `feat/phase-4-providers`.

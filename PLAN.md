@@ -255,12 +255,13 @@ class Transcriber(Protocol):
 
 ```python
 class DecisionEngine(Protocol):
-    def decide_cluster(self, cluster: TakeCluster, features: list[TakeFeatures]) -> ClusterDecision: ...
+    def same_take(self, first: Take, second: Take, similarity: float) -> SameTakeDecision: ...
+    def decide_cluster(self, cluster: TakeCluster, takes: list[Take], features: list[TakeFeatures]) -> ClusterDecision: ...
     def classify_segment(self, segment: Segment) -> SegmentFlags: ...
     def transition_between(self, prev: Segment, next: Segment) -> TransitionDecision: ...
 ```
 
-The `HeuristicEngine` is the default and the fallback that is always available. Phase 4 replaces the single engine switch with per-feature model selection across providers (see Phase 4).
+`decide_cluster` receives the takes (with their text), not only the ids, so a model-backed engine has the minimal state it needs. `same_take` answers the clustering grey zone. The `HeuristicEngine` is the default and the fallback that is always available. Phase 4 replaces the single engine switch with per-feature model selection across providers (see Phase 4).
 
 ### AI features
 
@@ -460,11 +461,12 @@ interface ColorGrade {
 - ARM64 notes: Remotion ships no win32-arm64 compositor, so renders use an x64 Node (`nodePath` setting, `<data dir>/bin/node-x64`, or `PATH`); pnpm installs x64 optional dependencies next to the host ones. faster-whisper (ctranslate2) works on CPU.
 - Known limit: the Player preview still uses frame-level fades, so preview (not export) can click at cuts.
 
-### Phase 3: Takes (heuristic)
+### Phase 3: Takes (heuristic) (done, synthetic benchmark)
 
 - Clustering + features + `HeuristicEngine`.
 - Benchmark: 20–30 hand-labelled clusters (`backend/tests/fixtures/takes_benchmark.json`); a synthetic set is allowed while real footage is missing, clearly labelled synthetic.
-- **Acceptance:** an evaluation script reports take-choice accuracy.
+- **Acceptance (met on synthetic data):** `powereditor eval-takes` reports take-choice accuracy. On the 25 synthetic clusters the heuristic scores 100% clustering, 100% best take and 100% off-take remarks, with 72% of decisions above confidence 0.6. The set was written together with the heuristic, so these numbers are optimistic; a hand-labelled set from real footage is still needed.
+- Embedding similarity (`takeSimilarity: "embeddings"`, `embeddings` extra) and OpenCV visual features (`vision` extra) are optional; the defaults are rapidfuzz text similarity and no visual features.
 
 ### Phase 4: AI providers and per-feature model selection
 
