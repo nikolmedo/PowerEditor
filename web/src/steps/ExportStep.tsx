@@ -1,6 +1,6 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { api } from "../api/endpoints";
-import type { ExportFile, JobKind, SubtitleFormat } from "../api/types";
+import type { ExportFile, JobKind, RenderQuality, SubtitleFormat } from "../api/types";
 import { useT } from "../i18n";
 import { JobStages } from "../jobs/JobStages";
 import { isRunning, useJob } from "../jobs/useJob";
@@ -8,6 +8,8 @@ import { stepPath } from "../routes";
 import { Link } from "../shell/AppShell";
 import { ErrorNotice, SelectField, TextField } from "../ui/primitives";
 import { useResource } from "../ui/useResource";
+
+const QUALITIES: readonly RenderQuality[] = ["draft", "standard", "high"];
 
 /** Mirrors the backend's `EXPORT_NAME_PATTERN`: a plain file name without extension. */
 const EXPORT_NAME = /^[A-Za-z0-9][A-Za-z0-9._ -]*$/;
@@ -69,6 +71,7 @@ export function ExportStep({ projectId }: { projectId: string }) {
   );
   const exports = useResource(useCallback(() => api.exports(projectId), [projectId]));
   const [name, setName] = useState("final");
+  const [quality, setQuality] = useState<RenderQuality>("standard");
   const [format, setFormat] = useState<SubtitleFormat>("srt");
   const [started, setStarted] = useState<StartedJob | null>(null);
   const [startError, setStartError] = useState<unknown>(null);
@@ -93,7 +96,7 @@ export function ExportStep({ projectId }: { projectId: string }) {
   };
   const render = (event: FormEvent) => {
     event.preventDefault();
-    if (nameOk) void start(() => api.render(projectId, name), "render");
+    if (nameOk) void start(() => api.render(projectId, name, quality), "render");
   };
 
   if (item && item.status !== "analyzed") {
@@ -128,6 +131,13 @@ export function ExportStep({ projectId }: { projectId: string }) {
           hint={t("export.name.hint")}
           error={nameOk ? undefined : t("export.name.invalid")}
         />
+        <SelectField
+          label={t("export.quality")}
+          value={quality}
+          onChange={(value) => setQuality(value as RenderQuality)}
+          options={QUALITIES.map((value) => ({ value, label: t(`export.quality.${value}`) }))}
+        />
+        <p className="meta">{t(`export.quality.${quality}.hint`)}</p>
         <button type="submit" className="primary" disabled={busy || !nameOk}>
           {t("export.render")}
         </button>

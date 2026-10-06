@@ -15,6 +15,7 @@ const NUMBER_FIELDS = [
   "targetLufs",
   "punchInScale",
   "modelMinConfidence",
+  "renderMaxConcurrency",
 ] as const;
 const BOOLEAN_FIELDS = ["autoCta"] as const;
 const WEIGHT_PREFIX = "takeWeights.";
@@ -139,6 +140,11 @@ export function SettingsScreen() {
           />
           <TextField inputMode="decimal" {...bind("targetLufs", "settings.targetLufs")} />
           <TextField inputMode="decimal" {...bind("punchInScale", "settings.punchInScale")} />
+          <TextField
+            inputMode="decimal"
+            {...bind("renderMaxConcurrency", "settings.renderMaxConcurrency")}
+            hint={t("settings.renderMaxConcurrency.hint")}
+          />
         </fieldset>
         <fieldset>
           <legend>{t("settings.section.takes")}</legend>

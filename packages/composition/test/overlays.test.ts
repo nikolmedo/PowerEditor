@@ -28,6 +28,7 @@ const overlay = (id: string, startFrame: number, endFrame: number): Overlay => (
 describe("overlay props", () => {
   it("fills every template's defaults, with the project accent as the color", () => {
     expect(defaultOverlayProps("title", ACCENT)).toEqual({
+      variant: "classic",
       text: "",
       subtitle: "",
       position: "center",
@@ -52,7 +53,21 @@ describe("overlay props", () => {
       { name: "  Ana Pérez ", role: 42, side: "middle", color: "#00aa11", extra: true },
       ACCENT,
     );
-    expect(props).toEqual({ name: "Ana Pérez", role: "", side: "left", color: "#00aa11" });
+    expect(props).toEqual({
+      variant: "clean_bar",
+      name: "Ana Pérez",
+      role: "",
+      side: "left",
+      color: "#00aa11",
+    });
+  });
+
+  it("falls back to the defaults when the stored props are not an object", () => {
+    for (const raw of [null, undefined, "title", ["a"]]) {
+      expect(normalizeOverlayProps("cta", raw as never, ACCENT)).toEqual(
+        defaultOverlayProps("cta", ACCENT),
+      );
+    }
   });
 
   it("refuses colors that are not six-digit hex", () => {
@@ -75,7 +90,7 @@ describe("overlay props", () => {
   });
 
   it("describes a form field for every default prop of every template", () => {
-    expect(OVERLAY_TEMPLATES).toHaveLength(6);
+    expect(OVERLAY_TEMPLATES).toHaveLength(8);
     for (const templateId of OVERLAY_TEMPLATES) {
       const keys = OVERLAY_FIELDS[templateId].map((field) => field.key).sort();
       expect(keys).toEqual(Object.keys(defaultOverlayProps(templateId, ACCENT)).sort());

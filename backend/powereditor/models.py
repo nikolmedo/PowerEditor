@@ -9,9 +9,20 @@ from pydantic.alias_generators import to_camel
 ProjectPreset = Literal["reel_9x16", "landscape_16x9"]
 TransitionType = Literal["cut", "punch_in", "fade", "slide"]
 AudioTrackKind = Literal["voice", "music", "sfx"]
-SubtitlePreset = Literal["karaoke_highlight", "clean", "bold_pop", "minimal"]
+SubtitlePreset = Literal[
+    "karaoke_highlight",
+    "clean",
+    "bold_pop",
+    "minimal",
+    "pill_karaoke",
+    "kinetic_slam",
+    "emoji_pop",
+    "editorial_emphasis",
+]
 SubtitlePosition = Literal["bottom", "center", "top"]
-OverlayTemplateId = Literal["title", "lower_third", "cta", "logo", "progress_bar", "image"]
+OverlayTemplateId = Literal[
+    "title", "lower_third", "cta", "logo", "progress_bar", "image", "count_up", "progress_ring"
+]
 ColorPreset = Literal["natural", "warm", "cool", "bw"]
 TranscriberProvider = Literal["local", "openai"]
 DecisionEngineName = Literal["heuristic", "jev", "model"]

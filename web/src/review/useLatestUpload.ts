@@ -35,8 +35,8 @@ export function useLatestUpload<T>(
     async (file: File) => {
       const token = ++latest.current;
       active.current?.abort();
-      const isCurrent = () =>
-        token === latest.current && useProjectStore.getState().projectId === projectId;
+      const isNewest = () => token === latest.current;
+      const isCurrent = () => isNewest() && useProjectStore.getState().projectId === projectId;
       setError(null);
       dispatch({ type: "start", total: file.size });
       const upload = start(projectId, file, (loaded, total) => {
@@ -45,13 +45,20 @@ export function useLatestUpload<T>(
       active.current = upload;
       try {
         const stored = await upload.done;
-        if (!isCurrent()) return;
-        dispatch({ type: "done" });
-        onStored(stored);
+        if (isCurrent()) {
+          dispatch({ type: "done" });
+          onStored(stored);
+        } else if (isNewest()) {
+          // Another project was opened: drop the file, but leave no progress behind.
+          dispatch({ type: "reset" });
+        }
       } catch (caught) {
-        if (!isCurrent()) return;
-        setError(caught);
-        dispatch({ type: "done" });
+        if (isCurrent()) {
+          setError(caught);
+          dispatch({ type: "done" });
+        } else if (isNewest()) {
+          dispatch({ type: "reset" });
+        }
       } finally {
         if (active.current === upload) active.current = null;
       }

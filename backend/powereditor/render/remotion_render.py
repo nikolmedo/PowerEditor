@@ -22,6 +22,7 @@ from powereditor.pipeline.ffmpeg import FractionCallback
 from powereditor.process import kill_tree, tracked
 from powereditor.render.base import RenderSettings, RenderTiming
 from powereditor.render.media_server import serve_directory
+from powereditor.render.quality import QUALITY_PROFILES, remotion_args
 from powereditor.timeline import timeline_layout
 
 STDERR_TAIL_CHARS = 4000
@@ -83,6 +84,7 @@ class OverlayAssetNotFoundError(RenderError):
 
 
 IMAGE_TEMPLATES = frozenset({"logo", "image"})
+"""Templates whose `props.src` names a file in `media/` (`count_up`, `progress_ring` need none)."""
 
 
 def _check_media(project: Project, media_dir: Path) -> None:
@@ -146,7 +148,10 @@ class RemotionRenderer:
                     str(self.script),
                     "--props", str(props_file),
                     "--output", str(output),
+                    *remotion_args(QUALITY_PROFILES[settings.quality]),
                 ]  # fmt: skip
+                if settings.concurrency is not None:
+                    command += ["--concurrency", str(settings.concurrency)]
                 with (
                     subprocess.Popen(
                         command,

@@ -71,5 +71,21 @@ describe("AudioPanel music upload", () => {
 
     expect(useProjectStore.getState().projectId).toBe("p2");
     expect(currentMusic()).toBe("C:/music/song.mp3");
+    // The dropped upload must not leave its progress bar behind.
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("clears the progress of an upload that fails after another project was opened", async () => {
+    const pending = deferredUpload();
+    vi.mocked(uploadMusic).mockReturnValueOnce(pending.upload);
+    render(<AudioPanel projectId="p1" project={PROJECT} />);
+
+    await pick("one.mp3");
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+    act(() => useProjectStore.getState().load("p2", PROJECT, "etag"));
+    await act(async () => pending.abort());
+
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

@@ -17,7 +17,7 @@ from powereditor.api.routes_settings import ServiceDep
 from powereditor.api.services import StoreDep, http_error, project_layout
 from powereditor.models import CamelModel
 from powereditor.pipeline.ffmpeg import FfmpegError, MediaTools, MissingToolError
-from powereditor.pipeline.ingest import probe_audio_duration
+from powereditor.pipeline.ingest import InvalidAudioError, probe_audio_duration
 
 router = APIRouter(prefix="/api")
 
@@ -57,9 +57,10 @@ def upload_music(
             shutil.copyfileobj(file.file, handle, COPY_CHUNK_BYTES)
         try:
             duration = probe_audio_duration(tools.ffprobe, partial)
-        except ValueError as exc:
-            raise http_error(422, exc, "invalid_music") from exc
-        except FfmpegError as exc:
+        except InvalidAudioError as exc:
+            raise http_error(422, exc) from exc
+        except (FfmpegError, ValueError) as exc:
+            # Probe internals (JSON or number parsing, ffprobe stderr) stay out of the answer.
             error = ValueError("The file is not a readable audio file.")
             raise http_error(422, error, "invalid_music") from exc
         partial.replace(layout.media_dir / file_name)

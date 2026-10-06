@@ -4,12 +4,16 @@ from typing import Protocol
 
 from powereditor.models import Project
 from powereditor.pipeline.ffmpeg import FractionCallback
+from powereditor.render.quality import RenderQuality
 
 
 @dataclass(frozen=True)
 class RenderSettings:
     audio_crossfade_ms: int
     punch_in_scale: float = 1.1
+    quality: RenderQuality = "standard"
+    concurrency: int | None = None
+    """Browser tabs Remotion renders with; None leaves Remotion's default."""
 
 
 @dataclass(frozen=True)

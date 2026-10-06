@@ -3,7 +3,13 @@
 from typing import Literal
 
 from powereditor.export.subtitles import SubtitleLine, group_lines
-from powereditor.models import Project, ProjectPreset, SubtitlePosition, SubtitleStyle
+from powereditor.models import (
+    Project,
+    ProjectPreset,
+    SubtitlePosition,
+    SubtitlePreset,
+    SubtitleStyle,
+)
 from powereditor.timeline import timeline_layout
 
 SubtitleFormat = Literal["srt", "ass"]
@@ -19,6 +25,19 @@ SAFE_AREAS: dict[ProjectPreset, tuple[float, float, float, float]] = {
     "landscape_16x9": (0.08, 0.1, 0.06, 0.06),
 }
 _ALIGNMENT: dict[SubtitlePosition, int] = {"bottom": 2, "center": 5, "top": 8}
+# ASS cannot animate per word like the video does; these presets are written as the closest
+# static style (the pill becomes karaoke colouring, the slam a bold line, emphasis plain text).
+ASS_FALLBACK: dict[SubtitlePreset, SubtitlePreset] = {
+    "pill_karaoke": "karaoke_highlight",
+    "kinetic_slam": "bold_pop",
+    "emoji_pop": "clean",
+    "editorial_emphasis": "clean",
+}
+
+
+def _ass_style(style: SubtitleStyle) -> SubtitleStyle:
+    fallback = ASS_FALLBACK.get(style.preset)
+    return style.model_copy(update={"preset": fallback}) if fallback else style
 
 
 def _lines(project: Project) -> list[SubtitleLine]:
@@ -98,7 +117,7 @@ def _style_line(style: SubtitleStyle, preset: ProjectPreset) -> str:
 
 
 def write_ass(project: Project) -> str:
-    style = project.subtitles.style
+    style = _ass_style(project.subtitles.style)
     width, height = DIMENSIONS[project.preset]
     karaoke = style.preset == "karaoke_highlight"
     events = []

@@ -62,6 +62,33 @@ describe("Graphics track", () => {
     expect(handlers.onOverlaySpan).toHaveBeenCalledWith("o1", { startFrame: 10, endFrame: 40 });
   });
 
+  it("drops a drag the browser cancels, without committing it", () => {
+    const { handlers, block } = renderTimeline();
+    const before = block.style.left;
+
+    fireEvent.pointerDown(block, { button: 0, clientX: 0 });
+    fireEvent.pointerMove(block, { clientX: 100 });
+    fireEvent.pointerCancel(block, { clientX: 100 });
+
+    expect(handlers.onOverlaySpan).not.toHaveBeenCalled();
+    expect(block.style.left).toBe(before);
+    expect(block.dataset.dragging).toBeUndefined();
+  });
+
+  it("ends a drag cleanly when the pointer capture is lost", () => {
+    const { handlers, block } = renderTimeline();
+    const before = block.style.left;
+
+    fireEvent.pointerDown(block, { button: 0, clientX: 0 });
+    fireEvent.pointerMove(block, { clientX: 100 });
+    fireEvent.lostPointerCapture(block);
+    fireEvent.pointerMove(block, { clientX: 300 });
+    fireEvent.pointerUp(block, { clientX: 300 });
+
+    expect(handlers.onOverlaySpan).not.toHaveBeenCalled();
+    expect(block.style.left).toBe(before);
+  });
+
   it("resizes an overlay by dragging its end edge", () => {
     const { handlers, block } = renderTimeline();
     const edge = block.querySelector('[data-edge="end"]') as HTMLElement;
@@ -131,6 +158,41 @@ describe("GraphicsPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: t("graphics.remove") }));
     expect(useProjectStore.getState().project?.overlays).toEqual(PROJECT.overlays);
+  });
+
+  it("offers each look of a template and adds the one picked, then switches its look", async () => {
+    render(<Harness frame={0} />);
+    const name = `${t("overlay.lower_third")} · ${t("graphics.option.kicker_name")}`;
+
+    await userEvent.click(
+      screen.getByRole("button", { name: t("graphics.addTemplate", { template: name }) }),
+    );
+    const added = () => useProjectStore.getState().project?.overlays.at(-1);
+    expect(added()).toMatchObject({
+      templateId: "lower_third",
+      props: { variant: "kicker_name", name: "Tu nombre" },
+    });
+
+    await userEvent.selectOptions(
+      screen.getByLabelText(t("graphics.field.variant")),
+      t("graphics.option.mask_reveal"),
+    );
+    expect(added()?.props.variant).toBe("mask_reveal");
+  });
+
+  it("types the counter's number in a box instead of dragging a slider", async () => {
+    render(<Harness frame={0} />);
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: t("graphics.addTemplate", { template: t("overlay.count_up") }),
+      }),
+    );
+    const value = screen.getByLabelText(t("graphics.field.value"));
+    await userEvent.clear(value);
+    await userEvent.type(value, "2500");
+
+    expect(useProjectStore.getState().project?.overlays.at(-1)?.props.value).toBe(2500);
   });
 
   it("marks automatic graphics in the list", () => {

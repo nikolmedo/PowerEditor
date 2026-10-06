@@ -32,6 +32,8 @@ export interface UserSettings {
   targetLufs: number;
   punchInScale: number;
   autoCta: boolean;
+  /** Browser tabs per render; 0 picks them from the cores and free memory. */
+  renderMaxConcurrency: number;
   ffmpegPath: string | null;
   ffprobePath: string | null;
   nodePath: string | null;
@@ -175,3 +177,6 @@ export interface ExportFile {
 }
 
 export type SubtitleFormat = "srt" | "ass";
+
+/** Export quality presets of `POST /api/projects/{id}/render`. */
+export type RenderQuality = "draft" | "standard" | "high";

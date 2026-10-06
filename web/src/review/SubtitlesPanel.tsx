@@ -1,21 +1,18 @@
 import {
   groupLines,
+  SUBTITLE_PRESETS,
   timelineWords,
   type Project,
   type SubtitleStyle,
 } from "@powereditor/composition";
-import { useState, type KeyboardEvent } from "react";
+import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import { editSubtitles, setSubtitleStyle } from "../edit/operations";
 import { useT } from "../i18n";
 import { useProjectStore } from "../store/project";
 import { Field, NumberField, SelectField } from "../ui/primitives";
 
-const PRESETS: readonly SubtitleStyle["preset"][] = [
-  "karaoke_highlight",
-  "clean",
-  "bold_pop",
-  "minimal",
-];
+/** Which sample word each preview marks: the active word, or the emphasized one. */
+const SAMPLE_MARK = 1;
 const POSITIONS: readonly SubtitleStyle["position"][] = ["bottom", "center", "top"];
 
 interface LineRange {
@@ -42,6 +39,49 @@ export function lineRanges(project: Project): LineRange[] {
     fromIndex = range.toIndex;
     return range;
   });
+}
+
+/** A small dark frame showing a sample line in each preset (see `.preset-sample`). */
+function PresetPicker({
+  value,
+  highlightColor,
+  onChange,
+}: {
+  value: SubtitleStyle["preset"];
+  highlightColor: string;
+  onChange: (preset: SubtitleStyle["preset"]) => void;
+}) {
+  const t = useT();
+  const words = t("subtitlePreset.sample").split(" ");
+  return (
+    <div
+      className="preset-picker"
+      role="radiogroup"
+      aria-label={t("edit.subtitlePreset")}
+      style={{ "--preset-accent": highlightColor } as CSSProperties}
+    >
+      {SUBTITLE_PRESETS.map((preset) => (
+        <button
+          key={preset}
+          type="button"
+          role="radio"
+          aria-checked={preset === value}
+          className="preset-tile"
+          onClick={() => onChange(preset)}
+        >
+          <span className="preset-sample" data-preset={preset} aria-hidden="true">
+            {words.map((word, index) => (
+              <span key={index} data-mark={index === SAMPLE_MARK || undefined}>
+                {word}
+              </span>
+            ))}
+            {preset === "emoji_pop" && <span data-mark>{t("subtitlePreset.sampleEmoji")}</span>}
+          </span>
+          <span>{t(`subtitlePreset.${preset}`)}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function LineEditor({ line, editable }: { line: LineRange; editable: boolean }) {
@@ -101,11 +141,11 @@ export function SubtitlesPanel({ project }: { project: Project }) {
 
   return (
     <div className="panel-body">
-      <SelectField
-        label={t("edit.subtitlePreset")}
+      <p className="subhead">{t("edit.subtitlePreset")}</p>
+      <PresetPicker
         value={style.preset}
-        options={PRESETS.map((value) => ({ value, label: t(`subtitlePreset.${value}`) }))}
-        onChange={(value) => restyle({ preset: value as SubtitleStyle["preset"] })}
+        highlightColor={style.highlightColor}
+        onChange={(preset) => restyle({ preset })}
       />
       <div className="grid-2">
         {number("fontSize", 16, 160)}

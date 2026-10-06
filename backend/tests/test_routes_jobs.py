@@ -8,6 +8,7 @@ from starlette.websockets import WebSocketDisconnect
 from powereditor.api.services import Pipelines
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout
 from powereditor.projects import ProjectMeta
+from powereditor.render.quality import RenderQuality
 from powereditor.render.remotion_render import RenderTimeoutError
 from powereditor.settings_store import SettingsService
 from powereditor.transcribe.factory import TranscriberConfigError
@@ -24,7 +25,7 @@ class GatedPipelines(Pipelines):
         self.started = threading.Event()
         self.release = threading.Event()
         self.error = error
-        self.calls: list[tuple[str, Any]] = []
+        self.calls: list[tuple[Any, ...]] = []
 
     def _run(self, progress: ProgressCallback) -> None:
         progress("ingest", 0.0, "running")
@@ -46,9 +47,14 @@ class GatedPipelines(Pipelines):
         return {"clips": 4}
 
     def fake_render(
-        self, layout: ProjectLayout, _: SettingsService, name: str, progress: ProgressCallback
+        self,
+        layout: ProjectLayout,
+        _: SettingsService,
+        name: str,
+        progress: ProgressCallback,
+        quality: RenderQuality,
     ) -> dict[str, Any]:
-        self.calls.append(("render", name))
+        self.calls.append(("render", name, quality))
         self._run(progress)
         return {"file": f"{name}.mp4"}
 
@@ -99,7 +105,7 @@ def test_second_job_on_a_project_conflicts(tmp_path: Path) -> None:
     assert delete.status_code == 409
     assert listed[0]["activeJobId"] == first["id"]
     assert done["result"] == {"file": "draft.mp4"}
-    assert pipelines.calls == [("render", "draft")]
+    assert pipelines.calls == [("render", "draft", "standard")]
 
 
 def test_saving_is_refused_while_analyzing(tmp_path: Path) -> None:
@@ -251,3 +257,19 @@ def test_project_list_reports_the_active_job_kind_and_last_error(tmp_path: Path)
     assert failed["lastError"] == {"code": "render_timeout", "message": "render timed out"}
     assert (running["activeJobId"], running["activeJobKind"]) == (job["id"], "analyze")
     assert finished["lastError"] is None
+
+
+def test_render_takes_a_quality_preset_and_refuses_unknown_ones(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    pipelines = GatedPipelines()
+    pipelines.release.set()
+    layout = stored_project(data)
+    base = f"/api/projects/{layout.project_id}"
+    with make_client(data, pipelines=pipelines) as client:
+        refused = client.post(f"{base}/render", json={"quality": "ultra"})
+        job = client.post(f"{base}/render", json={"exportName": "quick", "quality": "draft"})
+        assert job.status_code == 202
+        assert wait_for_job(client, job.json()["id"])["status"] == "succeeded"
+
+    assert refused.status_code == 422
+    assert pipelines.calls == [("render", "quick", "draft")]

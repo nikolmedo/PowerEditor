@@ -2,9 +2,9 @@ import { useState, type CSSProperties } from "react";
 import { AbsoluteFill, Img, useCurrentFrame, useVideoConfig } from "remotion";
 
 import { mediaUrl } from "../clips/media";
-import { SUBTITLE_FONT_FAMILY } from "../subtitles/font";
+import { area, SHADOW, type GraphicContext } from "./base";
 import { readableTextColor } from "./color";
-import type { Insets } from "./layout";
+import { CtaClose, CtaLockup, HeadlineSlam, LOWER_THIRD_LOOKS } from "./Looks";
 import type {
   CtaProps,
   ImageProps,
@@ -12,43 +12,14 @@ import type {
   LowerThirdProps,
   ProgressBarProps,
   TitleProps,
-  VerticalPosition,
 } from "./templates";
 
-/** What every template receives besides its own props. */
-export interface GraphicContext {
-  /** 0 hidden … 1 settled, from `overlayMotion`. */
-  presence: number;
-  insets: Insets;
-  /** Size unit: 1 at 1080 p. */
-  unit: number;
-}
+export type { GraphicContext } from "./base";
 
-const JUSTIFY: Record<VerticalPosition, CSSProperties["justifyContent"]> = {
-  top: "flex-start",
-  center: "center",
-  bottom: "flex-end",
-};
-const SHADOW = "0 2px 12px rgba(0,0,0,0.55)";
-
-function area(insets: Insets, position: VerticalPosition): CSSProperties {
-  return {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: JUSTIFY[position],
-    padding: `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`,
-    fontFamily: SUBTITLE_FONT_FAMILY,
-  };
-}
-
-export const Title: React.FC<{ props: TitleProps } & GraphicContext> = ({
-  props,
-  presence,
-  insets,
-  unit,
-}) => {
+export const Title: React.FC<{ props: TitleProps } & GraphicContext> = (context) => {
+  const { props, presence, insets, unit } = context;
   if (!props.text) return null;
+  if (props.variant === "headline_slam") return <HeadlineSlam {...context} />;
   return (
     <AbsoluteFill style={area(insets, props.position)}>
       <div
@@ -78,14 +49,11 @@ export const Title: React.FC<{ props: TitleProps } & GraphicContext> = ({
   );
 };
 
-export const LowerThird: React.FC<{ props: LowerThirdProps } & GraphicContext> = ({
-  props,
-  presence,
-  insets,
-  unit,
-}) => {
+export const LowerThird: React.FC<{ props: LowerThirdProps } & GraphicContext> = (context) => {
+  const { props, presence, insets, unit } = context;
   if (!props.name && !props.role) return null;
   const fromLeft = props.side === "left";
+  const Look = LOWER_THIRD_LOOKS[props.variant];
   return (
     <AbsoluteFill
       style={{
@@ -93,50 +61,54 @@ export const LowerThird: React.FC<{ props: LowerThirdProps } & GraphicContext> =
         alignItems: fromLeft ? "flex-start" : "flex-end",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: fromLeft ? "row" : "row-reverse",
-          opacity: presence,
-          transform: `translateX(${(1 - presence) * (fromLeft ? -60 : 60) * unit}px)`,
-        }}
-      >
+      {Look ? (
+        <Look {...context} fromLeft={fromLeft} />
+      ) : (
         <div
           style={{
-            width: 10 * unit,
-            background: props.color,
-            transform: `scaleY(${presence})`,
-          }}
-        />
-        <div
-          style={{
-            padding: `${18 * unit}px ${28 * unit}px`,
-            background: "rgba(10,10,10,0.72)",
-            color: "white",
-            textAlign: fromLeft ? "left" : "right",
+            display: "flex",
+            flexDirection: fromLeft ? "row" : "row-reverse",
+            opacity: presence,
+            transform: `translateX(${(1 - presence) * (fromLeft ? -60 : 60) * unit}px)`,
           }}
         >
-          {props.name && (
-            <div style={{ fontSize: 52 * unit, fontWeight: 700, lineHeight: 1.15 }}>
-              {props.name}
-            </div>
-          )}
-          {props.role && (
-            <div style={{ fontSize: 34 * unit, fontWeight: 400, opacity: 0.85 }}>{props.role}</div>
-          )}
+          <div
+            style={{
+              width: 10 * unit,
+              background: props.color,
+              transform: `scaleY(${presence})`,
+            }}
+          />
+          <div
+            style={{
+              padding: `${18 * unit}px ${28 * unit}px`,
+              background: "rgba(10,10,10,0.72)",
+              color: "white",
+              textAlign: fromLeft ? "left" : "right",
+            }}
+          >
+            {props.name && (
+              <div style={{ fontSize: 52 * unit, fontWeight: 700, lineHeight: 1.15 }}>
+                {props.name}
+              </div>
+            )}
+            {props.role && (
+              <div style={{ fontSize: 34 * unit, fontWeight: 400, opacity: 0.85 }}>
+                {props.role}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </AbsoluteFill>
   );
 };
 
-export const Cta: React.FC<{ props: CtaProps } & GraphicContext> = ({
-  props,
-  presence,
-  insets,
-  unit,
-}) => {
+export const Cta: React.FC<{ props: CtaProps } & GraphicContext> = (context) => {
+  const { props, presence, insets, unit } = context;
   if (!props.text) return null;
+  if (props.variant === "lockup") return <CtaLockup {...context} />;
+  if (props.variant === "close") return <CtaClose {...context} />;
   return (
     <AbsoluteFill style={area(insets, props.position)}>
       <div

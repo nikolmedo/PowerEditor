@@ -89,6 +89,15 @@ export function OverlayBlock({
       onOverlaySpan(overlay.id, span);
     }
   };
+  // A cancelled gesture or a lost capture (the element re-rendered away, another window took
+  // the pointer) abandons the drag: the block snaps back and the project stays unchanged.
+  // After a normal release the browser also reports the lost capture; `end` already finished.
+  const cancel = (event: PointerEvent<HTMLElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    drag.current = null;
+    setPreview(null);
+  };
   const keys = (event: KeyboardEvent<HTMLElement>) => {
     const step = event.shiftKey ? fps : 1;
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
@@ -128,7 +137,8 @@ export function OverlayBlock({
       // Pointer capture sends an edge's moves here too, so one set of handlers serves all.
       onPointerMove={move}
       onPointerUp={end}
-      onPointerCancel={end}
+      onPointerCancel={cancel}
+      onLostPointerCapture={cancel}
     >
       <span
         className="overlay-edge"
