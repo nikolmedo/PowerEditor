@@ -11,6 +11,7 @@ export type UploadAction =
   | { type: "start"; total: number }
   | { type: "progress"; loaded: number; total: number }
   | { type: "done" }
+  | { type: "reset" }
   | { type: "failed"; error: ApiError };
 
 export function uploadReducer(state: UploadState, action: UploadAction): UploadState {
@@ -24,6 +25,8 @@ export function uploadReducer(state: UploadState, action: UploadAction): UploadS
       return { phase: "done" };
     case "failed":
       return { phase: "failed", error: action.error };
+    case "reset":
+      return { phase: "idle" };
   }
 }
 

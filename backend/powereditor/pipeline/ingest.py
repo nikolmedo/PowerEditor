@@ -114,21 +114,28 @@ def probe_media(ffprobe: str, path: Path) -> ProbeResult:
     return parse_probe(json.loads(output))
 
 
+class InvalidAudioError(ValueError):
+    """A readable file that is not usable audio; the message is fit for the user."""
+
+    code = "invalid_music"
+
+
 def probe_audio_duration(ffprobe: str, path: Path) -> float:
     """Length in seconds of a file with an audio stream.
 
-    Raises ValueError, with a message fit for the user (it never names `path`, which may be
-    a temporary file), when the file has no audio stream or no length.
+    Raises InvalidAudioError, with a message fit for the user (it never names `path`, which
+    may be a temporary file), when the file has no audio stream or no length. Any other
+    failure (unreadable probe output) surfaces as a plain ValueError or FfmpegError.
     """
     flags = ["-v", "error", "-print_format", "json", "-show_format", "-show_streams"]
     data: dict[str, Any] = json.loads(run_capture([ffprobe, *flags, str(path)]))
     streams: list[dict[str, Any]] = data.get("streams", [])
     audio = next((stream for stream in streams if stream.get("codec_type") == "audio"), None)
     if audio is None:
-        raise ValueError("The file has no audio stream.")
+        raise InvalidAudioError("The file has no audio stream.")
     duration = float(data.get("format", {}).get("duration") or audio.get("duration") or 0.0)
     if duration <= 0:
-        raise ValueError("The audio has no length.")
+        raise InvalidAudioError("The audio has no length.")
     return duration
 
 

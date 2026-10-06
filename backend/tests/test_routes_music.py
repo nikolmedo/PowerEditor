@@ -63,3 +63,28 @@ def test_uploaded_music_is_served_with_an_audio_type(tmp_path: Path) -> None:
     (layout.media_dir / "music-0011aabb.mp3").write_bytes(b"ID3")
     response = make_client(data).get(f"/api/projects/{layout.project_id}/media/music-0011aabb.mp3")
     assert response.headers["content-type"] == "audio/mpeg"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ValueError("Expecting value: line 1 column 1 (char 0)"),
+        ValueError("could not convert string to float: 'N/A'"),
+    ],
+)
+def test_probe_internals_never_reach_the_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: ValueError
+) -> None:
+    def broken_probe(ffprobe: str, path: Path) -> float:
+        raise error
+
+    monkeypatch.setattr("powereditor.api.routes_audio.probe_audio_duration", broken_probe)
+
+    status, body, media_dir = _upload(tmp_path, "song.mp3", b"ID3")
+
+    assert status == 422
+    assert body["detail"] == {
+        "code": "invalid_music",
+        "message": "The file is not a readable audio file.",
+    }
+    assert list(media_dir.iterdir()) == []
