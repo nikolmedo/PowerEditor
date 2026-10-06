@@ -67,6 +67,118 @@ export function TextField({ label, value, onChange, hint, error, mono, ...input 
   );
 }
 
+interface SliderProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  /** How the value reads next to the label: a factor (1.50×), a percentage, decibels. */
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+  step?: number;
+  disabled?: boolean;
+}
+
+export function Slider({
+  label,
+  value,
+  min,
+  max,
+  format,
+  onChange,
+  step = 0.05,
+  disabled,
+}: SliderProps) {
+  return (
+    <label className="slider">
+      <span className="row spread">
+        {label}
+        <span className="mono">{format(value)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  );
+}
+
+interface NumberFieldProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+  hint?: string | undefined;
+  disabled?: boolean;
+  /** Round to whole numbers (the default). */
+  integer?: boolean;
+}
+
+const clampTo = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/**
+ * A number input that lets the text be incomplete or out of range while it is typed ("1" on
+ * the way to "120"). Valid values apply at once; the rest is clamped when the field is left or
+ * Enter is pressed, and an empty or unparsable entry falls back to the current value.
+ */
+export function NumberField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+  hint,
+  disabled,
+  integer = true,
+}: NumberFieldProps) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const parse = (text: string) => {
+    const parsed = Number(text);
+    if (text.trim() === "" || !Number.isFinite(parsed)) return null;
+    return integer ? Math.round(parsed) : parsed;
+  };
+  const type = (text: string) => {
+    setDraft(text);
+    const parsed = parse(text);
+    if (parsed !== null && parsed >= min && parsed <= max && parsed !== value) onChange(parsed);
+  };
+  const commit = () => {
+    if (draft === null) return;
+    const parsed = parse(draft);
+    setDraft(null);
+    if (parsed === null) return;
+    const clamped = clampTo(parsed, min, max);
+    if (clamped !== value) onChange(clamped);
+  };
+  return (
+    <Field label={label} hint={hint}>
+      {(id, describedBy) => (
+        <input
+          id={id}
+          type="number"
+          className="mono"
+          min={min}
+          max={max}
+          disabled={disabled}
+          aria-describedby={describedBy}
+          value={draft ?? String(value)}
+          onChange={(event) => type(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit();
+          }}
+        />
+      )}
+    </Field>
+  );
+}
+
 interface SelectFieldProps {
   label: string;
   value: string;

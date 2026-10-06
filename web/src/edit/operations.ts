@@ -22,6 +22,8 @@ export const SPEED_RANGE = [0.5, 2] as const;
 export const VOLUME_RANGE = [0, 2] as const;
 /** Length of a fade or slide when none is given; the draft builder uses the same value. */
 export const TRANSITION_SECONDS = 0.3;
+/** Confidence of a decision the user made by hand. */
+export const MANUAL_CONFIDENCE = 1;
 export const TRANSITION_TYPES: readonly TransitionType[] = ["cut", "punch_in", "fade", "slide"];
 
 export type Edge = "start" | "end";
@@ -118,6 +120,8 @@ function takeOwner(project: Project, clipId: string): Clip | undefined {
 /**
  * Keep `alternativeId` instead of the take `keptId`. The alternative moves into the kept take's
  * place on the timeline and inherits its incoming transition and its list of alternatives.
+ * The choice is now the user's, so the new take is fully confident and the old one loses the
+ * engine's confidence (it describes a decision that no longer holds).
  */
 export function swapTake(project: Project, keptId: string, alternativeId: string): Project {
   const kept = project.clips.find((clip) => clip.id === keptId);
@@ -127,12 +131,14 @@ export function swapTake(project: Project, keptId: string, alternativeId: string
     ...alternative,
     removed: kept.removed,
     transitionIn: kept.transitionIn,
+    decisionConfidence: MANUAL_CONFIDENCE,
     alternativeTakeIds: [keptId, ...kept.alternativeTakeIds.filter((id) => id !== alternativeId)],
   };
   const newAlternative: Clip = {
     ...kept,
     removed: true,
     transitionIn: alternative.transitionIn,
+    decisionConfidence: null,
     alternativeTakeIds: [],
   };
   const clips = project.clips.map((clip) => {

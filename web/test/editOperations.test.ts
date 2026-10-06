@@ -47,6 +47,11 @@ describe("swapTake", () => {
     expect(clip(result, "k1").transitionIn).toEqual({ type: "cut", durationFrames: 0 });
   });
 
+  it("marks the newly kept take as a manual choice with full confidence", () => {
+    expect(clip(swapped, "r1").decisionConfidence).toBe(1);
+    expect(clip(swapped, "k1").decisionConfidence).toBeNull();
+  });
+
   it("ignores a clip that is not one of the take's alternatives", () => {
     expect(swapTake(PROJECT, "k1", "k2")).toBe(PROJECT);
   });

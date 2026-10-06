@@ -40,7 +40,14 @@ export function useAutosave(projectId: string): AutosaveState {
     ...state,
     flush: () => void autosave.current?.flush(),
     keepMine: async () => {
-      const { etag } = await api.project(projectId);
+      let etag: string;
+      try {
+        ({ etag } = await api.project(projectId));
+      } catch (error) {
+        // The conflict stays unresolved; retrying saves again and reports the conflict anew.
+        setState({ status: "error", error });
+        return;
+      }
       await autosave.current?.overwrite(etag);
     },
   };
