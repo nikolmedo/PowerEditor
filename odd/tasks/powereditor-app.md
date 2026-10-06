@@ -45,7 +45,7 @@ Reviewed boundary: `f35332a` (phase-0).
 - [x] 3a Clustering, deterministic features, HeuristicEngine, synthetic benchmark (clearly labelled synthetic) + eval script.
 
 ### Slice 4 — `feat/phase-4-providers`
-- [ ] 4a Provider registry (`ModelProvider`, transports `api` / `local_cli`): OpenAI (API + Codex CLI), Gemini (API + Gemini CLI), Claude (API + Claude Code CLI), DeepSeek (API), Jev; per-feature model assignment with heuristic fallback; settings/API for providers and feature mapping.
+- [x] 4a Provider registry (`ModelProvider`, transports `api` / `local_cli`): OpenAI (API + Codex CLI), Gemini (API + Gemini CLI), Claude (API + Claude Code CLI), DeepSeek (API), Jev; per-feature model assignment with heuristic fallback; settings/API for providers and feature mapping.
 - [ ] 4b LLM decision engine (structured JSON + Pydantic, double-order choice, confidence gating, token/cost tracking) wired into take/segment/transition decisions.
 
 ### Slice 5 — `feat/phase-5-subtitles`
@@ -113,5 +113,10 @@ Reviewed boundary: `f35332a` (phase-0).
 - 3a done (delegated): text clustering (rapidfuzz, window of 6 takes; optional `embeddings` extra), deterministic features (fillers, restarts, cut-off, rate, prob, RMS dBFS, last-take bonus; optional `vision` extra with OpenCV <5), `decide/` with `DecisionEngine` protocol (+ `same_take`, `name`, `fingerprint`) and `HeuristicEngine`, takes stage cached, draft builder keeps best take and stores alternatives as removed clips sharing `takeGroupId` (no schema change), `powereditor eval-takes`. Evidence: pytest 246 passed / 1 skipped (vision extra) (parent re-run); SYNTHETIC benchmark 25 clusters: clustering 100%, best take 100%, off-take 100%, 72% automatic decisions (optimistic: fixture written with the heuristic).
 - Follow-ups: takes stage loads whole WAV; proxies not in cache key; zero-length chosen clip vanishes; eval doesn't validate one `best` per group.
 
+- PR #6 (phase 3) merged after green CI. User (2026-10-06): standing consent for every review (answer `granted`), merge PRs after green CI, do not stop until all phases are done.
+- 4a done (delegated): `providers/` registry (open kinds, transports api/local_cli), API adapters OpenAI/DeepSeek (OpenAI-compatible), Gemini, Anthropic; local CLI adapters Codex/Gemini CLI/Claude Code (stdin prompt, temp cwd, kill tree, safe model-name pattern for .cmd shims); settings `providers` + `feature_models` (7 features), keys in keyring `provider:<id>:api_key`; routes `/api/providers*`, `/api/features/models`. Evidence: pytest 303 passed (parent re-run). Local detection: gemini 0.61.0 found, claude 2.1.289 signed in, codex not installed.
+- Commits: `9b06c8b` deps (not due, under budget), `1d82aec` registry+adapters (high, 4 lenses approved), `8328d70` settings+routes (medium, approved). Follow-ups for 4b: base_url can leak API key to arbitrary host; cli_path executes arbitrary binary; overbroad auth hints; anthropic model list KeyError; CLI timeout hang; ReadError retry on POST; provider delete order; test endpoint for CLI untested.
+- **Terms risk (reported to user):** Anthropic (Feb 2026) allows consumer subscription OAuth only in Claude Code/Claude.ai, not routed by third-party apps; Gemini CLI personal terms with 1000 req/day; Codex under ChatGPT terms. Must be surfaced in docs/UI.
+
 ## Next step
-Phase 4 (providers) on `feat/phase-4-providers`.
+4b: LLM decision engine + Jev + wiring + 4a follow-ups.
