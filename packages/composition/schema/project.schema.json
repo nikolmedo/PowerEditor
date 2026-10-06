@@ -339,7 +339,9 @@
             "cta",
             "logo",
             "progress_bar",
-            "image"
+            "image",
+            "count_up",
+            "progress_ring"
           ],
           "type": "string"
         }
@@ -454,7 +456,11 @@
             "karaoke_highlight",
             "clean",
             "bold_pop",
-            "minimal"
+            "minimal",
+            "pill_karaoke",
+            "kinetic_slam",
+            "emoji_pop",
+            "editorial_emphasis"
           ],
           "type": "string"
         }

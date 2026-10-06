@@ -1,6 +1,7 @@
 import { Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 
 import type { Overlay, Project } from "../types";
+import { CountUp, ProgressRing } from "./Counters";
 import {
   Cta,
   ImageGraphic,
@@ -11,7 +12,7 @@ import {
   type GraphicContext,
 } from "./Graphics";
 import { overlayInsets, overlayUnit } from "./layout";
-import { overlayMotion } from "./motion";
+import { overlayExit, overlayMotion } from "./motion";
 import { overlaySpans } from "./spans";
 import { normalizeOverlayProps } from "./templates";
 
@@ -38,6 +39,9 @@ function Graphic({
   const accent = project.subtitles.style.highlightColor;
   const context: GraphicContext = {
     presence: overlayMotion(frame, durationInFrames, fps),
+    exit: overlayExit(frame, durationInFrames, fps),
+    frame,
+    fps,
     insets: overlayInsets(project, width, height),
     unit: overlayUnit(width, height),
   };
@@ -71,6 +75,16 @@ function Graphic({
         <ImageGraphic
           props={normalizeOverlayProps("image", raw, accent)}
           mediaBaseUrl={mediaBaseUrl}
+          {...context}
+        />
+      );
+    case "count_up":
+      return <CountUp props={normalizeOverlayProps("count_up", raw, accent)} {...context} />;
+    case "progress_ring":
+      return (
+        <ProgressRing
+          props={normalizeOverlayProps("progress_ring", raw, accent)}
+          durationInFrames={durationInFrames}
           {...context}
         />
       );

@@ -89,7 +89,15 @@ export interface Overlay {
     [k: string]: unknown;
   };
   startFrame: number;
-  templateId: "title" | "lower_third" | "cta" | "logo" | "progress_bar" | "image";
+  templateId:
+    | "title"
+    | "lower_third"
+    | "cta"
+    | "logo"
+    | "progress_bar"
+    | "image"
+    | "count_up"
+    | "progress_ring";
 }
 /**
  * This interface was referenced by `Project`'s JSON-Schema
@@ -157,7 +165,15 @@ export interface SubtitleStyle {
   highlightColor: string;
   maxWordsPerLine: number;
   position: "bottom" | "center" | "top";
-  preset: "karaoke_highlight" | "clean" | "bold_pop" | "minimal";
+  preset:
+    | "karaoke_highlight"
+    | "clean"
+    | "bold_pop"
+    | "minimal"
+    | "pill_karaoke"
+    | "kinetic_slam"
+    | "emoji_pop"
+    | "editorial_emphasis";
 }
 /**
  * This interface was referenced by `Project`'s JSON-Schema

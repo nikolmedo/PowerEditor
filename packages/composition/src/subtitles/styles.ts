@@ -45,6 +45,18 @@ export function safeAreaStyle(
 
 const OUTLINE = "0 0 6px rgba(0,0,0,0.85), 0 3px 8px rgba(0,0,0,0.6)";
 
+/** Every subtitle preset, in the order the editor offers them. */
+export const SUBTITLE_PRESETS = [
+  "karaoke_highlight",
+  "clean",
+  "bold_pop",
+  "minimal",
+  "pill_karaoke",
+  "kinetic_slam",
+  "emoji_pop",
+  "editorial_emphasis",
+] as const satisfies readonly SubtitleStyle["preset"][];
+
 /** Text style of the whole line for each preset. */
 export function lineStyle(style: SubtitleStyle, fontFamily: string): CSSProperties {
   const base: CSSProperties = {
@@ -70,10 +82,30 @@ export function lineStyle(style: SubtitleStyle, fontFamily: string): CSSProperti
         borderRadius: Math.round(style.fontSize * 0.2),
         padding: `${Math.round(style.fontSize * 0.15)}px ${Math.round(style.fontSize * 0.35)}px`,
       };
+    case "pill_karaoke":
+      return { ...base, fontWeight: 800, textShadow: OUTLINE };
+    case "kinetic_slam":
+      return {
+        ...base,
+        fontWeight: 800,
+        fontSize: Math.round(style.fontSize * 1.1),
+        lineHeight: 1.1,
+        textTransform: "uppercase",
+        textShadow: OUTLINE,
+      };
+    case "emoji_pop":
+      return { ...base, fontWeight: 700, textShadow: OUTLINE };
+    case "editorial_emphasis":
+      return { ...base, fontWeight: 400, textShadow: OUTLINE };
   }
 }
 
 /** Whether a preset colors the active word with `highlightColor`. */
 export function highlightsActiveWord(preset: SubtitleStyle["preset"]): boolean {
-  return preset === "karaoke_highlight" || preset === "bold_pop";
+  return (
+    preset === "karaoke_highlight" ||
+    preset === "bold_pop" ||
+    preset === "pill_karaoke" ||
+    preset === "kinetic_slam"
+  );
 }

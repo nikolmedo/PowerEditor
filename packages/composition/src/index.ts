@@ -15,6 +15,7 @@ export {
   groupLines,
   remapWords,
   retimeWords,
+  SUBTITLE_PRESETS,
   timelineWords,
   type SubtitleLine,
 } from "./subtitles";
@@ -38,7 +39,9 @@ export {
   normalizeOverlayProps,
   OVERLAY_FIELDS,
   OVERLAY_TEMPLATES,
+  OVERLAY_VARIANTS,
   overlayMotion,
+  overlayVariants,
   overlaySpans,
   readableTextColor,
   type OverlayField,
