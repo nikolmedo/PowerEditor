@@ -43,5 +43,9 @@ Implement PLAN.md Phase 0: monorepo skeleton (uv + pnpm), lint, typecheck, tests
 - `uv run autocut doctor`: exit 0; ffmpeg 9.0.2, ffprobe 9.0.2, node v24.19.0, pnpm 12.9.1 found; cuda missing (optional) (re-run by parent).
 - `corepack pnpm install`, `-r typecheck`, `-r lint`, `prettier --check .`: pass.
 
+## Review
+- Work-unit commit `f35332a`: assessed high (process_boundary in doctor.py); consent granted; 4-lens native review approved, lineage `review-465ce6ed9a02fa5a`, acknowledged (authority burned). Reviewed boundary advances to `f35332a`.
+- Non-blocking follow-ups: doctor found-semantics (doctor.py:85-91), UnicodeDecodeError on version decode (doctor.py:52), exception path untested (doctor.py:82-86), config tests leak real env (test_config.py:9-27), probe-order coupling in test_doctor.py:109, unexplained media constants (config.py:33-36), env note (config.py:29), types.ts mirror claim.
+
 ## Next step
 Phase 1 — Ingest and transcription. First verify faster-whisper on this host (CPU, x86_64 emulation).
