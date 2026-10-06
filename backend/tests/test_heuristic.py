@@ -149,3 +149,27 @@ def test_transition_between_consecutive_lines_of_one_take_is_a_cut() -> None:
     decision = HeuristicEngine().transition_between(_segment("a", 0), _segment("b", 1), 0.0)
 
     assert (decision.type, decision.topic_change) == ("cut", False)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Comentá abajo qué te pareció.",
+        "Dejame en los comentarios tu receta.",
+        "Sígueme para más recetas.",
+        "El link en la descripción.",
+        "Leave a comment below with your tips.",
+        "Link in bio for the full recipe.",
+        "Follow for more recipes like this.",
+    ],
+)
+def test_classify_segment_spots_calls_to_action(text: str) -> None:
+    assert HeuristicEngine().classify_segment(_segment(text)).has_cta is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Follow these steps carefully.", "That comment was rude.", "El comentario del chef."],
+)
+def test_classify_segment_ignores_lookalike_phrases(text: str) -> None:
+    assert HeuristicEngine().classify_segment(_segment(text)).has_cta is False

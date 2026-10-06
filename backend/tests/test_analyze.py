@@ -22,9 +22,10 @@ BURSTS = 5
 class BurstTranscriber:
     """Fake transcriber: one sentence per tone burst at [2k + 0.1, 2k + 0.9]."""
 
-    def __init__(self) -> None:
+    def __init__(self, last_word: str = "fin") -> None:
         self.calls = 0
         self.languages: list[str | None] = []
+        self.last_word = last_word
 
     @property
     def provider(self) -> TranscriberProvider:
@@ -42,7 +43,11 @@ class BurstTranscriber:
             for k in range(BURSTS)
             for word in (
                 Word(text=f"palabra{k}", start=2 * k + 0.1, end=2 * k + 0.5),
-                Word(text=f"fin{k}.", start=2 * k + 0.5, end=2 * k + 0.9),
+                Word(
+                    text=f"{self.last_word if k == BURSTS - 1 else 'fin'}{k}.",
+                    start=2 * k + 0.5,
+                    end=2 * k + 0.9,
+                ),
             )
         ]
         return Transcript(language=language, words=words, provider="local", model="fake-bursts")
@@ -138,3 +143,24 @@ def test_analyze_cli_prints_summary(
     assert str(layout.project_file) in output
     assert f"{BURSTS} clips" in output
     assert load_project(layout.project_file).preset == "reel_9x16"
+
+
+@pytest.mark.parametrize("auto_cta", [True, False])
+def test_a_call_to_action_gets_a_graphic_unless_turned_off(
+    burst_clip: Path, tmp_path: Path, auto_cta: bool
+) -> None:
+    service = SettingsService.default()
+    service.update({"autoCta": auto_cta})
+    layout = ProjectLayout.for_project(AppPaths(data_dir=tmp_path), "demo")
+
+    result = analyze_project(
+        layout,
+        service,
+        files=[burst_clip],
+        transcriber=BurstTranscriber(last_word="suscribite "),
+        detector=EnergyDetector(),
+    )
+
+    overlays = [(o.template_id, o.id, o.auto_generated) for o in result.project.overlays]
+    last_clip = result.project.clips[-1].id
+    assert overlays == ([("cta", f"cta-{last_clip}", True)] if auto_cta else [])

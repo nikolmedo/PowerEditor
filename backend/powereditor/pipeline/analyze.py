@@ -146,6 +146,10 @@ def _select_takes(
     )
 
 
+def _cta_segments(takes: TakeSelection) -> set[str]:
+    return {flag.segment_id for flag in takes.flags if flag.has_cta}
+
+
 def analyze_project(
     layout: ProjectLayout,
     service: SettingsService,
@@ -202,6 +206,8 @@ def analyze_project(
         padding_s=settings.silence_padding_ms / 1000,
         preset=preset,
         entries=takes.entries,
+        cta_segment_ids=_cta_segments(takes) if settings.auto_cta else (),
+        language=settings.language,
     )
     path = write_draft(layout, project)
     progress("draft", 1.0, "done")

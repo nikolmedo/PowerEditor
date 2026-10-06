@@ -24,7 +24,7 @@ from powereditor.pipeline.vad import read_wav
 from powereditor.pipeline.visual import NullVisualExtractor, VisualFeatureExtractor
 
 TAKES_STAGE = "takes"
-TAKES_STAGE_VERSION = 2
+TAKES_STAGE_VERSION = 3
 
 
 class TakeEntry(CamelModel):

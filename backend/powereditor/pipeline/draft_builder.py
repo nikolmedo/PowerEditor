@@ -1,6 +1,6 @@
 """Assemble the first editable `project.json` from the analysis stages."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +22,7 @@ from powereditor.models import (
     Word,
     save_project,
 )
+from powereditor.pipeline.auto_cta import cta_overlays
 from powereditor.pipeline.color_match import match_colors
 from powereditor.pipeline.ingest import IngestedSource
 from powereditor.pipeline.runner import ProjectLayout
@@ -139,11 +140,15 @@ def build_draft(
     padding_s: float,
     preset: ProjectPreset | None = None,
     entries: Sequence[TakeEntry] | None = None,
+    cta_segment_ids: Collection[str] = (),
+    language: str | None = None,
 ) -> Project:
     """Clips in `entries` order (the takes stage), or one kept clip per segment in source order.
 
     A retake that was not chosen stays in the timeline as a removed clip sharing the
-    chosen clip's `takeGroupId`; `alternativeTakeIds` lists those clip ids.
+    chosen clip's `takeGroupId`; `alternativeTakeIds` lists those clip ids. Segments in
+    `cta_segment_ids` get an automatic call-to-action overlay (`pipeline.auto_cta`) whose
+    text is in `language`.
     """
     if not sources:
         raise ValueError("a draft needs at least one source")
@@ -164,7 +169,7 @@ def build_draft(
         for draft in sources
     }
     corrections = match_colors({d.ingested.source_id: d.color_stats for d in sources})
-    return Project(
+    project = Project(
         version=1,
         preset=preset or _preset_for(sources[0].ingested),
         fps=fps,
@@ -182,6 +187,11 @@ def build_draft(
         overlays=[],
         color_grade=NEUTRAL_GRADE,
     )
+    if not cta_segment_ids:
+        return project
+    segment_clips = {segment_id: clip.id for segment_id, clip in by_segment.items()}
+    overlays = cta_overlays(project, segment_clips, cta_segment_ids, language)
+    return project.model_copy(update={"overlays": overlays})
 
 
 def write_draft(layout: ProjectLayout, project: Project) -> Path:
