@@ -11,7 +11,6 @@ killed after a generous timeout that grows with the timeline length.
 
 import json
 import subprocess
-import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -20,6 +19,7 @@ from typing import IO
 
 from powereditor.models import Project
 from powereditor.pipeline.ffmpeg import FractionCallback
+from powereditor.process import kill_tree
 from powereditor.render.base import RenderSettings, RenderTiming
 from powereditor.render.media_server import serve_directory
 from powereditor.timeline import timeline_layout
@@ -85,15 +85,6 @@ def _check_media(project: Project, media_dir: Path) -> None:
             raise RenderError(f"mezzanine for source {source.id} is not in {media_dir}")
 
 
-def _kill_tree(process: "subprocess.Popen[str]") -> None:
-    """Kill the render and its children (headless Chrome, compositor) so pipes close."""
-    if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/T", "/F", "/PID", str(process.pid)], capture_output=True, check=False
-        )
-    process.kill()
-
-
 class RemotionRenderer:
     def __init__(
         self,
@@ -156,7 +147,7 @@ class RemotionRenderer:
 
                     def expire() -> None:
                         timed_out.set()
-                        _kill_tree(process)
+                        kill_tree(process)
 
                     # Killing the process closes stdout, which ends the read loop below.
                     watchdog = threading.Timer(timeout_s, expire)
