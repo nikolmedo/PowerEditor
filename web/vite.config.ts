@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const API_TARGET = "http://127.0.0.1:8765";
@@ -17,5 +18,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],
+    alias: { "@remotion/fonts": fileURLToPath(new URL("./test/stubs/fonts.ts", import.meta.url)) },
   },
 });

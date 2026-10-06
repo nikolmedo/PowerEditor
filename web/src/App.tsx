@@ -1,40 +1,55 @@
-import { useEffect, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { api } from "./api/endpoints";
-import { LANGUAGES, type Language } from "./i18n";
+import { LANGUAGES, useT, type Language } from "./i18n";
+import { parseRoute, type Route } from "./routes";
 import { FeaturesScreen } from "./settings/FeaturesScreen";
 import { ProvidersScreen } from "./settings/ProvidersScreen";
 import { SettingsScreen } from "./settings/SettingsScreen";
 import { SetupScreen } from "./settings/SetupScreen";
-import { AppShell, type Step } from "./shell/AppShell";
+import { AppShell } from "./shell/AppShell";
 import { ProjectsHome } from "./shell/ProjectsHome";
-import { StepPlaceholder } from "./shell/StepPlaceholder";
+import { ExportStep } from "./steps/ExportStep";
+import { LoadStep } from "./steps/LoadStep";
 import { useAppStore } from "./store/app";
 
-const STEP_PATHS: Record<string, Step> = {
-  "/load": "load",
-  "/review": "review",
-  "/export": "export",
-};
+// The player and the composition are the heaviest part of the bundle: load them on demand.
+const ReviewStep = lazy(() =>
+  import("./review/ReviewStep").then((module) => ({ default: module.ReviewStep })),
+);
 
-function screenFor(path: string): ReactNode {
-  const step = STEP_PATHS[path];
-  if (step) return <StepPlaceholder step={step} />;
-  switch (path) {
-    case "/setup":
+function Loading() {
+  const t = useT();
+  return <p className="lede">{t("common.loading")}</p>;
+}
+
+function screenFor(route: Route): ReactNode {
+  switch (route.screen) {
+    case "load":
+      return <LoadStep key={route.projectId ?? "new"} projectId={route.projectId} />;
+    case "review":
+      return (
+        <Suspense fallback={<Loading />}>
+          <ReviewStep key={route.projectId} projectId={route.projectId} />
+        </Suspense>
+      );
+    case "export":
+      return <ExportStep key={route.projectId} projectId={route.projectId} />;
+    case "setup":
       return <SetupScreen />;
-    case "/settings":
+    case "settings":
       return <SettingsScreen />;
-    case "/settings/providers":
+    case "providers":
       return <ProvidersScreen />;
-    case "/settings/features":
+    case "features":
       return <FeaturesScreen />;
-    default:
+    case "home":
       return <ProjectsHome />;
   }
 }
 
 export function App() {
   const { path, theme, language, setLanguage, syncPath } = useAppStore();
+  const route = parseRoute(path);
 
   useEffect(() => {
     window.addEventListener("popstate", syncPath);
@@ -56,5 +71,11 @@ export function App() {
     document.documentElement.lang = language;
   }, [theme, language]);
 
-  return <AppShell step={STEP_PATHS[path] ?? null}>{screenFor(path)}</AppShell>;
+  const step = "projectId" in route ? route.screen : null;
+  const projectId = "projectId" in route ? route.projectId : null;
+  return (
+    <AppShell step={step} projectId={projectId}>
+      {screenFor(route)}
+    </AppShell>
+  );
 }
