@@ -24,6 +24,7 @@ CPU_WHISPER_MODEL = "small"
 SecretName = Literal["openai_api_key", "typesafe_api_key"]
 SECRET_NAMES: tuple[SecretName, ...] = get_args(SecretName)
 SecretSource = Literal["env", "keyring"]
+TakeSimilarity = Literal["text", "embeddings"]
 
 _ENV_FIELD_TO_SETTING = {"whisper_language": "language"}
 
@@ -37,6 +38,21 @@ def _lock_for(path: Path) -> threading.Lock:
         return _FILE_LOCKS.setdefault(key, threading.Lock())
 
 
+class TakeWeights(CamelModel):
+    """Weights of the heuristic take score; penalties are subtracted."""
+
+    completeness: float = Field(default=4.0, ge=0.0)
+    fillers: float = Field(default=0.5, ge=0.0)
+    repetitions: float = Field(default=0.5, ge=0.0)
+    cut_off: float = Field(default=2.0, ge=0.0)
+    speech_rate: float = Field(default=0.5, ge=0.0)
+    word_prob: float = Field(default=1.0, ge=0.0)
+    clipping: float = Field(default=1.0, ge=0.0)
+    face_centered: float = Field(default=0.5, ge=0.0)
+    sharpness: float = Field(default=0.5, ge=0.0)
+    last_take: float = Field(default=0.75, ge=0.0)
+
+
 class UserSettings(CamelModel):
     transcriber: Transcriber = "local"
     whisper_model: str | None = None
@@ -45,6 +61,8 @@ class UserSettings(CamelModel):
     decision_engine: DecisionEngine = "heuristic"
     jev_model: str = "jev-1.13"
     jev_min_confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    take_weights: TakeWeights = Field(default_factory=TakeWeights)
+    take_similarity: TakeSimilarity = "text"
     silence_padding_ms: int = Field(default=120, ge=0)
     audio_crossfade_ms: int = Field(default=15, ge=0)
     target_lufs: float = -14.0

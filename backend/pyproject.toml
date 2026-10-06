@@ -15,10 +15,19 @@ dependencies = [
     "httpx>=0.28.1",
     "faster-whisper>=1.2.1",
     "numpy>=2.0",
+    "rapidfuzz>=3.14.6",
 ]
 
 [project.scripts]
 powereditor = "powereditor.cli:app"
+
+[project.optional-dependencies]
+vision = [
+    "opencv-python-headless>=4.10,<5",
+]
+embeddings = [
+    "sentence-transformers>=6.1.0",
+]
 
 [dependency-groups]
 dev = [
@@ -47,7 +56,16 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["faster_whisper", "faster_whisper.*", "ctranslate2", "ctranslate2.*"]
+module = [
+    "faster_whisper",
+    "faster_whisper.*",
+    "ctranslate2",
+    "ctranslate2.*",
+    "cv2",
+    "cv2.*",
+    "sentence_transformers",
+    "sentence_transformers.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -1,10 +1,13 @@
-"""Full analysis: ingest -> transcribe -> VAD -> segmentation -> loudness/color -> draft."""
+"""Full analysis: ingest, transcribe, VAD, segmentation, loudness/color, takes, draft."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from powereditor.decide.base import DecisionEngine
+from powereditor.decide.factory import create_engine
 from powereditor.models import Project, ProjectPreset, Transcript
+from powereditor.pipeline.clustering import create_similarity
 from powereditor.pipeline.color_stats import measure_color
 from powereditor.pipeline.draft_builder import DraftSource, build_draft, write_draft
 from powereditor.pipeline.ffmpeg import MediaTools
@@ -17,9 +20,11 @@ from powereditor.pipeline.ingest import (
 from powereditor.pipeline.loudness import measure_loudness
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress
 from powereditor.pipeline.segmentation import segment_source
+from powereditor.pipeline.takes import TakeSelection, select_project_takes
 from powereditor.pipeline.transcription import transcribe_project
 from powereditor.pipeline.vad import Range, SileroDetector, SpeechDetector, detect_voice
-from powereditor.settings_store import SettingsService
+from powereditor.pipeline.visual import create_visual_extractor
+from powereditor.settings_store import SettingsService, UserSettings
 from powereditor.transcribe.base import Transcriber
 from powereditor.transcribe.factory import create_transcriber
 
@@ -30,6 +35,7 @@ class AnalyzeResult:
     project_path: Path
     original_seconds: float
     kept_seconds: float
+    takes: TakeSelection
 
 
 def _select_sources(
@@ -90,6 +96,33 @@ def _analyze_source(
     )
 
 
+def _select_takes(
+    layout: ProjectLayout,
+    drafts: Sequence[DraftSource],
+    settings: UserSettings,
+    engine: DecisionEngine,
+    script: str | None,
+    progress: ProgressCallback,
+) -> TakeSelection:
+    segments = [
+        segment
+        for draft in drafts
+        for segment in sorted(draft.segments, key=lambda segment: segment.start)
+    ]
+    sources = [draft.ingested for draft in drafts]
+    return select_project_takes(
+        layout,
+        segments,
+        engine,
+        create_similarity(settings.take_similarity, settings.language),
+        language=settings.language,
+        script=script,
+        wav_paths={s.source_id: Path(s.wav_path) for s in sources if s.wav_path},
+        visual=create_visual_extractor({s.source_id: Path(s.proxy_path) for s in sources}),
+        progress=progress,
+    )
+
+
 def analyze_project(
     layout: ProjectLayout,
     service: SettingsService,
@@ -98,6 +131,8 @@ def analyze_project(
     transcriber: Transcriber | None = None,
     detector: SpeechDetector | None = None,
     preset: ProjectPreset | None = None,
+    engine: DecisionEngine | None = None,
+    script: str | None = None,
     progress: ProgressCallback = no_progress,
 ) -> AnalyzeResult:
     """Ingest `files` (or reuse every ingested source) and write a draft `project.json`.
@@ -131,8 +166,16 @@ def analyze_project(
         )
         for entry in entries
     ]
+    takes = _select_takes(
+        layout, drafts, settings, engine or create_engine(settings), script, progress
+    )
     progress("draft", 0.0, "building")
-    project = build_draft(drafts, padding_s=settings.silence_padding_ms / 1000, preset=preset)
+    project = build_draft(
+        drafts,
+        padding_s=settings.silence_padding_ms / 1000,
+        preset=preset,
+        entries=takes.entries,
+    )
     path = write_draft(layout, project)
     progress("draft", 1.0, "done")
     kept = sum((c.out_sec - c.in_sec) / c.speed for c in project.clips if not c.removed)
@@ -141,4 +184,5 @@ def analyze_project(
         project_path=path,
         original_seconds=sum(entry.probe.duration for entry in entries),
         kept_seconds=kept,
+        takes=takes,
     )

@@ -82,7 +82,10 @@ def test_analyze_project_removes_silence_end_to_end(burst_clip: Path, tmp_path: 
     assert all(s <= e for s, e in frames)
     assert all(a[1] <= b[0] for a, b in itertools.pairwise(frames))
     assert project.sources[0].loudness_lufs > -40
-    assert {"vad", "segments", "loudness", "color", "draft"} <= {e.split("-")[0] for e in events}
+    stages = {e.split("-")[0] for e in events}
+    assert {"vad", "segments", "loudness", "color", "takes", "draft"} <= stages
+    assert result.takes.decisions == []
+    assert layout.cache_file("takes").is_file()
 
     analyze_project(
         layout, service, files=[burst_clip], transcriber=fake, detector=EnergyDetector()

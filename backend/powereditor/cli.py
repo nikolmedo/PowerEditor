@@ -11,6 +11,7 @@ from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedCo
 from rich.table import Table
 
 from powereditor import doctor as doctor_module
+from powereditor.eval.takes_eval import DEFAULT_BENCHMARK, evaluate_takes, load_benchmark
 from powereditor.models import ProjectPreset
 from powereditor.pipeline.analyze import analyze_project
 from powereditor.pipeline.ffmpeg import FfmpegError, MediaTools, MissingToolError
@@ -177,11 +178,16 @@ def analyze(
     project_id: Annotated[str | None, typer.Option(help="Project to create or update.")] = None,
     preset: Annotated[ProjectPreset | None, typer.Option(help="Force the output format.")] = None,
     vad: Annotated[VadChoice, typer.Option(help="Speech detector.")] = "silero",
+    script: Annotated[
+        Path | None,
+        typer.Option(exists=True, dir_okay=False, help="Script text used to judge completeness."),
+    ] = None,
 ) -> None:
-    """Ingest, transcribe and cut silences into a draft project.json."""
+    """Ingest, transcribe, cut silences and pick takes into a draft project.json."""
     console = Console()
     service = SettingsService.default()
     try:
+        script_text = script.read_text(encoding="utf-8") if script else None
         layout = ProjectLayout.for_project(service.paths, project_id or _default_project_id())
         with _progress_bar(console) as report:
             result = analyze_project(
@@ -190,15 +196,41 @@ def analyze(
                 files=files,
                 preset=preset,
                 detector=DETECTORS[vad],
+                script=script_text,
                 progress=report,
             )
-    except (ValueError, *PIPELINE_ERRORS) as exc:
+    except (ValueError, OSError, *PIPELINE_ERRORS) as exc:
         raise _fail(console, exc) from exc
     console.print(
         f"{len(result.project.clips)} clips, kept {result.kept_seconds:.1f}s"
         f" of {result.original_seconds:.1f}s"
     )
     console.print(f"Project file: {result.project_path}", soft_wrap=True)
+
+
+@app.command("eval-takes")
+def eval_takes(
+    fixture: Annotated[
+        Path, typer.Option(exists=True, dir_okay=False, help="Labelled takes benchmark.")
+    ] = DEFAULT_BENCHMARK,
+    threshold: Annotated[
+        float, typer.Option(min=0.0, max=1.0, help="Confidence for an automatic decision.")
+    ] = 0.6,
+) -> None:
+    """Report take clustering and take-choice accuracy of the heuristic engine."""
+    benchmark = load_benchmark(fixture)
+    report = evaluate_takes(benchmark, threshold=threshold)
+    console = Console()
+    if report.synthetic:
+        console.print("[yellow]SYNTHETIC benchmark: not real footage.[/yellow]")
+    console.print(f"Clusters: {report.clusters}")
+    console.print(f"Clustering accuracy: {report.clustering_accuracy:.1%}")
+    console.print(f"Best-take accuracy: {report.best_take_accuracy:.1%}")
+    console.print(f"Off-take remark accuracy: {report.off_take_accuracy:.1%}")
+    console.print(
+        f"Automatic (confidence >= {report.threshold:.2f}): {report.automatic_share:.1%}"
+        f" of decisions, {report.automatic_accuracy:.1%} correct"
+    )
 
 
 @app.command()

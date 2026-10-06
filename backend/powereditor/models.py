@@ -191,6 +191,11 @@ class SegmentFlags(CamelModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class SameTakeDecision(CamelModel):
+    same: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
 class TransitionDecision(CamelModel):
     type: TransitionType
     topic_change: bool

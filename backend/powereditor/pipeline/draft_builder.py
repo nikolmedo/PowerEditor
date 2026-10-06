@@ -1,6 +1,6 @@
 """Assemble the first editable `project.json` from the analysis stages."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +22,7 @@ from powereditor.models import (
 )
 from powereditor.pipeline.ingest import IngestedSource
 from powereditor.pipeline.runner import ProjectLayout
+from powereditor.pipeline.takes import TakeEntry
 from powereditor.pipeline.vad import Range
 
 # Okabe-Ito palette: distinguishable with common color-vision deficiencies.
@@ -33,6 +34,8 @@ DEFAULT_SUBTITLE_STYLE = SubtitleStyle(
     highlight_color="#FFD400",
     max_words_per_line=4,
 )
+# Default length of non-cut transitions until Phase 5 sets them per type.
+TRANSITION_SECONDS = 0.3
 NEUTRAL_GRADE = ColorGrade(
     preset="natural", brightness=1.0, contrast=1.0, saturation=1.0, temperature=0.0
 )
@@ -77,12 +80,14 @@ def _source(index: int, draft: DraftSource) -> Source:
     )
 
 
-def _clips(draft: DraftSource, padding_s: float) -> list[Clip]:
+def _source_clips(draft: DraftSource, padding_s: float) -> dict[str, Clip]:
+    """Padded clip per segment id; ids follow the segment's position in the source."""
     ordered = sorted(draft.segments, key=lambda segment: segment.start)
     ranges = [(segment.start, segment.end) for segment in ordered]
     source_id = draft.ingested.source_id
-    return [
-        Clip(
+    bounds = clip_bounds(ranges, padding_s, draft.ingested.probe.duration)
+    return {
+        segment.id: Clip(
             id=f"clip-{source_id}-{index:04d}",
             source_id=source_id,
             in_sec=in_sec,
@@ -93,21 +98,60 @@ def _clips(draft: DraftSource, padding_s: float) -> list[Clip]:
             alternative_take_ids=[],
             removed=False,
         )
-        for index, (in_sec, out_sec) in enumerate(
-            clip_bounds(ranges, padding_s, draft.ingested.probe.duration)
-        )
+        for index, (segment, (in_sec, out_sec)) in enumerate(zip(ordered, bounds, strict=True))
         if out_sec > in_sec
-    ]
+    }
+
+
+def _apply_entries(clips: Mapping[str, Clip], entries: Sequence[TakeEntry], fps: int) -> list[Clip]:
+    placed: list[Clip] = []
+    for entry in entries:
+        clip = clips.get(entry.segment_id)
+        if clip is None:
+            continue
+        duration = 0 if entry.transition == "cut" else round(fps * TRANSITION_SECONDS)
+        placed.append(
+            clip.model_copy(
+                update={
+                    "removed": entry.removed,
+                    "take_group_id": entry.take_group_id,
+                    "decision_confidence": entry.decision_confidence,
+                    "alternative_take_ids": [
+                        clips[segment_id].id
+                        for segment_id in entry.alternative_segment_ids
+                        if segment_id in clips
+                    ],
+                    "transition_in": TransitionIn(type=entry.transition, duration_frames=duration),
+                }
+            )
+        )
+    return placed
 
 
 def build_draft(
-    sources: Sequence[DraftSource], *, padding_s: float, preset: ProjectPreset | None = None
+    sources: Sequence[DraftSource],
+    *,
+    padding_s: float,
+    preset: ProjectPreset | None = None,
+    entries: Sequence[TakeEntry] | None = None,
 ) -> Project:
-    """One clip per segment, in source order, with cut transitions (take selection comes later)."""
+    """Clips in `entries` order (the takes stage), or one kept clip per segment in source order.
+
+    A retake that was not chosen stays in the timeline as a removed clip sharing the
+    chosen clip's `takeGroupId`; `alternativeTakeIds` lists those clip ids.
+    """
     if not sources:
         raise ValueError("a draft needs at least one source")
     fps = sources[0].ingested.fps
-    clips = [clip for draft in sources for clip in _clips(draft, padding_s)]
+    by_segment = {
+        segment_id: clip
+        for draft in sources
+        for segment_id, clip in _source_clips(draft, padding_s).items()
+    }
+    if entries is None:
+        clips = list(by_segment.values())
+    else:
+        clips = _apply_entries(by_segment, entries, fps)
     words = {draft.ingested.source_id: draft.words for draft in sources}
     return Project(
         version=1,

@@ -246,3 +246,15 @@ def test_concurrent_updates_do_not_lose_writes(
 
     stored = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
     assert stored == {"audioCrossfadeMs": 30, "silencePaddingMs": 250}
+
+
+def test_take_weights_are_user_settings(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+
+    effective = service.update({"takeWeights": {"lastTake": 0.0, "fillers": 1.5}})
+
+    assert (effective.take_weights.last_take, effective.take_weights.fillers) == (0.0, 1.5)
+    assert effective.take_weights.completeness == 4.0
+    assert service.get_effective().take_weights == effective.take_weights
+    with pytest.raises(ValidationError):
+        service.update({"takeWeights": {"fillers": -1.0}})

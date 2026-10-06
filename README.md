@@ -4,7 +4,7 @@ Record your video, say the line again when you trip over it, and let PowerEditor
 
 PowerEditor runs on your own Windows PC. Your footage never leaves it unless you choose a cloud model.
 
-> **Status:** early development. The analysis pipeline and the render engine work today from the command line (Phases 0–2 of [PLAN.md](PLAN.md)). The graphical app, take selection and the installer are planned. Features below are marked **planned** when they do not exist yet.
+> **Status:** early development. The analysis pipeline and the render engine work today from the command line (Phases 0–3 of [PLAN.md](PLAN.md)). Take selection is heuristic only. The graphical app, AI models and the installer are planned. Features below are marked **planned** when they do not exist yet.
 
 ## Why PowerEditor
 
@@ -24,7 +24,7 @@ Talking-head videos (reels, tutorials, course lessons, YouTube) are cheap to rec
 | Silence detection and removal (Silero VAD + loudness floor)                                                     | Available |
 | Draft project built automatically from the analysis                                                             | Available |
 | MP4 render with click-free cuts and -14 LUFS loudness normalization                                             | Available |
-| Best-take selection when a phrase was recorded several times                                                    | Planned   |
+| Best-take selection when a phrase was recorded several times (heuristic; AI models come later)                  | Available |
 | Bring your own AI model per feature: OpenAI, Gemini, Claude, DeepSeek, Jev, by API key or a logged-in local CLI | Planned   |
 | Animated subtitles (karaoke, clean, bold pop, minimal) + SRT/ASS export                                         | Planned   |
 | Automatic transitions (punch-in within a topic, fade or slide between topics)                                   | Planned   |
@@ -41,7 +41,7 @@ Talking-head videos (reels, tutorials, course lessons, YouTube) are cheap to rec
 2. **Transcribe.** Whisper writes down every word with its start and end time, filler words included.
 3. **Find speech.** A voice detector marks where you speak; everything else is a candidate cut.
 4. **Split into phrases** using pauses and punctuation.
-5. **Group repeated takes and pick the best one** (planned). Similar phrases are clustered; each take is scored in code (completeness, filler words, pace, loudness, framing) and, if you enable it, by an AI model for semantic questions such as "is this idea complete?".
+5. **Group repeated takes and pick the best one.** Remarks like "cut, again" are dropped, similar phrases are clustered, and each take is scored in code (completeness, filler words, stutters, pace, loudness, framing). Rejected takes stay in the project as removed clips, so you can swap them back. AI models for semantic questions such as "is this idea complete?" are planned.
 6. **Build the draft.** Clips, transitions, subtitles, audio and color go into one `project.json`.
 7. **Render.** Remotion draws the video, ffmpeg rebuilds the voice sample by sample so cuts never click, and a final pass normalizes loudness.
 
@@ -76,7 +76,7 @@ uv run powereditor analyze path/to/video.mp4 --project-id demo
 uv run powereditor render demo     # writes <data dir>/projects/demo/exports/final.mp4
 ```
 
-`analyze` downloads the Whisper model on first use. Other commands: `ingest`, `transcribe`, `serve` (local API on `127.0.0.1:8765`). Run `uv run powereditor --help` for the full list.
+`analyze` downloads the Whisper model on first use; pass `--script script.txt` to judge take completeness against your script. Other commands: `ingest`, `transcribe`, `eval-takes` (take-choice accuracy on the benchmark), `serve` (local API on `127.0.0.1:8765`). Run `uv run powereditor --help` for the full list.
 
 ## Configuration
 
@@ -106,35 +106,37 @@ Dense reference for coding agents. Read this before exploring; it should save mo
 
 ### Repo map
 
-| Path                                      | Responsibility                                                                                                                                   |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `backend/powereditor/cli.py`              | Typer CLI: `doctor`, `serve`, `ingest`, `transcribe`, `analyze`, `render`                                                                        |
-| `backend/powereditor/api/`                | FastAPI app (`app.py`: `/api/health`, `/api/doctor`) and settings/secrets routes (`routes_settings.py`)                                          |
-| `backend/powereditor/models.py`           | Pydantic models, single source of truth for `project.json` and stage results                                                                     |
-| `backend/powereditor/schema_gen.py`       | Writes `packages/composition/schema/project.schema.json` from `Project`                                                                          |
-| `backend/powereditor/config.py`           | `.env` developer overrides (pydantic-settings), `REPO_ROOT`                                                                                      |
-| `backend/powereditor/settings_store.py`   | Settings layering, user `settings.json`, keyring and in-memory secret stores                                                                     |
-| `backend/powereditor/paths.py`            | User data dir layout, executable resolution (configured → `<data dir>/bin` → `PATH`)                                                             |
-| `backend/powereditor/doctor.py`           | Dependency probes                                                                                                                                |
-| `backend/powereditor/timeline.py`         | Clip frame layout; mirrored by `packages/composition/src/timeline.ts`                                                                            |
-| `backend/powereditor/pipeline/`           | Stage runner + cache (`runner.py`), ffmpeg helpers, ingest, transcription, VAD, segmentation, loudness, color stats, draft builder, `analyze.py` |
-| `backend/powereditor/transcribe/`         | `Transcriber` protocol, factory, faster-whisper and OpenAI implementations                                                                       |
-| `backend/powereditor/render/`             | Render job: voice rebuild (`audio_mix.py`), Remotion runner, Node resolution, loopback media server, final pass                                  |
-| `backend/powereditor/export/subtitles.py` | Source-time words → timeline words                                                                                                               |
-| `backend/tests/`                          | pytest suite; `conftest.py` isolates data dir, env and secrets; `media.py` builds lavfi fixtures                                                 |
-| `packages/composition/src/`               | Remotion composition (`ProjectVideo.tsx`, `Root.tsx`, `timeline.ts`, clips, transitions, subtitles, overlays, color)                             |
-| `packages/composition/scripts/`           | `gen-types.mjs` (schema → TS), `render.mjs` (CLI render, NDJSON progress)                                                                        |
-| `packages/composition/test/`              | vitest                                                                                                                                           |
-| `PLAN.md`                                 | Product plan, architecture, phases                                                                                                               |
-| `odd/tasks/powereditor-app.md`            | Progress log, decisions, measurements, review history                                                                                            |
+| Path                                      | Responsibility                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/powereditor/cli.py`              | Typer CLI: `doctor`, `serve`, `ingest`, `transcribe`, `analyze`, `render`, `eval-takes`                                                                 |
+| `backend/powereditor/api/`                | FastAPI app (`app.py`: `/api/health`, `/api/doctor`) and settings/secrets routes (`routes_settings.py`)                                                 |
+| `backend/powereditor/models.py`           | Pydantic models, single source of truth for `project.json` and stage results                                                                            |
+| `backend/powereditor/schema_gen.py`       | Writes `packages/composition/schema/project.schema.json` from `Project`                                                                                 |
+| `backend/powereditor/config.py`           | `.env` developer overrides (pydantic-settings), `REPO_ROOT`                                                                                             |
+| `backend/powereditor/settings_store.py`   | Settings layering, user `settings.json`, keyring and in-memory secret stores                                                                            |
+| `backend/powereditor/paths.py`            | User data dir layout, executable resolution (configured → `<data dir>/bin` → `PATH`)                                                                    |
+| `backend/powereditor/doctor.py`           | Dependency probes                                                                                                                                       |
+| `backend/powereditor/timeline.py`         | Clip frame layout; mirrored by `packages/composition/src/timeline.ts`                                                                                   |
+| `backend/powereditor/pipeline/`           | Stage runner + cache (`runner.py`), ffmpeg helpers, ingest, transcription, VAD, segmentation, loudness, color stats, takes, draft builder, `analyze.py` |
+| `backend/powereditor/decide/`             | `DecisionEngine` protocol (`base.py`), `HeuristicEngine`, `create_engine` factory                                                                       |
+| `backend/powereditor/eval/takes_eval.py`  | Take benchmark evaluator behind `powereditor eval-takes`                                                                                                |
+| `backend/powereditor/transcribe/`         | `Transcriber` protocol, factory, faster-whisper and OpenAI implementations                                                                              |
+| `backend/powereditor/render/`             | Render job: voice rebuild (`audio_mix.py`), Remotion runner, Node resolution, loopback media server, final pass                                         |
+| `backend/powereditor/export/subtitles.py` | Source-time words → timeline words                                                                                                                      |
+| `backend/tests/`                          | pytest suite; `conftest.py` isolates data dir, env and secrets; `media.py` builds lavfi fixtures                                                        |
+| `packages/composition/src/`               | Remotion composition (`ProjectVideo.tsx`, `Root.tsx`, `timeline.ts`, clips, transitions, subtitles, overlays, color)                                    |
+| `packages/composition/scripts/`           | `gen-types.mjs` (schema → TS), `render.mjs` (CLI render, NDJSON progress)                                                                               |
+| `packages/composition/test/`              | vitest                                                                                                                                                  |
+| `PLAN.md`                                 | Product plan, architecture, phases                                                                                                                      |
+| `odd/tasks/powereditor-app.md`            | Progress log, decisions, measurements, review history                                                                                                   |
 
-Not yet present: `web/` (UI), `backend/powereditor/decide/`, provider registry.
+Not yet present: `web/` (UI), provider registry.
 
 ### Data flow
 
 ```
 files → ingest (mezzanine, proxy, WAV) → transcribe → vad → segmentation
-      → loudness + color stats → draft_builder → <data dir>/projects/<id>/project.json
+      → loudness + color stats → takes → draft_builder → <data dir>/projects/<id>/project.json
 project.json → render/job.py:
    audio_mix (ffmpeg voice rebuild) → remotion_render (muted MP4 via render.mjs)
    → final_pass (mux + two-pass loudnorm) → exports/<name>.mp4
@@ -197,6 +199,8 @@ CI (`.github/workflows/ci.yml`) runs the same commands on Windows and Linux.
 - **Pipeline stage:** add a module under `pipeline/`, compute through `run_stage(layout, stage, version, inputs, params, ResultModel, compute, outputs=...)`, put the result model in `models.py` (or the module), wire it into `pipeline/analyze.py`, add tests with lavfi fixtures from `tests/media.py`.
 - **CLI command:** add an `@app.command()` in `cli.py`; get settings with `SettingsService.default()`; catch `PIPELINE_ERRORS` and exit through `_fail()` so errors print a code.
 - **API route:** create an `APIRouter(prefix="/api")` module in `api/`, inject the service with the `ServiceDep` pattern from `routes_settings.py`, and `include_router` it in `create_app()`. Test with `create_app(settings_service=...)` and FastAPI's `TestClient`.
+- **Takes stage** (`pipeline/takes.py`, cached as `cache/takes.json`): `engine.classify_segment` drops out-of-take remarks, `clustering.py` groups retakes inside a window (rapidfuzz text similarity, or `sentence-transformers` embeddings with `takeSimilarity: "embeddings"` and the `embeddings` extra; grey zone 0.5–0.8 goes to `engine.same_take`), `features.py` scores each take in code, `engine.decide_cluster` picks one. The result is an ordered `TakeEntry` list. `draft_builder` turns it into clips: a group keeps its chosen clip, the other takes become `removed` clips with the same `takeGroupId`, and `alternativeTakeIds` lists those clip ids. Remarks become `removed` clips without a group. Weights live in the `takeWeights` user setting. Visual features need the `vision` extra (OpenCV); without it they are `None`.
+- **Decision engine:** implement the `DecisionEngine` protocol in `decide/base.py` (`same_take`, `decide_cluster`, `classify_segment`, `transition_between`, plus `name` and a `fingerprint()` that goes into the stage cache key). Each method is one feature with Pydantic inputs and outputs, so an engine can delegate any method to `HeuristicEngine`. Return it from `decide/factory.py`. Check it with `uv run powereditor eval-takes`; the bundled benchmark is **synthetic** (`tests/fixtures/takes_benchmark.json`), not real footage.
 - **Model provider (planned, Phase 4):** implement the `ModelProvider` interface (capabilities + transport `api` or `local_cli`) and register it; features never import providers directly. See PLAN.md Phase 4.
 
 ### Platform gotchas
@@ -205,6 +209,7 @@ CI (`.github/workflows/ci.yml`) runs the same commands on Windows and Linux.
 - `pnpm-workspace.yaml` sets `supportedArchitectures.cpu: [current, x64]` so x64 native packages (compositor, esbuild) install next to ARM64 ones. Only `esbuild` may run install scripts (`allowBuilds`).
 - **Line endings:** `.gitattributes` forces LF. Generators normalize CRLF before `--check`.
 - **`bash` from Python subprocess** on Windows can resolve to WSL's `bash.exe`, not Git Bash. Do not shell out to `bash` from code or tests.
+- The `vision` extra pins `opencv-python-headless<5`: OpenCV 5 moved the Haar face cascade out of the main package.
 - ffmpeg reports `h264_nvenc` even without a GPU on some builds; encoder choice also checks CUDA.
 
 ### Where planning and progress live

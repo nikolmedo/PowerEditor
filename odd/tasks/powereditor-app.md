@@ -42,7 +42,7 @@ Reviewed boundary: `f35332a` (phase-0).
 - [ ] 2b Remotion composition (clips + audio crossfade), render CLI + loudnorm final pass, render-speed measurement.
 
 ### Slice 3 — `feat/phase-3-takes`
-- [ ] 3a Clustering, deterministic features, HeuristicEngine, synthetic benchmark (clearly labelled synthetic) + eval script.
+- [x] 3a Clustering, deterministic features, HeuristicEngine, synthetic benchmark (clearly labelled synthetic) + eval script.
 
 ### Slice 4 — `feat/phase-4-providers`
 - [ ] 4a Provider registry (`ModelProvider`, transports `api` / `local_cli`): OpenAI (API + Codex CLI), Gemini (API + Gemini CLI), Claude (API + Claude Code CLI), DeepSeek (API), Jev; per-feature model assignment with heuristic fallback; settings/API for providers and feature mapping.
@@ -84,7 +84,10 @@ Reviewed boundary: `f35332a` (phase-0).
 - `f78a4fd` (2a): high, granted, 4 lenses approved + acknowledged. WARNING advisories → follow-ups: vad.py:179-182 and :144-152 (full WAV in memory), ingest.py:275-276, OpenAI retry on non-idempotent timeouts (openai_whisper.py:140-148), zero-length segment padded into a clip (draft_builder.py:96-99).
 - `f6cf249` (2b): high, granted, 4 lenses approved + acknowledged. WARNING advisories → follow-ups: pnpm-workspace supportedArchitectures/allowBuilds scope (R1-001), composition id duplicated in render.mjs, empty-edit mismatch (job.py:63), partial/non-atomic export on final-pass failure (job.py:75-84), Remotion renderer untested (remotion_render.py:73-134), loudnorm on silent audio (final_pass.py:34-46).
 - `5c4afe5` (2c): high, granted, 4 lenses → `correction_required` (CRITICAL R4-voice-argv-length: per-clip `-i` + inline filtergraph exceeds the Windows 32767-char command line at ~100 clips). One bounded correction `02bf674`: render voice in batches of 40 clips with `-/filter_complex` script files, join exact-length PCM parts with the concat demuxer; tests for batching and renumbering. Targeted validation approved + acknowledged. Follow-ups: POSIX kill-tree for render timeout (remotion_render.py:88-94), voice rendered before media check (job.py:54-62), decode from start per clip (audio_mix.py:133).
-- Reviewed boundary: `02bf674`.
+- `02bf674`..`9f89392` (#4+#5 accumulated, stop-hook candidate): approved + acknowledged.
+- Slice 3: single commit hit `lens_context_budget_exceeded` twice (uv.lock is byte-heavy); with user approval split and force-pushed as `d21459a` (deps), `3913292` (code), `a5a0e20` (tests/docs). Each reviewed in a detached worktree: medium, granted, 1 lens, approved + acknowledged. Follow-ups: eval doesn't validate one `best` per group (takes_eval.py:118), pyproject extras notes.
+- Reviewed boundary: `a5a0e20`.
+- Lesson: commit lockfile changes separately from code so each review candidate fits the native budget.
 
 - 2a done (delegated): 1b follow-ups fixed (encoder in cache key, WAV tracked output, atomic stage outputs, CLI error codes, OpenAI per-chunk retry); VAD (Silero ONNX bundled in faster-whisper, no torch, + dB floor; EnergyDetector fallback); segmentation; LUFS (ebur128) + color stats; draft builder + `export/subtitles.remap_words`; `analyze_project` + `powereditor analyze`. Evidence: pytest 156 passed (parent re-run); ruff/mypy clean; smoke on gated-tone clip kept 5.18 of 10 s, second run fully cached. RED strong for follow-ups, weak for new modules.
 - Contract for 2b: clip frames = round((out-in)/speed*fps); composition must match.
@@ -106,5 +109,9 @@ Reviewed boundary: `f35332a` (phase-0).
 - User requests (2026-10-06): all docs in English; tidy readable code; README for humans (marketing, screenshots) and agents (token-saving guide); release workflow + in-app update check; multi-provider AI (API or local subscription CLIs: OpenAI, Gemini, Claude; DeepSeek API only), extensible registry, Providers screen + Features screen for per-feature model choice. Added to PLAN.md as Phase 4 (providers, absorbs Jev) and Phase 11 (docs/CI/release/update).
 - Follow-up: `.env.example` lacks `FFMPEG_PATH`/`FFPROBE_PATH` (present in `config.py`).
 
+- PR #4 (2c) and #5 (docs/CI) merged into `main` (user approved, 2026-10-06). First CI run green on windows + ubuntu. Accumulated #4+#5 range review approved; follow-ups: POSIX kill-tree on render timeout, per-clip voice decode from file start, crossfade naming, VoiceGraph dual representation, fade on short source audio.
+- 3a done (delegated): text clustering (rapidfuzz, window of 6 takes; optional `embeddings` extra), deterministic features (fillers, restarts, cut-off, rate, prob, RMS dBFS, last-take bonus; optional `vision` extra with OpenCV <5), `decide/` with `DecisionEngine` protocol (+ `same_take`, `name`, `fingerprint`) and `HeuristicEngine`, takes stage cached, draft builder keeps best take and stores alternatives as removed clips sharing `takeGroupId` (no schema change), `powereditor eval-takes`. Evidence: pytest 246 passed / 1 skipped (vision extra) (parent re-run); SYNTHETIC benchmark 25 clusters: clustering 100%, best take 100%, off-take 100%, 72% automatic decisions (optimistic: fixture written with the heuristic).
+- Follow-ups: takes stage loads whole WAV; proxies not in cache key; zero-length chosen clip vanishes; eval doesn't validate one `best` per group.
+
 ## Next step
-Slice 3 (takes heuristic) on a branch stacked on `docs/plan-readme`.
+Phase 4 (providers) on `feat/phase-4-providers`.

@@ -1,0 +1,130 @@
+{
+  "synthetic": true,
+  "description": "SYNTHETIC take benchmark: scripted retakes written by hand to exercise clustering and take choice (fillers, cut-offs, stutters, off-take remarks). It is not the hand-labelled benchmark from real footage that PLAN.md asks for. Timings are synthesized by the evaluator, so audio and visual features are unknown here.",
+  "scenes": [
+    {
+      "id": "es-cafe",
+      "language": "es",
+      "segments": [
+        { "text": "Hola a todos, hoy vamos a hablar de", "group": "cafe-intro" },
+        { "text": "Eh, hola a todos, hoy vamos a hablar del café y de su historia.", "group": "cafe-intro" },
+        { "text": "Hola a todos, hoy vamos a hablar del café y de su historia.", "group": "cafe-intro", "best": true },
+        { "text": "El café llegó a Europa en el siglo diecisiete.", "group": "cafe-europe", "best": true },
+        { "text": "Mmm, el café llegó a, eh, a Europa en el siglo diecisiete.", "group": "cafe-europe" },
+        { "text": "Primero se tomaba en Venecia y después en Londres.", "group": "cafe-venice" }
+      ]
+    },
+    {
+      "id": "es-receta",
+      "language": "es",
+      "segments": [
+        { "text": "Para esta receta necesitamos tres huevos y harina.", "group": "receta-ingredients" },
+        { "text": "Corta, corta.", "offTake": true },
+        { "text": "Para esta receta necesitamos tres huevos, harina y un poco de azúcar.", "group": "receta-ingredients", "best": true },
+        { "text": "Batimos los huevos hasta que queden bien es- espumosos.", "group": "receta-beat" },
+        { "text": "Batimos los huevos hasta que queden bien espumosos.", "group": "receta-beat", "best": true },
+        { "text": "Después agregamos la harina de a poco y mezclamos con", "group": "receta-flour" },
+        { "text": "Después agregamos la harina de a poco y mezclamos con una espátula.", "group": "receta-flour", "best": true },
+        { "text": "Después agregamos la la harina de a poco y mezclamos con una", "group": "receta-flour" }
+      ]
+    },
+    {
+      "id": "es-finanzas",
+      "language": "es",
+      "segments": [
+        { "text": "Ahorrar no es guardar lo que sobra, es pagarte primero a vos.", "group": "fin-save", "best": true },
+        { "text": "Ahorrar no es, eh, guardar lo que sobra, es, o sea, pagarte primero a vos.", "group": "fin-save" },
+        { "text": "¿Está grabando?", "offTake": true },
+        { "text": "La regla más simple es separar el diez por ciento apenas cobrás.", "group": "fin-rule" },
+        { "text": "La regla más simple es separar el diez por ciento apenas cobrás el sueldo.", "group": "fin-rule", "best": true },
+        { "text": "Con el tiempo ese hábito vale más que cualquier inversión.", "group": "fin-habit" },
+        { "text": "Si te sirvió, suscribite para más consejos.", "group": "fin-cta" }
+      ]
+    },
+    {
+      "id": "es-viaje",
+      "language": "es",
+      "segments": [
+        { "text": "Este es el mirador más lindo de toda la ciudad.", "group": "viaje-view", "best": true },
+        { "text": "Este es el mirador más lindo de toda la", "group": "viaje-view" },
+        { "text": "Se llega caminando desde el puerto en veinte minutos.", "group": "viaje-walk" },
+        { "text": "Se llega caminando desde el puerto, eh, en unos veinte minutos.", "group": "viaje-walk" },
+        { "text": "Se llega caminando desde el puerto en unos veinte minutos más o menos.", "group": "viaje-walk", "best": true },
+        { "text": "Otra vez.", "offTake": true },
+        { "text": "Conviene venir al atardecer, cuando baja el sol.", "group": "viaje-sunset", "best": true },
+        { "text": "Conviene venir al atardecer cuando, mmm, cuando baja el", "group": "viaje-sunset" }
+      ]
+    },
+    {
+      "id": "es-tecnologia",
+      "language": "es",
+      "segments": [
+        { "text": "Hoy les muestro tres atajos de teclado que uso todos los días.", "group": "tec-intro" },
+        { "text": "Hoy les muestro tres atajos de teclado que uso todos los días en el trabajo.", "group": "tec-intro", "best": true },
+        { "text": "El primero es control más shift más T para recuperar una pestaña cerrada.", "group": "tec-first", "best": true },
+        { "text": "El primero es control más shift, eh, más T para recu- recuperar una pestaña.", "group": "tec-first" },
+        { "text": "Ok, de nuevo.", "offTake": true },
+        { "text": "El segundo sirve para mover ventanas entre pantallas.", "group": "tec-second" },
+        { "text": "El segundo sirve para mover las ventanas entre dos pantallas.", "group": "tec-second", "best": true },
+        { "text": "Y el tercero es mi favorito.", "group": "tec-third" }
+      ]
+    },
+    {
+      "id": "en-fitness",
+      "language": "en",
+      "segments": [
+        { "text": "Here are three mistakes people make at the gym.", "group": "fit-intro" },
+        { "text": "Um, here are three mistakes, uh, people make at the gym every day.", "group": "fit-intro" },
+        { "text": "Here are three mistakes people make at the gym every day.", "group": "fit-intro", "best": true },
+        { "text": "First, they skip the warm up and go straight to heavy weights.", "group": "fit-first", "best": true },
+        { "text": "First, they skip the warm up and go straight to the", "group": "fit-first" },
+        { "text": "Sorry, again.", "offTake": true },
+        { "text": "Second, they never track how much they lift.", "group": "fit-second" },
+        { "text": "Second, they they never track how much they lift each week.", "group": "fit-second", "best": true }
+      ]
+    },
+    {
+      "id": "en-cooking",
+      "language": "en",
+      "segments": [
+        { "text": "Today we are making the easiest bread you will ever bake.", "group": "bread-intro", "best": true },
+        { "text": "Today we are making the, um, easiest bread you will ever, uh, bake.", "group": "bread-intro" },
+        { "text": "You only need flour, water, salt and yeast.", "group": "bread-ingredients" },
+        { "text": "You only need flour, water, salt and a little bit of yeast.", "group": "bread-ingredients", "best": true },
+        { "text": "Let me try that again.", "offTake": true },
+        { "text": "Mix everything and let it rest overnight in the fridge.", "group": "bread-rest", "best": true },
+        { "text": "Mix everything and let it rest overnight in the", "group": "bread-rest" },
+        { "text": "Bake it at two hundred and fifty degrees for forty minutes.", "group": "bread-bake" }
+      ]
+    },
+    {
+      "id": "en-productivity",
+      "language": "en",
+      "segments": [
+        { "text": "The best productivity tip I know is to plan tomorrow tonight.", "group": "prod-tip" },
+        { "text": "The best productivity tip I know is to plan tomorrow tonight before bed.", "group": "prod-tip", "best": true },
+        { "text": "Write down the three things that matter most.", "group": "prod-three", "best": true },
+        { "text": "Write down the three, uh, the three things that, um, matter most.", "group": "prod-three" },
+        { "text": "Cut!", "offTake": true },
+        { "text": "Then do the hardest one first, before you open your email.", "group": "prod-hard" },
+        { "text": "Then do the hardest one first, before you open your", "group": "prod-hard" },
+        { "text": "Then do the hardest one first, before you open your email or chat.", "group": "prod-hard", "best": true },
+        { "text": "Follow me for more tips like this.", "group": "prod-cta" }
+      ]
+    },
+    {
+      "id": "en-travel",
+      "language": "en",
+      "segments": [
+        { "text": "This little village is only two hours from Lisbon.", "group": "travel-village" },
+        { "text": "Is it recording?", "offTake": true },
+        { "text": "This little village is only two hours by train from Lisbon.", "group": "travel-village", "best": true },
+        { "text": "The streets are so narrow that cars can't get in.", "group": "travel-streets", "best": true },
+        { "text": "The streets are so narrow that, um, cars can't, uh, can't get in.", "group": "travel-streets" },
+        { "text": "Come in spring, when the hills turn green and the crowds are gone.", "group": "travel-spring" },
+        { "text": "Come in spring, when the hills turn green and the", "group": "travel-spring" },
+        { "text": "Come in spring, when the hills turn green and the crowds are gone.", "group": "travel-spring", "best": true }
+      ]
+    }
+  ]
+}
