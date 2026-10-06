@@ -11,7 +11,9 @@ import { Link } from "../shell/AppShell";
 import { useProjectStore } from "../store/project";
 import { ErrorNotice, Status } from "../ui/primitives";
 import { useResource } from "../ui/useResource";
+import { AudioPanel } from "./AudioPanel";
 import { ClipPanel } from "./ClipPanel";
+import { ColorPanel } from "./ColorPanel";
 import { editorCommand, ownsKeys } from "./editorKeys";
 import { PreviewVideo, projectMediaBase } from "./PreviewVideo";
 import { SubtitlesPanel } from "./SubtitlesPanel";
@@ -22,7 +24,7 @@ import { useAutosave, type AutosaveState } from "./useAutosave";
 
 /** Defaults of the user settings, used until (or if) the settings cannot be read. */
 const PREVIEW_DEFAULTS = { audioCrossfadeMs: 15, punchInScale: 1.1, modelMinConfidence: 0.8 };
-const PANELS = ["clip", "transitions", "subtitles"] as const;
+const PANELS = ["clip", "transitions", "subtitles", "audio", "color"] as const;
 type PanelName = (typeof PANELS)[number];
 
 const SAVE_LABELS: Record<AutosaveState["status"], [MessageKey, boolean | null]> = {
@@ -103,6 +105,7 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
       audioCrossfadeMs: preview.audioCrossfadeMs,
       punchInScale: preview.punchInScale,
       mediaBaseUrl: projectMediaBase(projectId),
+      previewMusic: true,
     }),
     [project, projectId, preview.audioCrossfadeMs, preview.punchInScale],
   );
@@ -199,6 +202,8 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         )}
         {panel === "transitions" && <TransitionsPanel clip={selected} />}
         {panel === "subtitles" && <SubtitlesPanel project={project} />}
+        {panel === "audio" && <AudioPanel projectId={projectId} project={project} />}
+        {panel === "color" && <ColorPanel project={project} clip={selected} />}
       </aside>
       <Timeline
         model={model}

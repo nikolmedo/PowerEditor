@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/client";
 import { api } from "../src/api/endpoints";
 import { watchJob } from "../src/api/jobs";
+import { uploadMusic } from "../src/api/upload";
 import type { JobEvent, JobInfo, ProjectListItem } from "../src/api/types";
 import { translate, type MessageKey } from "../src/i18n";
 import { ReviewStep } from "../src/review/ReviewStep";
@@ -37,6 +38,10 @@ vi.mock("../src/api/endpoints", () => ({
   ),
 }));
 vi.mock("../src/api/jobs", () => ({ watchJob: vi.fn(() => () => undefined) }));
+vi.mock("../src/api/upload", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/api/upload")>()),
+  uploadMusic: vi.fn(),
+}));
 
 const seekTo = vi.fn();
 vi.mock("@remotion/player", () => ({
@@ -303,6 +308,89 @@ describe("ReviewStep", () => {
 
     await userEvent.selectOptions(screen.getByLabelText(t("edit.position")), "top");
     expect(useProjectStore.getState().project?.subtitles.style.position).toBe("top");
+  });
+
+  it("sets track levels, ducking and source matching from the audio panel", async () => {
+    await open();
+    await userEvent.click(screen.getByRole("tab", { name: t("panel.audio") }));
+    const voice = screen.getByRole("region", { name: t("audio.voice") });
+    const music = screen.getByRole("region", { name: t("audio.music") });
+    const trackOf = (id: string) =>
+      useProjectStore.getState().project?.audioTracks.find((track) => track.id === id);
+
+    fireEvent.change(within(voice).getByLabelText(t("edit.volume"), { exact: false }), {
+      target: { value: "0.5" },
+    });
+    expect(trackOf("voice")?.volume).toBe(0.5);
+    await userEvent.click(within(voice).getByLabelText(t("audio.normalize")));
+    expect(useProjectStore.getState().project?.normalizeSources).toBe(true);
+
+    expect(within(music).getByText("song.mp3")).toBeTruthy();
+    await userEvent.click(within(music).getByLabelText(t("audio.duck")));
+    expect(trackOf("m1")?.duckingEnabled).toBe(false);
+    await userEvent.click(within(music).getByRole("button", { name: t("audio.removeMusic") }));
+    expect(trackOf("m1")).toBeUndefined();
+    expect(within(music).getByText(t("audio.noMusic"))).toBeTruthy();
+  });
+
+  it("uploads a music file and puts it on the timeline", async () => {
+    vi.mocked(uploadMusic).mockImplementation((_id, _file, onProgress) => {
+      onProgress(1, 2);
+      return {
+        done: Promise.resolve({ fileName: "music-0a1b2c3d.mp3", durationSeconds: 3, url: "/m" }),
+        abort: () => undefined,
+      };
+    });
+    await open({ ...PROJECT, audioTracks: PROJECT.audioTracks.slice(0, 1) });
+    await userEvent.click(screen.getByRole("tab", { name: t("panel.audio") }));
+
+    await userEvent.upload(
+      screen.getByLabelText(t("audio.addMusic")),
+      new File(["abc"], "song.mp3", { type: "audio/mpeg" }),
+    );
+
+    await waitFor(() =>
+      expect(useProjectStore.getState().project?.audioTracks.at(-1)?.sourcePath).toBe(
+        "music-0a1b2c3d.mp3",
+      ),
+    );
+    expect(vi.mocked(uploadMusic).mock.calls[0]?.[0]).toBe("p1");
+  });
+
+  it("grades every clip or only the selected one from the color panel", async () => {
+    await open({
+      ...PROJECT,
+      sources: PROJECT.sources.map((source, index) =>
+        index === 0
+          ? { ...source, colorCorrection: { redGain: 1.1, greenGain: 1, blueGain: 0.9 } }
+          : source,
+      ),
+    });
+    await userEvent.click(screen.getByRole("tab", { name: t("panel.color") }));
+    const state = () => useProjectStore.getState().project;
+
+    await userEvent.click(screen.getByRole("button", { name: t("color.preset.warm") }));
+    expect(state()?.colorGrade.preset).toBe("warm");
+    fireEvent.change(screen.getByLabelText(t("color.brightness"), { exact: false }), {
+      target: { value: "1.2" },
+    });
+    expect(state()?.colorGrade.brightness).toBe(1.2);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: t("review.clipAt", { time: "0:02.0" }) }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: t("color.scope.clip") }));
+    await userEvent.click(screen.getByRole("button", { name: t("color.preset.bw") }));
+    expect(state()?.clips.find((clip) => clip.id === "k2")?.colorOverride?.saturation).toBe(0);
+    expect(state()?.colorGrade.preset).toBe("warm");
+
+    await userEvent.click(screen.getByRole("tab", { name: t("color.scope.all") }));
+    await userEvent.click(screen.getByRole("button", { name: t("color.applyToAll") }));
+    expect(state()?.clips.every((clip) => clip.colorOverride == null)).toBe(true);
+
+    const match = screen.getByRole("region", { name: t("color.match") });
+    await userEvent.click(within(match).getByRole("button", { name: t("color.reset") }));
+    expect(state()?.sources[0]?.colorCorrection).toBeNull();
   });
 
   it("offers to reload or keep the open version after a conflicting save", async () => {

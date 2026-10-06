@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/client";
-import { uploadFraction, uploadProject, uploadReducer } from "../src/api/upload";
+import { uploadFraction, uploadMusic, uploadProject, uploadReducer } from "../src/api/upload";
 
 /** A stand-in XHR: records what was sent and lets each test decide how the request ends. */
 class FakeXhr {
@@ -74,6 +74,24 @@ describe("uploadProject", () => {
     const offline = start();
     offline.xhr.onerror?.();
     await expect(offline.upload.done).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("uploadMusic", () => {
+  it("posts one file to the project's music endpoint and resolves to the stored file", async () => {
+    vi.stubGlobal("XMLHttpRequest", FakeXhr);
+    const progress = vi.fn();
+    const upload = uploadMusic("p 1", new File(["abc"], "song.mp3"), progress);
+    const xhr = FakeXhr.last;
+    if (!xhr) throw new Error("no request was made");
+
+    expect(xhr.opened).toEqual(["POST", "/api/projects/p%201/music"]);
+    expect((xhr.sent?.get("file") as File).name).toBe("song.mp3");
+    xhr.upload.onprogress?.({ loaded: 2, total: 3 });
+    expect(progress).toHaveBeenCalledWith(2, 3);
+    const stored = { fileName: "music-0a1b2c3d.mp3", durationSeconds: 2, url: "/x" };
+    xhr.finish(201, JSON.stringify(stored));
+    expect(await upload.done).toEqual(stored);
   });
 });
 

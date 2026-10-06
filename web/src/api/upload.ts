@@ -1,5 +1,5 @@
 import { ApiError, parseError } from "./client";
-import type { ProjectOptions } from "./types";
+import type { MusicFile, ProjectOptions } from "./types";
 
 export type UploadState =
   | { phase: "idle" }
@@ -33,25 +33,19 @@ export function uploadFraction(state: UploadState): number {
   return Math.min(1, state.loaded / state.total);
 }
 
-export interface Upload {
-  done: Promise<{ id: string }>;
+export interface Upload<T> {
+  done: Promise<T>;
   abort: () => void;
 }
 
-/** Create a project from local files with `POST /api/projects/upload`. XHR instead of fetch
- * because only XHR reports upload progress. */
-export function uploadProject(
-  files: readonly File[],
-  options: ProjectOptions,
+/** POST a form with XHR instead of fetch, because only XHR reports upload progress. */
+function postForm<T>(
+  url: string,
+  form: FormData,
   onProgress: (loaded: number, total: number) => void,
-): Upload {
-  const form = new FormData();
-  for (const file of files) form.append("files", file, file.name);
-  for (const [key, value] of Object.entries(options)) {
-    if (value) form.append(key, value);
-  }
+): Upload<T> {
   const xhr = new XMLHttpRequest();
-  const done = new Promise<{ id: string }>((resolve, reject) => {
+  const done = new Promise<T>((resolve, reject) => {
     xhr.upload.onprogress = (event) => onProgress(event.loaded, event.total);
     xhr.onload = () => {
       let body: unknown = null;
@@ -60,13 +54,38 @@ export function uploadProject(
       } catch {
         // A non-JSON answer still becomes an ApiError below.
       }
-      if (xhr.status >= 200 && xhr.status < 300 && body) resolve(body as { id: string });
+      if (xhr.status >= 200 && xhr.status < 300 && body) resolve(body as T);
       else reject(parseError(xhr.status, body));
     };
     xhr.onerror = () => reject(new ApiError(0, "network", "The local server is not reachable."));
     xhr.onabort = () => reject(new ApiError(0, "cancelled", "The upload was cancelled."));
   });
-  xhr.open("POST", "/api/projects/upload");
+  xhr.open("POST", url);
   xhr.send(form);
   return { done, abort: () => xhr.abort() };
+}
+
+/** Create a project from local files with `POST /api/projects/upload`. */
+export function uploadProject(
+  files: readonly File[],
+  options: ProjectOptions,
+  onProgress: (loaded: number, total: number) => void,
+): Upload<{ id: string }> {
+  const form = new FormData();
+  for (const file of files) form.append("files", file, file.name);
+  for (const [key, value] of Object.entries(options)) {
+    if (value) form.append(key, value);
+  }
+  return postForm("/api/projects/upload", form, onProgress);
+}
+
+/** Store a music file in the project's media folder; adding it to the timeline is an edit. */
+export function uploadMusic(
+  projectId: string,
+  file: File,
+  onProgress: (loaded: number, total: number) => void,
+): Upload<MusicFile> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return postForm(`/api/projects/${encodeURIComponent(projectId)}/music`, form, onProgress);
 }

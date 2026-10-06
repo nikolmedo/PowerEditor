@@ -134,6 +134,13 @@ export interface JobInfo {
 
 export type ProjectPreset = "reel_9x16" | "landscape_16x9";
 
+/** A music file stored in a project's media folder (`POST /api/projects/{id}/music`). */
+export interface MusicFile {
+  fileName: string;
+  durationSeconds: number;
+  url: string;
+}
+
 export interface ProjectOptions {
   name?: string;
   preset?: ProjectPreset;
