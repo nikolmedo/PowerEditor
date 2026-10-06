@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from powereditor.config import Settings
-from powereditor.paths import AppPaths, resolve_executable
+from powereditor.paths import AppPaths
 from powereditor.settings_store import InMemorySecretStore, SettingsService
 
 
@@ -150,22 +150,19 @@ def test_corrupt_settings_file_falls_back_to_defaults(tmp_path: Path) -> None:
     assert _service(tmp_path).get_effective().transcriber == "local"
 
 
-def test_resolve_executable_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
-    bin_dir = tmp_path / "bin"
-    configured = tmp_path / "custom" / "ffmpeg.exe"
+def test_locate_executable_uses_configured_tool_paths(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    node = tmp_path / "custom" / "node.exe"
+    node.parent.mkdir()
+    node.write_bytes(b"")
+    downloaded = service.paths.bin_dir / "ffmpeg-8.1.3" / "bin" / "ffmpeg.exe"
+    downloaded.parent.mkdir(parents=True)
+    downloaded.write_bytes(b"")
 
-    assert resolve_executable("ffmpeg", None, bin_dir) == "/usr/bin/ffmpeg"
+    service.update({"nodePath": str(node)})
 
-    bin_dir.mkdir()
-    bundled = bin_dir / "ffmpeg.exe"
-    bundled.write_bytes(b"")
-    assert resolve_executable("ffmpeg", None, bin_dir) == str(bundled)
-
-    configured.parent.mkdir()
-    configured.write_bytes(b"")
-    assert resolve_executable("ffmpeg", str(configured), bin_dir) == str(configured)
-    assert resolve_executable("ffmpeg", str(tmp_path / "nope.exe"), bin_dir) == str(bundled)
+    assert service.locate_executable("node") == str(node)
+    assert service.locate_executable("ffmpeg") == str(downloaded)
 
 
 def test_locate_executable_uses_configured_ffprobe(tmp_path: Path) -> None:

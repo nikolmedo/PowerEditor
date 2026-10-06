@@ -22,7 +22,7 @@ from powereditor.process import ProcessScope, process_scope
 
 logger = logging.getLogger(__name__)
 
-JobKind = Literal["analyze", "render", "export_subtitles", "whisper_model"]
+JobKind = Literal["analyze", "render", "export_subtitles", "whisper_model", "runtime"]
 JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 TERMINAL_STATUSES: frozenset[JobStatus] = frozenset({"succeeded", "failed", "cancelled"})
 MIN_FRACTION_STEP = 0.01

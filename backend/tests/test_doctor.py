@@ -124,3 +124,14 @@ def test_cli_doctor_uses_configured_ffmpeg_path(
     result = CliRunner().invoke(app, ["doctor"])
 
     assert result.exit_code == 0, result.output
+
+
+def test_a_frozen_build_does_not_need_pnpm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shutil, "which", _which_only("ffmpeg", "ffprobe", "node"))
+
+    source = doctor.run_checks(runner=_fake_runner("v1"))
+    frozen = doctor.run_checks(runner=_fake_runner("v1"), frozen=True)
+
+    assert not source.ok
+    assert frozen.ok
+    assert [check.name for check in frozen.checks] == ["ffmpeg", "ffprobe", "node", "cuda"]

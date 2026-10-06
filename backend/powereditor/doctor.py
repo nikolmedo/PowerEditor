@@ -113,12 +113,16 @@ def cuda_available(runner: Runner | None = None) -> bool:
     return check_dependency(CUDA_PROBE, runner or default_runner).found
 
 
-def run_checks(runner: Runner | None = None, locate: Locator | None = None) -> DoctorReport:
+def run_checks(
+    runner: Runner | None = None, locate: Locator | None = None, *, frozen: bool = False
+) -> DoctorReport:
+    """Probe every tool; a frozen build renders from a prebuilt bundle and needs no pnpm."""
     active_runner = runner if runner is not None else default_runner
     active_locate = locate if locate is not None else _which
+    probes = [probe for probe in PROBES if not (frozen and probe.name == "pnpm")]
     return DoctorReport(
         system=platform.system(),
         machine=platform.machine(),
         python_version=platform.python_version(),
-        checks=[check_dependency(probe, active_runner, active_locate) for probe in PROBES],
+        checks=[check_dependency(probe, active_runner, active_locate) for probe in probes],
     )

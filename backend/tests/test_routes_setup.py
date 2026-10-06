@@ -10,6 +10,7 @@ from powereditor.api.app import create_app
 from powereditor.api.services import Pipelines
 from powereditor.settings_store import SettingsService
 from tests.api_client import local_client, make_service, wait_for_job
+from tests.test_runtime import ARCHIVE, redirecting_transport, spec_for
 
 TIMEOUT = 10
 
@@ -95,3 +96,27 @@ def test_download_the_whisper_model_as_a_job(tmp_path: Path) -> None:
     assert done["result"] == {"model": "small"}
     assert models.requests == [("small", tmp_path / "models")]
     assert (after["whisperModelDownloaded"], after["whisperDownloadJobId"]) == (True, None)
+
+
+def test_install_a_runtime_as_a_job(tmp_path: Path) -> None:
+    spec = spec_for(ARCHIVE)
+    app = create_app(
+        settings_service=make_service(tmp_path),
+        pipelines=Pipelines(whisper_models=FakeWhisperModels()),
+        doctor_runner=_all_tools_found,
+        runtime_downloads=(spec,),
+        runtime_transport=redirecting_transport(ARCHIVE),
+    )
+    with local_client(app) as client:
+        before = client.get("/api/setup").json()["runtimes"]
+        job = client.post("/api/setup/runtime/tool").json()
+        done = wait_for_job(client, job["id"])
+        after = client.get("/api/setup").json()["runtimes"]
+        unknown = client.post("/api/setup/runtime/nope")
+
+    assert [(r["name"], r["installed"]) for r in before] == [("tool", False), ("browser", False)]
+    assert done["status"] == "succeeded"
+    assert done["result"]["path"] == str(tmp_path / "bin" / "tool-1.0" / "bin" / "tool.exe")
+    assert after[0]["installed"] is True
+    assert unknown.status_code == 404
+    assert unknown.json()["detail"]["code"] == "unknown_runtime"

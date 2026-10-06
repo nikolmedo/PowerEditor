@@ -23,6 +23,8 @@ from powereditor.render.music_mix import render_mix
 from powereditor.render.node_runtime import resolve_render_node
 from powereditor.render.quality import QUALITY_PROFILES, RenderQuality
 from powereditor.render.remotion_render import RemotionRenderer
+from powereditor.resources import Resources
+from powereditor.runtime.manager import browser_cache_dir, prepare_browser_cache
 from powereditor.settings_store import SettingsService
 from powereditor.timeline import timeline_layout
 
@@ -57,8 +59,15 @@ class RenderResult:
 
 
 def create_renderer(service: SettingsService) -> Renderer:
-    node = resolve_render_node(service.get_effective().node_path, service.paths.bin_dir)
-    return RemotionRenderer(node)
+    """Remotion under the render Node; a prebuilt bundle runs from the data dir's browser cache."""
+    resources = Resources.current()
+    bin_dir = service.paths.bin_dir
+    node = resolve_render_node(
+        service.get_effective().node_path, bin_dir, runtime_dir=resources.runtime_dir
+    )
+    bundle = resources.prebuilt_bundle()
+    work_dir = prepare_browser_cache(browser_cache_dir(bin_dir)) if bundle else None
+    return RemotionRenderer(node, resources.composition_dir(), bundle_dir=bundle, work_dir=work_dir)
 
 
 def _voice_graph(project: Project, media_dir: Path, ffprobe: str, crossfade_ms: int) -> VoiceGraph:

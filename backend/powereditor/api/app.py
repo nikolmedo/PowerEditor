@@ -1,5 +1,5 @@
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 from pathlib import Path
@@ -24,11 +24,12 @@ from powereditor.api.routes_settings import get_service
 from powereditor.api.routes_settings import router as settings_router
 from powereditor.api.routes_setup import router as setup_router
 from powereditor.api.services import Pipelines, Revealer, default_revealer
-from powereditor.config import REPO_ROOT
 from powereditor.jobs import JobManager
 from powereditor.paths import AppPaths
 from powereditor.projects import ProjectStore
 from powereditor.providers.registry import ProviderRegistry, default_registry
+from powereditor.resources import Resources
+from powereditor.runtime.manifest import RuntimeDownload
 from powereditor.settings_store import SettingsService
 
 
@@ -41,21 +42,13 @@ def _validation_error_without_input(_: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": errors})
 
 
-ENV_WEB_DIR = "POWEREDITOR_WEB_DIR"
 ENV_DEV_CORS = "POWEREDITOR_DEV_CORS"
 VITE_DEV_ORIGIN = "http://localhost:5173"
-BUNDLED_WEB_DIR = Path(__file__).resolve().parents[1] / "web"
-"""Where a packaged build puts the web app, next to the Python package."""
 
 
 def resolve_web_dir() -> Path:
     """`POWEREDITOR_WEB_DIR`, then a bundled build, then the repo's `web/dist`."""
-    override = os.environ.get(ENV_WEB_DIR)
-    if override:
-        return Path(override)
-    if (BUNDLED_WEB_DIR / "index.html").is_file():
-        return BUNDLED_WEB_DIR
-    return REPO_ROOT / "web" / "dist"
+    return Resources.current().web_dir()
 
 
 def dev_cors_enabled() -> bool:
@@ -95,6 +88,8 @@ def create_app(
     revealer: Revealer | None = None,
     web_dir: Path | None = None,
     dev_cors: bool | None = None,
+    runtime_downloads: Sequence[RuntimeDownload] | None = None,
+    runtime_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     if settings_service is None:
         settings_service = SettingsService(
@@ -128,6 +123,8 @@ def create_app(
     app.state.doctor_runner = doctor_runner
     app.state.provider_registry = provider_registry or default_registry()
     app.state.provider_transport = provider_transport
+    app.state.runtime_downloads = runtime_downloads
+    app.state.runtime_transport = runtime_transport
     app.state.project_store = ProjectStore(settings_service.paths)
     app.state.jobs = jobs
     app.state.pipelines = pipelines or Pipelines()
@@ -142,7 +139,9 @@ def create_app(
     def run_doctor(request: Request) -> doctor.DoctorReport:
         service = get_service(request)
         runner = cast(doctor.Runner | None, request.app.state.doctor_runner)
-        return doctor.run_checks(runner=runner, locate=service.locate_executable)
+        return doctor.run_checks(
+            runner=runner, locate=service.locate_executable, frozen=Resources.current().frozen
+        )
 
     app.include_router(settings_router)
     app.include_router(providers_router)
