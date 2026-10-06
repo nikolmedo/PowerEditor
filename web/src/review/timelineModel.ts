@@ -128,3 +128,20 @@ export function clipAt(model: TimelineModel, frame: number): TimelineClip | unde
     (clip) => clip.startFrame <= frame && frame < clip.startFrame + clip.durationInFrames,
   );
 }
+
+/** The kept clip `step` places from the selection. A removed clip sits at the cut before the
+ * kept clip that starts at its frame; with nothing selected the walk starts at either end. */
+export function neighbourClip(
+  model: TimelineModel,
+  selectedId: string | null,
+  step: -1 | 1,
+): TimelineClip | undefined {
+  const kept = model.video;
+  const at = kept.findIndex((clip) => clip.clipId === selectedId);
+  if (at >= 0) return kept[at + step];
+  const removed = model.removed.find((clip) => clip.clipId === selectedId);
+  if (!removed) return step > 0 ? kept[0] : kept.at(-1);
+  const after = kept.findIndex((clip) => clip.startFrame >= removed.startFrame);
+  if (step > 0) return after < 0 ? undefined : kept[after];
+  return kept[(after < 0 ? kept.length : after) - 1];
+}

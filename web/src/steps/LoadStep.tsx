@@ -1,4 +1,5 @@
 import { useCallback, useReducer, useRef, useState, type DragEvent, type FormEvent } from "react";
+import type { ApiError } from "../api/client";
 import { api } from "../api/endpoints";
 import type { ProjectOptions, ProjectPreset } from "../api/types";
 import { uploadFraction, uploadProject, uploadReducer } from "../api/upload";
@@ -19,6 +20,15 @@ export function parsePaths(text: string): string[] {
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/^"(.*)"$/, "$1"))
     .filter(Boolean);
+}
+
+/** Why processing a just-created project could not start, shown once on its page. */
+const startFailures = new Map<string, unknown>();
+
+function takeStartFailure(projectId: string): unknown {
+  const error = startFailures.get(projectId) ?? null;
+  startFailures.delete(projectId);
+  return error;
 }
 
 function formatSize(bytes: number): string {
@@ -73,9 +83,14 @@ function NewProjectForm() {
     const sent = uploadProject(files, options, (loaded, total) =>
       dispatch({ type: "progress", loaded, total }),
     );
-    const { id } = await sent.done;
-    dispatch({ type: "done" });
-    return id;
+    try {
+      const { id } = await sent.done;
+      dispatch({ type: "done" });
+      return id;
+    } catch (caught) {
+      dispatch({ type: "failed", error: caught as ApiError });
+      throw caught;
+    }
   };
 
   const submit = async (event: FormEvent) => {
@@ -94,8 +109,9 @@ function NewProjectForm() {
       setBusy(false);
       return;
     }
-    // A failure to start shows up on the project's page, which offers to process again.
-    await api.analyze(id).catch(() => undefined);
+    // The project exists either way: open its page, which explains a failed start and
+    // offers to process again, instead of staying here where a retry would duplicate it.
+    await api.analyze(id).catch((caught: unknown) => startFailures.set(id, caught));
     navigate(stepPath("load", id) as string);
   };
 
@@ -239,7 +255,7 @@ function ProcessPanel({ projectId }: { projectId: string }) {
     ),
   );
   const [startedId, setStartedId] = useState<string | null>(null);
-  const [startError, setStartError] = useState<unknown>(null);
+  const [startError, setStartError] = useState<unknown>(() => takeStartFailure(projectId));
   const item = project.data;
   const activeId = startedId ?? (item?.activeJobKind === "analyze" ? item.activeJobId : null);
   const progress = useJob(activeId, () => void project.reload());

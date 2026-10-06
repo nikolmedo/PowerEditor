@@ -55,7 +55,7 @@ Reviewed boundary: `f35332a` (phase-0).
 - [x] 6a Web app: settings page (keys + test connection), first-run setup check, Load/Review(read-only)/Export steps, jobs WebSocket, media range serving.
 
 ### Slice 7–9 — `feat/phase-7-editing`, `feat/phase-8-audio-color`, `feat/phase-9-graphics`
-- [ ] 7a Editing: change take, trim, remove/restore, transitions, subtitle edit, undo/redo.
+- [x] 7a Editing: change take, trim, remove/restore, transitions, subtitle edit, undo/redo.
 - [ ] 8a Audio & color panels.
 - [ ] 9a Overlay templates + auto CTA.
 
@@ -135,5 +135,9 @@ Reviewed boundary: `f35332a` (phase-0).
 - README screenshots: real UI captures (review, load, providers, features, setup) and real render frames of a synthetic demo project, in `docs/screenshots/`.
 - Follow-ups: upload.ts untested; LoadStep swallows analyze failure / upload failed dispatch (LoadStep.tsx:83-110); Remotion license prop on Player.
 
+- PR #9 (phase 6) merged after green CI.
+- Phase 7 done (delegated): pure edit ops (`web/src/edit/operations.ts`: swapTake, trimClip ±0.1 s, setRemoved, speed/volume, transitions + preset, subtitle edits/style), TS `retimeWords`/`editSubtitleText` mirrored with shared fixture, zundo undo/redo (100 steps, grouped trims, Ctrl+Z/Shift+Z/Y), debounced autosave with ETag + 409 conflict banner, Clip/Transitions/Subtitles panels, timeline keys. Follow-ups from 6b-2 fixed (LoadStep failures, upload tests). Evidence: pytest 482, vitest 142 (parent re-run); Phase 5 sync acceptance re-asserted after UI edits; manual API + Chrome check.
+- Commits 71e3887, a01ac22, f532972, a70a0bb (all approved), 4cd1408 docs. Follow-ups: keepalive 64 KiB limit on page-close save; "keep mine" error handling (useAutosave.ts:42-45); number inputs clamp while typing; overlay drag deferred to Phase 9; swap keeps old decision confidence.
+
 ## Next step
-PR for phase 6, then Phase 7 (editing).
+PR for phase 7, then Phase 8 (audio & color).

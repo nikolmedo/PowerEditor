@@ -34,6 +34,29 @@ async function readProject(id: string): Promise<{ project: Project; etag: string
   return { project, etag: response.headers.get("ETag") ?? "" };
 }
 
+/** Save an edited project over the revision `etag` names; resolves to the new ETag. A stale
+ * ETag fails with a 409 `revision_conflict`. `keepalive` lets the save outlive a closing page. */
+async function saveProject(
+  id: string,
+  project: Project,
+  etag: string,
+  options: { keepalive?: boolean } = {},
+): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(projectPath(id), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "If-Match": etag },
+      body: JSON.stringify(project),
+      keepalive: options.keepalive ?? false,
+    });
+  } catch {
+    throw new ApiError(0, "network", "The local server is not reachable.");
+  }
+  await readBody<Project>(response);
+  return response.headers.get("ETag") ?? "";
+}
+
 export const api = {
   setup: () => request<SetupStatus>("GET", "/api/setup"),
   downloadWhisperModel: () => request<JobInfo>("POST", "/api/setup/whisper-model"),
@@ -64,6 +87,7 @@ export const api = {
   createProject: (paths: string[], options: ProjectOptions) =>
     request<{ id: string }>("POST", "/api/projects", { paths, ...options }),
   project: readProject,
+  saveProject,
   deleteProject: (id: string) => request<undefined>("DELETE", projectPath(id)),
   analyze: (id: string) => request<JobInfo>("POST", `${projectPath(id)}/analyze`),
   render: (id: string, exportName: string) =>

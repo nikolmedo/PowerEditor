@@ -8,6 +8,10 @@ interface TimelineProps {
   selectedId: string | null;
   onSeek: (frame: number) => void;
   onSelect: (clip: TimelineClip) => void;
+  /** Alt-click: keep the clip's next take. */
+  onSwapNext: (clip: TimelineClip) => void;
+  /** The "N takes" badge: show the clip's takes. */
+  onOpenTakes: (clip: TimelineClip) => void;
 }
 
 export function timecode(frame: number, fps: number): string {
@@ -49,9 +53,18 @@ function Track({
   );
 }
 
-/** Read-only timeline: kept clips in their source color, removed clips as dimmed marks at
- * their cut, subtitle lines, graphics and music, with a playhead synced to the player. */
-export function Timeline({ model, frame, selectedId, onSeek, onSelect }: TimelineProps) {
+/** The edit timeline: kept clips in their source color, removed clips as dimmed marks at their
+ * cut (selectable, to restore them), subtitle lines, graphics and music, with a playhead
+ * synced to the player. */
+export function Timeline({
+  model,
+  frame,
+  selectedId,
+  onSeek,
+  onSelect,
+  onSwapNext,
+  onOpenTakes,
+}: TimelineProps) {
   const t = useT();
   const total = model.durationInFrames;
   const playhead = { left: `${(frame / Math.max(total, 1)) * 100}%` };
@@ -80,17 +93,29 @@ export function Timeline({ model, frame, selectedId, onSeek, onSelect }: Timelin
               aria-label={t("review.clipAt", { time: timecode(clip.startFrame, model.fps) })}
               onClick={(event) => {
                 event.stopPropagation();
-                onSelect(clip);
+                if (event.altKey && clip.takes > 0) onSwapNext(clip);
+                else onSelect(clip);
               }}
             >
               {clip.takes > 0 && (
-                <span className="takes mono">{t("review.takes", { count: clip.takes })}</span>
+                // Mouse shortcut to the takes list; the clip panel lists the takes for keyboards.
+                <span
+                  className="takes mono"
+                  role="presentation"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenTakes(clip);
+                  }}
+                >
+                  {t("review.takes", { count: clip.takes })}
+                </span>
               )}
             </button>
           ))}
           {model.removed.map((clip) => (
-            <span
+            <button
               key={clip.clipId}
+              type="button"
               className="removed-mark"
               style={
                 {
@@ -99,6 +124,12 @@ export function Timeline({ model, frame, selectedId, onSeek, onSelect }: Timelin
                 } as CSSProperties
               }
               title={t("review.removed")}
+              aria-pressed={clip.clipId === selectedId}
+              aria-label={t("edit.removedAt", { time: timecode(clip.startFrame, model.fps) })}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(clip);
+              }}
             />
           ))}
         </Track>

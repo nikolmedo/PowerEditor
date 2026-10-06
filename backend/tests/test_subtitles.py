@@ -156,3 +156,16 @@ def test_lines_break_on_word_limit() -> None:
         "aquí",
     ]
     assert lines[-1].end_frame == 123
+
+
+def test_text_edit_matches_the_shared_fixture() -> None:
+    case = _fixture()["textEdit"]
+    project = rebuild_subtitles(_project())
+    line = project.subtitles.words[case["fromIndex"] : case["toIndex"]]
+
+    edited = edit_subtitle_text(project, line, case["text"])
+
+    source = edited.subtitles.source_words["s1"][5:9]
+    assert [w.model_dump(by_alias=True) for w in source] == case["expectedSourceWords"]
+    words = [w.model_dump(by_alias=True, exclude_none=True) for w in edited.subtitles.words]
+    assert words == case["expectedWords"]

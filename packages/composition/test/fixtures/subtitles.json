@@ -273,5 +273,104 @@
       "startFrame": 99,
       "endFrame": 114
     }
-  ]
+  ],
+  "textEdit": {
+    "fromIndex": 3,
+    "toIndex": 6,
+    "text": "Ahora esto ya vuela",
+    "expectedSourceWords": [
+      {
+        "text": "Ahora",
+        "start": 2.95,
+        "end": 3.2625
+      },
+      {
+        "text": "esto",
+        "start": 3.2625,
+        "end": 3.5125
+      },
+      {
+        "text": "ya",
+        "start": 3.5125,
+        "end": 3.6375
+      },
+      {
+        "text": "vuela",
+        "start": 3.6375,
+        "end": 3.95
+      }
+    ],
+    "expectedWords": [
+      {
+        "text": "Hola",
+        "startFrame": 3,
+        "endFrame": 12,
+        "clipId": "c1",
+        "wordIndex": 0
+      },
+      {
+        "text": "a",
+        "startFrame": 14,
+        "endFrame": 16,
+        "clipId": "c1",
+        "wordIndex": 1
+      },
+      {
+        "text": "todos.",
+        "startFrame": 18,
+        "endFrame": 34,
+        "clipId": "c1",
+        "wordIndex": 2
+      },
+      {
+        "text": "Ahora",
+        "startFrame": 34,
+        "endFrame": 39,
+        "clipId": "c3",
+        "wordIndex": 5
+      },
+      {
+        "text": "esto",
+        "startFrame": 39,
+        "endFrame": 44,
+        "clipId": "c3",
+        "wordIndex": 6
+      },
+      {
+        "text": "ya",
+        "startFrame": 44,
+        "endFrame": 47,
+        "clipId": "c3",
+        "wordIndex": 7
+      },
+      {
+        "text": "vuela",
+        "startFrame": 47,
+        "endFrame": 53,
+        "clipId": "c3",
+        "wordIndex": 8
+      },
+      {
+        "text": "Nuevo",
+        "startFrame": 54,
+        "endFrame": 66,
+        "clipId": "c4",
+        "wordIndex": 0
+      },
+      {
+        "text": "tema",
+        "startFrame": 69,
+        "endFrame": 81,
+        "clipId": "c4",
+        "wordIndex": 1
+      },
+      {
+        "text": "aquí",
+        "startFrame": 99,
+        "endFrame": 108,
+        "clipId": "c4",
+        "wordIndex": 2
+      }
+    ]
+  }
 }

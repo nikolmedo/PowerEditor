@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeline, clipAt, fileLabel, frameAtRatio } from "../src/review/timelineModel";
+import {
+  buildTimeline,
+  clipAt,
+  fileLabel,
+  frameAtRatio,
+  neighbourClip,
+} from "../src/review/timelineModel";
 import { PROJECT } from "./fixtures/reviewProject";
 
 describe("buildTimeline", () => {
@@ -55,5 +61,13 @@ describe("timeline helpers", () => {
     expect(clipAt(model, 61)?.clipId).toBe("k2");
     expect(clipAt(model, 105)).toBeUndefined();
     expect(fileLabel("D:\\a\\b.mp4")).toBe("b.mp4");
+  });
+
+  it("walks the kept clips from the selection, a removed clip or either end", () => {
+    const walk = (id: string | null, step: -1 | 1) => neighbourClip(model, id, step)?.clipId;
+    expect([walk("k1", 1), walk("k2", -1), walk("k3", 1)]).toEqual(["k2", "k1", undefined]);
+    // r2 was dropped at the cut before k3.
+    expect([walk("r2", 1), walk("r2", -1)]).toEqual(["k3", "k2"]);
+    expect([walk(null, 1), walk(null, -1)]).toEqual(["k1", "k3"]);
   });
 });

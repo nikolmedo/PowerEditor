@@ -12,6 +12,9 @@ import { ProjectsHome } from "../src/shell/ProjectsHome";
 import { ExportStep } from "../src/steps/ExportStep";
 import { LoadStep } from "../src/steps/LoadStep";
 import { useAppStore } from "../src/store/app";
+import type { Project } from "@powereditor/composition";
+import fixture from "../../packages/composition/test/fixtures/subtitles.json";
+import { useProjectStore } from "../src/store/project";
 import { PROJECT } from "./fixtures/reviewProject";
 
 vi.mock("../src/api/endpoints", () => ({
@@ -24,6 +27,7 @@ vi.mock("../src/api/endpoints", () => ({
       "deleteProject",
       "analyze",
       "project",
+      "saveProject",
       "render",
       "exportSubtitles",
       "exports",
@@ -152,6 +156,22 @@ describe("LoadStep", () => {
     expect(api.analyze).toHaveBeenCalledWith("p9");
   });
 
+  it("opens the new project and says why processing could not start", async () => {
+    vi.mocked(api.createProject).mockResolvedValue({ id: "p9" });
+    vi.mocked(api.analyze).mockRejectedValue(new ApiError(409, "job_active", "busy"));
+    vi.mocked(api.projects).mockResolvedValue([item({ id: "p9", status: "ingested" })]);
+    const { rerender } = render(<LoadStep projectId={null} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: t("load.mode.paths") }));
+    await userEvent.type(screen.getByLabelText(t("load.paths")), "C:/rec/a.mp4");
+    await userEvent.click(screen.getByRole("button", { name: t("load.process") }));
+    await waitFor(() => expect(useAppStore.getState().path).toBe("/projects/p9/load"));
+    rerender(<LoadStep projectId="p9" />);
+
+    expect(await screen.findByText(t("error.job_active"))).toBeTruthy();
+    expect(screen.getByRole("button", { name: t("load.process") })).toBeTruthy();
+  });
+
   it("follows a running analysis stage by stage and can cancel it", async () => {
     vi.mocked(api.projects).mockResolvedValue([
       item({ status: "ingested", activeJobId: "job-1", activeJobKind: "analyze" }),
@@ -185,6 +205,8 @@ describe("LoadStep", () => {
 describe("ReviewStep", () => {
   beforeEach(() => {
     vi.mocked(api.settings).mockRejectedValue(new ApiError(0, "network", "offline"));
+    // Forget the project a previous test left open, so each test waits for its own load.
+    useProjectStore.getState().load("none", PROJECT, "");
   });
 
   it("shows clip details and seeks the player when a clip is picked", async () => {
@@ -200,6 +222,106 @@ describe("ReviewStep", () => {
     expect(within(panel).getByText("cam-b.MOV")).toBeTruthy();
     expect(within(panel).getByText("95 %")).toBeTruthy();
     expect(seekTo).toHaveBeenCalledWith(60);
+  });
+
+  const clipOf = (id: string) =>
+    useProjectStore.getState().project?.clips.find((clip) => clip.id === id);
+  const open = async (project: Project = PROJECT) => {
+    vi.mocked(api.project).mockResolvedValue({ project, etag: '"e1"' });
+    render(<ReviewStep projectId="p1" />);
+    await screen.findByRole("tablist", { name: t("panel.label") });
+  };
+
+  it("removes, trims and undoes from the keyboard, then autosaves", async () => {
+    vi.mocked(api.saveProject).mockResolvedValue('"e2"');
+    await open();
+    await userEvent.click(
+      screen.getByRole("button", { name: t("review.clipAt", { time: "0:02.0" }) }),
+    );
+
+    await userEvent.keyboard("[[[[");
+    expect(screen.getByText("0.20 s")).toBeTruthy();
+    await userEvent.keyboard("{Delete}");
+    expect(clipOf("k2")?.removed).toBe(true);
+    // r1, k2 and r2 now all sit at the cut before k3.
+    expect(
+      screen.getAllByRole("button", { name: t("edit.removedAt", { time: "0:02.0" }) }),
+    ).toHaveLength(3);
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(clipOf("k2")?.removed).toBe(false);
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(clipOf("k2")?.inSec).toBe(0);
+    await userEvent.keyboard("{ArrowRight}{Delete}");
+    expect(clipOf("k3")?.removed).toBe(true);
+
+    await waitFor(() => expect(api.saveProject).toHaveBeenCalled(), { timeout: 2000 });
+    const [id, saved, etag] = vi.mocked(api.saveProject).mock.calls[0] ?? [];
+    expect([id, etag]).toEqual(["p1", '"e1"']);
+    expect(saved?.clips.find((clip) => clip.id === "k3")?.removed).toBe(true);
+    expect(await screen.findByText(t("save.saved"))).toBeTruthy();
+  });
+
+  it("switches takes from the clip panel and from an alt-click", async () => {
+    await open();
+    await userEvent.click(screen.getByText(t("review.takes", { count: 2 })));
+    const takes = screen.getByRole("region", { name: t("edit.takes") });
+    await userEvent.click(within(takes).getByRole("button", { name: t("edit.useTake") }));
+    expect([clipOf("r1")?.removed, clipOf("k1")?.removed]).toEqual([false, true]);
+
+    const user = userEvent.setup();
+    await user.keyboard("{Alt>}");
+    await user.click(screen.getByRole("button", { name: t("review.clipAt", { time: "0:00.0" }) }));
+    await user.keyboard("{/Alt}");
+    expect([clipOf("r1")?.removed, clipOf("k1")?.removed]).toEqual([true, false]);
+  });
+
+  it("changes one transition and applies a preset to every cut", async () => {
+    await open();
+    await userEvent.click(
+      screen.getByRole("button", { name: t("review.clipAt", { time: "0:02.0" }) }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: t("panel.transitions") }));
+    await userEvent.selectOptions(screen.getByLabelText(t("review.transition")), "slide");
+    expect(clipOf("k2")?.transitionIn).toEqual({ type: "slide", durationFrames: 9 });
+
+    await userEvent.selectOptions(screen.getByLabelText(t("edit.preset")), "punch_in");
+    await userEvent.click(screen.getByRole("button", { name: t("edit.applyToAll") }));
+    expect([clipOf("k2")?.transitionIn.type, clipOf("k3")?.transitionIn.type]).toEqual([
+      "punch_in",
+      "punch_in",
+    ]);
+  });
+
+  it("edits a subtitle line and its style", async () => {
+    await open(fixture.project as Project);
+    await userEvent.click(screen.getByRole("tab", { name: t("panel.subtitles") }));
+    const line = screen.getByDisplayValue("Ahora Esto va");
+    await userEvent.clear(line);
+    await userEvent.type(line, "Ahora esto vuela{enter}");
+    const words = useProjectStore.getState().project?.subtitles.words ?? [];
+    expect(words.slice(3, 6).map((word) => word.text)).toEqual(["Ahora", "esto", "vuela"]);
+
+    await userEvent.selectOptions(screen.getByLabelText(t("edit.position")), "top");
+    expect(useProjectStore.getState().project?.subtitles.style.position).toBe("top");
+  });
+
+  it("offers to reload or keep the open version after a conflicting save", async () => {
+    vi.mocked(api.saveProject)
+      .mockRejectedValueOnce(new ApiError(409, "revision_conflict", "changed"))
+      .mockResolvedValueOnce('"e4"');
+    await open();
+    await userEvent.click(
+      screen.getByRole("button", { name: t("review.clipAt", { time: "0:02.0" }) }),
+    );
+    await userEvent.keyboard("{Delete}");
+
+    expect(await screen.findByText(t("save.conflictHint"), {}, { timeout: 2000 })).toBeTruthy();
+    vi.mocked(api.project).mockResolvedValue({ project: PROJECT, etag: '"e3"' });
+    await userEvent.click(screen.getByRole("button", { name: t("save.keepMine") }));
+
+    await waitFor(() => expect(api.saveProject).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.saveProject).mock.calls[1]?.[2]).toBe('"e3"');
+    expect(vi.mocked(api.saveProject).mock.calls[1]?.[1].clips[2]?.removed).toBe(true);
   });
 
   it("sends an unprocessed project back to the load step", async () => {
