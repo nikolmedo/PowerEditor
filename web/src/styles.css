@@ -805,7 +805,7 @@ textarea {
   margin-bottom: 14px;
 }
 
-/* Five panels do not fit one row of a 280 px column in every language: tabs wrap by width. */
+/* Six panels do not fit one row of a 280 px column in every language: tabs wrap by width. */
 .side-panel .segmented button {
   flex: 1 1 auto;
   justify-content: center;
@@ -863,6 +863,134 @@ textarea {
 .preset-row button[aria-pressed="true"] {
   box-shadow: inset 0 -2px 0 var(--accent);
   border-color: var(--muted);
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.template-grid .template {
+  height: auto;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 4px;
+  font-size: 11.5px;
+}
+
+/* A schematic frame: always dark like video, the marks in the project's accent. */
+.thumb {
+  position: relative;
+  display: block;
+  height: 40px;
+  max-width: 100%;
+  margin: 0 auto;
+  background: #0d0e10;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.thumb-mark {
+  position: absolute;
+  background: var(--thumb-accent);
+}
+
+.thumb[data-template="title"] .thumb-mark:first-child {
+  inset: 40% 20% auto;
+  height: 10%;
+  background: #f2f2f2;
+}
+
+.thumb[data-template="title"] .thumb-mark:last-child {
+  inset: 55% 38% auto;
+  height: 4%;
+}
+
+.thumb[data-template="lower_third"] .thumb-mark:first-child {
+  left: 10%;
+  bottom: 22%;
+  width: 4%;
+  height: 12%;
+}
+
+.thumb[data-template="lower_third"] .thumb-mark:last-child {
+  left: 14%;
+  bottom: 22%;
+  width: 50%;
+  height: 12%;
+  background: rgb(255 255 255 / 0.3);
+}
+
+.thumb[data-template="cta"] .thumb-mark:first-child {
+  inset: auto 18% 22%;
+  height: 12%;
+  border-radius: 99px;
+}
+
+.thumb[data-template="logo"] .thumb-mark:first-child {
+  top: 10%;
+  right: 12%;
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: #f2f2f2;
+}
+
+.thumb[data-template="progress_bar"] .thumb-mark:first-child {
+  inset: 0 0 auto;
+  height: 6%;
+  background: rgb(255 255 255 / 0.25);
+}
+
+.thumb[data-template="progress_bar"] .thumb-mark:last-child {
+  inset: 0 45% auto 0;
+  height: 6%;
+}
+
+.thumb[data-template="image"] .thumb-mark:first-child {
+  inset: 30% 18%;
+  background: repeating-linear-gradient(45deg, #3a3d42 0 4px, #2a2c30 4px 8px);
+}
+
+.overlay-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.overlay-list button {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.overlay-list button[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+.badge {
+  margin-left: auto;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.color-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.color-field input {
+  width: 44px;
+  height: 28px;
+  padding: 0 2px;
 }
 
 .track-file {
@@ -1127,6 +1255,47 @@ textarea {
 
 .bar-music {
   border-left-color: var(--ok);
+}
+
+/* Overlays on the Graphics track: the body drags, the edges resize. */
+.overlay-block {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.overlay-block[data-auto] {
+  border-left-style: dashed;
+}
+
+.overlay-block[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--text);
+}
+
+.overlay-block[data-dragging] {
+  cursor: grabbing;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
+}
+
+.overlay-label {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-edge {
+  flex: 0 0 6px;
+  cursor: ew-resize;
+}
+
+.overlay-edge:hover,
+.overlay-block[aria-pressed="true"] .overlay-edge {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .playhead-layer {

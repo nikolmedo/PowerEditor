@@ -1,11 +1,14 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { useT, type MessageKey } from "../i18n";
+import { minOverlayFrames } from "../edit/overlays";
+import { OverlayBlock, type OverlayBlockHandlers } from "./OverlayBlock";
 import { frameAtRatio, type TimelineClip, type TimelineModel } from "./timelineModel";
 
-interface TimelineProps {
+interface TimelineProps extends OverlayBlockHandlers {
   model: TimelineModel;
   frame: number;
   selectedId: string | null;
+  selectedOverlayId: string | null;
   onSeek: (frame: number) => void;
   onSelect: (clip: TimelineClip) => void;
   /** Alt-click: keep the clip's next take. */
@@ -64,6 +67,8 @@ export function Timeline({
   onSelect,
   onSwapNext,
   onOpenTakes,
+  selectedOverlayId,
+  ...overlayHandlers
 }: TimelineProps) {
   const t = useT();
   const total = model.durationInFrames;
@@ -147,13 +152,17 @@ export function Timeline({
         </Track>
         <Track label="track.graphics" onSeek={onSeek} total={total}>
           {model.graphics.map((overlay) => (
-            <span
+            <OverlayBlock
               key={overlay.id}
-              className="bar bar-graphic"
-              style={span(overlay.startFrame, overlay.endFrame, total)}
-            >
-              {t(`overlay.${overlay.templateId}`)}
-            </span>
+              overlay={overlay}
+              totalFrames={total}
+              fps={model.fps}
+              minFrames={minOverlayFrames(model.fps)}
+              selected={overlay.id === selectedOverlayId}
+              label={t(`overlay.${overlay.templateId}`)}
+              timecode={(frame) => timecode(frame, model.fps)}
+              {...overlayHandlers}
+            />
           ))}
         </Track>
         <Track label="track.music" onSeek={onSeek} total={total}>

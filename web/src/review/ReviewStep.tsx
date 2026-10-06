@@ -5,6 +5,7 @@ import { useStore } from "zustand";
 import { ApiError } from "../api/client";
 import { api } from "../api/endpoints";
 import { setRemoved, swapTake, trimClip } from "../edit/operations";
+import { moveOverlay, removeOverlay, setOverlaySpan } from "../edit/overlays";
 import { useT, type MessageKey } from "../i18n";
 import { stepPath } from "../routes";
 import { Link } from "../shell/AppShell";
@@ -15,6 +16,7 @@ import { AudioPanel } from "./AudioPanel";
 import { ClipPanel } from "./ClipPanel";
 import { ColorPanel } from "./ColorPanel";
 import { editorCommand, ownsKeys } from "./editorKeys";
+import { GraphicsPanel } from "./GraphicsPanel";
 import { PreviewVideo, projectMediaBase } from "./PreviewVideo";
 import { SubtitlesPanel } from "./SubtitlesPanel";
 import { Timeline } from "./Timeline";
@@ -24,7 +26,7 @@ import { useAutosave, type AutosaveState } from "./useAutosave";
 
 /** Defaults of the user settings, used until (or if) the settings cannot be read. */
 const PREVIEW_DEFAULTS = { audioCrossfadeMs: 15, punchInScale: 1.1, modelMinConfidence: 0.8 };
-const PANELS = ["clip", "transitions", "subtitles", "audio", "color"] as const;
+const PANELS = ["clip", "transitions", "subtitles", "audio", "color", "graphics"] as const;
 type PanelName = (typeof PANELS)[number];
 
 const SAVE_LABELS: Record<AutosaveState["status"], [MessageKey, boolean | null]> = {
@@ -92,6 +94,7 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
   const playerRef = useRef<PlayerRef>(null);
   const [frame, setFrame] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelName>("clip");
 
   const metadata = videoMetadata(project);
@@ -204,6 +207,15 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         {panel === "subtitles" && <SubtitlesPanel project={project} />}
         {panel === "audio" && <AudioPanel projectId={projectId} project={project} />}
         {panel === "color" && <ColorPanel project={project} clip={selected} />}
+        {panel === "graphics" && (
+          <GraphicsPanel
+            projectId={projectId}
+            project={project}
+            frame={frame}
+            selectedId={selectedOverlayId}
+            onSelect={setSelectedOverlayId}
+          />
+        )}
       </aside>
       <Timeline
         model={model}
@@ -215,6 +227,21 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         onOpenTakes={(clip) => {
           select(clip);
           setPanel("clip");
+        }}
+        selectedOverlayId={selectedOverlayId}
+        onSelectOverlay={(id) => {
+          setSelectedOverlayId(id);
+          setPanel("graphics");
+        }}
+        onOverlaySpan={(id, span) =>
+          edit((current) => setOverlaySpan(current, id, span.startFrame, span.endFrame))
+        }
+        onNudgeOverlay={(id, delta) =>
+          edit((current) => moveOverlay(current, id, delta), `nudge:${id}`)
+        }
+        onDeleteOverlay={(id) => {
+          edit((current) => removeOverlay(current, id));
+          setSelectedOverlayId(null);
         }}
       />
       <p className="meta shortcuts">{t("edit.shortcuts")}</p>

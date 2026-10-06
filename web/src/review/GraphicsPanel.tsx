@@ -1,0 +1,315 @@
+import {
+  normalizeOverlayProps,
+  OVERLAY_FIELDS,
+  OVERLAY_TEMPLATES,
+  type Overlay,
+  type OverlayField,
+  type OverlayTemplateId,
+  type Project,
+} from "@powereditor/composition";
+import { useCallback, useRef, type CSSProperties } from "react";
+import type { OverlayAsset } from "../api/types";
+import { uploadFraction, uploadOverlayAsset } from "../api/upload";
+import { addOverlay, projectAccent, removeOverlay, setOverlayProps } from "../edit/overlays";
+import { isMessageKey, useT, type MessageKey, type Translate } from "../i18n";
+import { useProjectStore } from "../store/project";
+import { ErrorNotice, SelectField, Slider, TextField } from "../ui/primitives";
+import { timecode } from "./Timeline";
+import { useLatestUpload } from "./useLatestUpload";
+
+const IMAGE_TYPES = "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp";
+
+/** Starter text of a new overlay, in the interface language. */
+const STARTER_TEXT: Partial<Record<OverlayTemplateId, Record<string, MessageKey>>> = {
+  title: { text: "graphics.default.title" },
+  lower_third: { name: "graphics.default.name", role: "graphics.default.role" },
+  cta: { text: "graphics.default.cta" },
+};
+
+/** Shapes drawn by each template's thumbnail (see `.thumb` in styles.css). */
+const THUMB_MARKS: Record<OverlayTemplateId, number> = {
+  title: 2,
+  lower_third: 2,
+  cta: 1,
+  logo: 1,
+  progress_bar: 2,
+  image: 1,
+};
+
+const label = (t: Translate, prefix: string, key: string) => {
+  const full = `${prefix}.${key}`;
+  return isMessageKey(full) ? t(full) : key;
+};
+
+const newOverlayId = () => `ov-${crypto.randomUUID().slice(0, 8)}`;
+
+/** A schematic of the template on a frame of the project's shape, in the project's accent. */
+function TemplateThumb({
+  templateId,
+  project,
+}: {
+  templateId: OverlayTemplateId;
+  project: Project;
+}) {
+  const style = {
+    "--thumb-accent": projectAccent(project),
+    aspectRatio: project.preset === "reel_9x16" ? "9 / 16" : "16 / 9",
+  } as CSSProperties;
+  return (
+    <span className="thumb" data-template={templateId} style={style} aria-hidden="true">
+      {Array.from({ length: THUMB_MARKS[templateId] }, (_, index) => (
+        <span key={index} className="thumb-mark" />
+      ))}
+    </span>
+  );
+}
+
+function ImageField({
+  projectId,
+  overlay,
+  project,
+}: {
+  projectId: string;
+  overlay: Overlay;
+  project: Project;
+}) {
+  const t = useT();
+  const edit = useProjectStore((state) => state.edit);
+  const picker = useRef<HTMLInputElement>(null);
+  const onStored = useCallback(
+    (stored: OverlayAsset) => edit((p) => setOverlayProps(p, overlay.id, { src: stored.fileName })),
+    [edit, overlay.id],
+  );
+  const { state, error, send } = useLatestUpload(projectId, uploadOverlayAsset, onStored);
+  const current = typeof overlay.props.src === "string" ? overlay.props.src : "";
+  // Images already used by the project's graphics, so a logo can be reused without uploading.
+  const known = [
+    ...new Set(
+      project.overlays.flatMap(({ props }) =>
+        typeof props.src === "string" && props.src ? [props.src] : [],
+      ),
+    ),
+  ];
+  return (
+    <div className="panel-body">
+      <SelectField
+        label={t("graphics.field.src")}
+        value={current}
+        options={[
+          { value: "", label: t("graphics.noImage") },
+          ...known.map((name) => ({ value: name, label: name })),
+        ]}
+        onChange={(src) => edit((p) => setOverlayProps(p, overlay.id, { src }))}
+      />
+      <button type="button" onClick={() => picker.current?.click()}>
+        {t("graphics.upload")}
+      </button>
+      <input
+        ref={picker}
+        type="file"
+        accept={IMAGE_TYPES}
+        hidden
+        aria-label={t("graphics.upload")}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void send(file);
+        }}
+      />
+      {state.phase === "uploading" && (
+        <progress max={1} value={uploadFraction(state)} aria-label={t("load.uploading")} />
+      )}
+      <ErrorNotice error={error} />
+    </div>
+  );
+}
+
+function PropField({
+  field,
+  overlay,
+  value,
+}: {
+  field: OverlayField;
+  overlay: Overlay;
+  value: unknown;
+}) {
+  const t = useT();
+  const edit = useProjectStore((state) => state.edit);
+  const name = label(t, "graphics.field", field.key);
+  // Typing and slider drags on one field merge into one undo step.
+  const set = (next: unknown) =>
+    edit(
+      (p) => setOverlayProps(p, overlay.id, { [field.key]: next }),
+      `overlay:${overlay.id}:${field.key}`,
+    );
+  switch (field.kind) {
+    case "text":
+      return <TextField label={name} value={String(value)} onChange={set} />;
+    case "color":
+      return (
+        <label className="color-field">
+          {name}
+          <input type="color" value={String(value)} onChange={(event) => set(event.target.value)} />
+        </label>
+      );
+    case "choice":
+      return (
+        <SelectField
+          label={name}
+          value={String(value)}
+          options={field.options.map((option) => ({
+            value: option,
+            label: label(t, "graphics.option", option),
+          }))}
+          onChange={set}
+        />
+      );
+    case "number":
+      return (
+        <Slider
+          label={name}
+          value={Number(value)}
+          min={field.min}
+          max={field.max}
+          step={field.step}
+          format={(number) => (field.max <= 1 ? `${Math.round(number * 100)} %` : `${number} px`)}
+          onChange={set}
+        />
+      );
+    case "image":
+      return null;
+  }
+}
+
+function OverlayEditor({
+  projectId,
+  project,
+  overlay,
+  onSelect,
+}: {
+  projectId: string;
+  project: Project;
+  overlay: Overlay;
+  onSelect: (id: string | null) => void;
+}) {
+  const t = useT();
+  const edit = useProjectStore((state) => state.edit);
+  const props = normalizeOverlayProps(overlay.templateId, overlay.props, projectAccent(project));
+  const values = props as unknown as Record<string, unknown>;
+  return (
+    <section className="panel-body" aria-label={t("graphics.properties")}>
+      <h3>
+        {t(`overlay.${overlay.templateId}`)} · {t("graphics.properties")}
+      </h3>
+      {overlay.autoGenerated && <p className="meta">{t("graphics.autoHint")}</p>}
+      {OVERLAY_FIELDS[overlay.templateId].map((field) =>
+        field.kind === "image" ? (
+          <ImageField key={field.key} projectId={projectId} overlay={overlay} project={project} />
+        ) : (
+          <PropField key={field.key} field={field} overlay={overlay} value={values[field.key]} />
+        ),
+      )}
+      <button
+        type="button"
+        className="quiet"
+        onClick={() => {
+          edit((p) => removeOverlay(p, overlay.id));
+          onSelect(null);
+        }}
+      >
+        {t("graphics.remove")}
+      </button>
+    </section>
+  );
+}
+
+interface GraphicsPanelProps {
+  projectId: string;
+  project: Project;
+  /** The playhead: new graphics start here. */
+  frame: number;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}
+
+/** Overlay templates: add one at the playhead, pick one to edit its props, remove it. */
+export function GraphicsPanel({
+  projectId,
+  project,
+  frame,
+  selectedId,
+  onSelect,
+}: GraphicsPanelProps) {
+  const t = useT();
+  const edit = useProjectStore((state) => state.edit);
+  const selected = project.overlays.find((overlay) => overlay.id === selectedId) ?? null;
+  const ordered = [...project.overlays].sort((a, b) => a.startFrame - b.startFrame);
+
+  const add = (templateId: OverlayTemplateId) => {
+    const id = newOverlayId();
+    const props = Object.fromEntries(
+      Object.entries(STARTER_TEXT[templateId] ?? {}).map(([key, message]) => [key, t(message)]),
+    );
+    edit((p) => addOverlay(p, { id, templateId, atFrame: frame, props }));
+    onSelect(id);
+  };
+
+  return (
+    <div className="panel-body">
+      <h3>{t("graphics.templates")}</h3>
+      <div className="template-grid">
+        {OVERLAY_TEMPLATES.map((templateId) => (
+          <button
+            key={templateId}
+            type="button"
+            className="template"
+            aria-label={t("graphics.addTemplate", { template: t(`overlay.${templateId}`) })}
+            onClick={() => add(templateId)}
+          >
+            <TemplateThumb templateId={templateId} project={project} />
+            <span>{t(`overlay.${templateId}`)}</span>
+          </button>
+        ))}
+      </div>
+      <h3>{t("graphics.list")}</h3>
+      {ordered.length === 0 ? (
+        <p className="meta">{t("graphics.empty")}</p>
+      ) : (
+        <ul className="overlay-list">
+          {ordered.map((overlay) => (
+            <li key={overlay.id}>
+              <button
+                type="button"
+                className="quiet"
+                aria-pressed={overlay.id === selectedId}
+                onClick={() => onSelect(overlay.id)}
+              >
+                <span>{t(`overlay.${overlay.templateId}`)}</span>
+                <span className="meta mono">
+                  {t("graphics.span", {
+                    start: timecode(overlay.startFrame, project.fps),
+                    end: timecode(overlay.endFrame, project.fps),
+                  })}
+                </span>
+                {overlay.autoGenerated && (
+                  <span className="badge mono" title={t("graphics.autoHint")}>
+                    {t("graphics.auto")}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="meta">{t("graphics.keys")}</p>
+      {selected && (
+        <OverlayEditor
+          projectId={projectId}
+          project={project}
+          overlay={selected}
+          onSelect={onSelect}
+        />
+      )}
+    </div>
+  );
+}

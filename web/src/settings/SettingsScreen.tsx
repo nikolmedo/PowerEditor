@@ -16,12 +16,14 @@ const NUMBER_FIELDS = [
   "punchInScale",
   "modelMinConfidence",
 ] as const;
+const BOOLEAN_FIELDS = ["autoCta"] as const;
 const WEIGHT_PREFIX = "takeWeights.";
 
 function toForm(settings: UserSettings): Form {
   const form: Form = { transcriber: settings.transcriber, whisperDevice: settings.whisperDevice };
   for (const name of TEXT_FIELDS) form[name] = settings[name] ?? "";
   for (const name of NUMBER_FIELDS) form[name] = String(settings[name]);
+  for (const name of BOOLEAN_FIELDS) form[name] = String(settings[name]);
   for (const [name, weight] of Object.entries(settings.takeWeights)) {
     form[WEIGHT_PREFIX + name] = String(weight);
   }
@@ -39,6 +41,7 @@ export function settingsChanges(before: Form, after: Form): Record<string, unkno
     if (before[name] === value) continue;
     if (name.startsWith(WEIGHT_PREFIX)) weights[name.slice(WEIGHT_PREFIX.length)] = asNumber(value);
     else if ((NUMBER_FIELDS as readonly string[]).includes(name)) changes[name] = asNumber(value);
+    else if ((BOOLEAN_FIELDS as readonly string[]).includes(name)) changes[name] = value === "true";
     else
       changes[name] =
         (TEXT_FIELDS as readonly string[]).includes(name) && !value.trim() ? null : value;
@@ -144,6 +147,15 @@ export function SettingsScreen() {
             {...bind("modelMinConfidence", "settings.modelMinConfidence")}
             hint={t("settings.modelMinConfidence.hint")}
           />
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={form.autoCta === "true"}
+              onChange={(event) => setForm({ ...form, autoCta: String(event.target.checked) })}
+            />
+            {t("settings.autoCta")}
+          </label>
+          <p className="meta">{t("settings.autoCta.hint")}</p>
           <p className="subhead">{t("settings.takeWeights")}</p>
           <div className="grid-weights">
             {Object.keys(data.settings.takeWeights).map((name) => (
