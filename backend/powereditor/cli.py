@@ -18,7 +18,8 @@ from rich.table import Table
 
 from powereditor import doctor as doctor_module
 from powereditor import sidecar
-from powereditor.api.app import ENV_DEV_CORS
+from powereditor.api.app import ENV_DEV_CORS, ENV_SESSION_TOKEN
+from powereditor.api.session_token import TOKEN_HEADER, TOKEN_QUERY
 from powereditor.decide.model_engine import ModelUsageReport
 from powereditor.eval.takes_eval import DEFAULT_BENCHMARK, evaluate_takes, load_benchmark
 from powereditor.export.subtitle_files import SubtitleFormat, write_subtitles
@@ -105,19 +106,22 @@ def doctor() -> None:
         raise typer.Exit(code=1)
 
 
-def open_when_ready(base_url: str, timeout_s: float = 30.0) -> threading.Thread:
+def open_when_ready(
+    base_url: str, token: str | None = None, timeout_s: float = 30.0
+) -> threading.Thread:
     """Open the browser once the server answers its health check (in the background)."""
+    headers = {TOKEN_HEADER: token} if token else {}
 
     def wait_and_open() -> None:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             try:
-                if httpx.get(f"{base_url}/api/health", timeout=1.0).is_success:
+                if httpx.get(f"{base_url}/api/health", headers=headers, timeout=1.0).is_success:
                     break
             except httpx.HTTPError:
                 pass
             time.sleep(0.25)
-        webbrowser.open(f"{base_url}/")
+        webbrowser.open(f"{base_url}/?{TOKEN_QUERY}={token}" if token else f"{base_url}/")
 
     thread = threading.Thread(target=wait_and_open, daemon=True)
     thread.start()
@@ -141,7 +145,8 @@ def serve(
 ) -> None:
     """Start the local server: the API under /api and the built web app at /.
 
-    Once listening it prints `POWEREDITOR_READY {"port": N, "token": "..."}` on stdout.
+    Once listening it prints `POWEREDITOR_READY {"port": N, "token": ...}` on stdout. With
+    `--port 0` (the desktop sidecar) the API requires that token; on a fixed port it is null.
     """
     if dev:
         os.environ[ENV_DEV_CORS] = "1"
@@ -152,11 +157,20 @@ def serve(
         console.print(f"[red]port_unavailable: cannot listen on port {port}: {exc}[/red]")
         raise typer.Exit(code=1) from exc
     bound = int(sock.getsockname()[1])
-    token = secrets.token_urlsafe(32)
+    token = secrets.token_urlsafe(32) if port == 0 else None
+    if token:
+        os.environ[ENV_SESSION_TOKEN] = token
+    else:
+        os.environ.pop(ENV_SESSION_TOKEN, None)
     if open_browser:
-        open_when_ready(f"http://{DEFAULT_HOST}:{bound}")
+        open_when_ready(f"http://{DEFAULT_HOST}:{bound}", token)
     config = uvicorn.Config(
-        "powereditor.api.app:create_app", factory=True, host=DEFAULT_HOST, port=bound
+        "powereditor.api.app:create_app",
+        factory=True,
+        host=DEFAULT_HOST,
+        port=bound,
+        # The access log goes to stdout, which the shell reads; it would also show the token.
+        access_log=token is None,
     )
     server = sidecar.AnnouncingServer(
         config, on_started=lambda: sidecar.announce(sidecar.ready_line(bound, token))

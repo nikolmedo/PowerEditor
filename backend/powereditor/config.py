@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -11,8 +12,15 @@ WhisperDevice = Literal["auto", "cuda", "cpu"]
 DecisionEngine = Literal["heuristic", "jev"]
 
 
+def env_files() -> tuple[Path, ...]:
+    """The `.env` files a source run reads; a frozen build reads none (env variables only)."""
+    if getattr(sys, "frozen", False):
+        return ()
+    return (REPO_ROOT / ".env", Path(".env"))
+
+
 class Settings(BaseSettings):
-    """Developer overrides read from `.env` and environment variables.
+    """Developer overrides read from `.env` (source runs only) and environment variables.
 
     Every field defaults to None: only explicitly set values override the code
     defaults in `settings_store.UserSettings`, and the user settings file wins
@@ -20,7 +28,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=(REPO_ROOT / ".env", Path(".env")),
+        env_file=env_files(),
         env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",
