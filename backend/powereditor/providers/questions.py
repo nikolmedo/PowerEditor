@@ -211,8 +211,15 @@ def _parse_one(question_id: str, question: Question, raw: Any) -> Answer:
     if not score.level.isdigit() or int(score.level) > top:
         raise _bad(question_id, f"picks unknown level {score.level!r}")
     return ScoreAnswer(
-        value=int(score.level) / top, confidence=CERTAINTY_CONFIDENCE[score.certainty]
+        value=scale_fraction(int(score.level), len(question.levels)),
+        confidence=CERTAINTY_CONFIDENCE[score.certainty],
     )
+
+
+def scale_fraction(position: float, level_count: int) -> float:
+    """Position on a scale of `level_count` levels as 0..1; a one-level scale is neutral."""
+    top = level_count - 1
+    return position / top if top > 0 else 0.5
 
 
 def parse_answers(

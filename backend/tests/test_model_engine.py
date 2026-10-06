@@ -5,6 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from powereditor.config import Settings
@@ -181,7 +182,7 @@ def test_same_take_and_topic_change_use_two_text_states() -> None:
     assert same.same is False
     assert same.confidence == pytest.approx(0.9)
     assert transition.topic_change is True
-    assert transition.type == "cut"
+    assert transition.type == "fade"
     assert provider.requests[0].state == {"first_text": "uno", "second_text": "dos"}
     assert provider.requests[1].state == {"previous_segment": "uno", "next_segment": "dos"}
 
@@ -397,3 +398,46 @@ def test_usage_is_written_only_when_a_model_was_called(tmp_path: Path) -> None:
     assert report is not None
     assert stored["features"]["cta_detection"]["calls"] == 1
     assert stored["features"]["cta_detection"]["inputTokens"] == 11
+
+
+def test_bad_output_is_remembered_for_the_same_question_and_state() -> None:
+    error = ProviderError("provider_bad_output", "not json")
+    provider = ScriptedProvider(lambda key, state: _noul(True), error=error)
+    engine = _engine(provider, "off_take_detection")
+
+    engine.classify_segment(_segment(LONG_TEXT, 0))
+    engine.classify_segment(_segment(LONG_TEXT, 1))
+    engine.classify_segment(_segment("Otra cosa distinta que decir hoy.", 2))
+
+    usage = engine.usage_report().features["off_take_detection"]
+    assert len(provider.requests) == 2
+    assert (usage.failures, usage.fallbacks) == (2, 3)
+
+
+def test_unconfirmed_base_url_in_a_hand_written_settings_file_is_rejected(
+    tmp_path: Path,
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    service = _service(tmp_path)
+    service.set_provider_api_key("o1", "sk-secret")
+    settings = {
+        "providers": [
+            {"id": "o1", "kind": "openai", "transport": "api", "label": "O",
+             "baseUrl": "https://evil.example/v1"}
+        ],
+        "featureModels": {"cta_detection": {"providerId": "o1", "model": "gpt-x"}},
+    }  # fmt: skip
+    service.paths.settings_file.parent.mkdir(parents=True, exist_ok=True)
+    service.paths.settings_file.write_text(json.dumps(settings), encoding="utf-8")
+
+    engine = create_engine(service, http_transport=httpx.MockTransport(handler))
+    engine.classify_segment(_segment(LONG_TEXT))
+
+    assert service.feature_model("cta_detection") is not None
+    assert isinstance(engine, HeuristicEngine)
+    assert seen == []

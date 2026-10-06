@@ -1,0 +1,277 @@
+{
+  "description": "Shared subtitle contract: word remap (speed, clamping, removed takes) and line grouping. c2 is the retake that was not chosen; 'uh' overlaps it most and is dropped.",
+  "project": {
+    "version": 1,
+    "preset": "reel_9x16",
+    "fps": 30,
+    "sources": [
+      {
+        "id": "s1",
+        "originalPath": "C:/media/s1.mp4",
+        "mezzaninePath": "C:/data/projects/p/media/s1.mezzanine.mp4",
+        "proxyPath": "C:/data/projects/p/media/s1.proxy.mp4",
+        "displayColor": "#0072B2",
+        "loudnessLufs": -20.0,
+        "colorStats": {
+          "meanLuma": 0.5,
+          "meanR": 0.5,
+          "meanG": 0.5,
+          "meanB": 0.5
+        }
+      },
+      {
+        "id": "s2",
+        "originalPath": "C:/media/s2.mp4",
+        "mezzaninePath": "C:/data/projects/p/media/s2.mezzanine.mp4",
+        "proxyPath": "C:/data/projects/p/media/s2.proxy.mp4",
+        "displayColor": "#E69F00",
+        "loudnessLufs": -20.0,
+        "colorStats": {
+          "meanLuma": 0.5,
+          "meanR": 0.5,
+          "meanG": 0.5,
+          "meanB": 0.5
+        }
+      }
+    ],
+    "clips": [
+      {
+        "id": "c1",
+        "sourceId": "s1",
+        "inSec": 0.0,
+        "outSec": 1.15,
+        "speed": 1.0,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "cut",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": [],
+        "removed": false
+      },
+      {
+        "id": "c2",
+        "sourceId": "s1",
+        "inSec": 2.0,
+        "outSec": 3.0,
+        "speed": 1.0,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "cut",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": [],
+        "removed": true,
+        "takeGroupId": "g1"
+      },
+      {
+        "id": "c3",
+        "sourceId": "s1",
+        "inSec": 3.0,
+        "outSec": 4.0,
+        "speed": 1.5,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "punch_in",
+          "durationFrames": 0
+        },
+        "alternativeTakeIds": ["c2"],
+        "removed": false,
+        "takeGroupId": "g1"
+      },
+      {
+        "id": "c4",
+        "sourceId": "s2",
+        "inSec": 0.5,
+        "outSec": 2.5,
+        "speed": 1.0,
+        "volume": 1.0,
+        "transitionIn": {
+          "type": "fade",
+          "durationFrames": 9
+        },
+        "alternativeTakeIds": [],
+        "removed": false
+      }
+    ],
+    "audioTracks": [
+      {
+        "id": "voice",
+        "kind": "voice",
+        "volume": 1.0,
+        "duckingEnabled": false
+      }
+    ],
+    "subtitles": {
+      "style": {
+        "preset": "karaoke_highlight",
+        "fontSize": 64,
+        "position": "bottom",
+        "highlightColor": "#FFD400",
+        "maxWordsPerLine": 3
+      },
+      "words": [],
+      "sourceWords": {
+        "s1": [
+          {
+            "text": "Hola",
+            "start": 0.1,
+            "end": 0.4
+          },
+          {
+            "text": "a",
+            "start": 0.45,
+            "end": 0.55
+          },
+          {
+            "text": "todos.",
+            "start": 0.6,
+            "end": 1.3
+          },
+          {
+            "text": "corta",
+            "start": 2.2,
+            "end": 2.5
+          },
+          {
+            "text": "uh",
+            "start": 2.85,
+            "end": 3.05
+          },
+          {
+            "text": "Ahora",
+            "start": 2.95,
+            "end": 3.3
+          },
+          {
+            "text": "Esto",
+            "start": 3.35,
+            "end": 3.6
+          },
+          {
+            "text": "va",
+            "start": 3.65,
+            "end": 3.95
+          }
+        ],
+        "s2": [
+          {
+            "text": "Nuevo",
+            "start": 0.4,
+            "end": 0.9
+          },
+          {
+            "text": "tema",
+            "start": 1.0,
+            "end": 1.4
+          },
+          {
+            "text": "aquí",
+            "start": 2.0,
+            "end": 2.3
+          },
+          {
+            "text": "fuera",
+            "start": 2.6,
+            "end": 2.9
+          }
+        ]
+      }
+    },
+    "overlays": [],
+    "colorGrade": {
+      "preset": "natural",
+      "brightness": 1.0,
+      "contrast": 1.0,
+      "saturation": 1.0,
+      "temperature": 0.0
+    }
+  },
+  "expectedWords": [
+    {
+      "text": "Hola",
+      "startFrame": 3,
+      "endFrame": 12,
+      "clipId": "c1",
+      "wordIndex": 0
+    },
+    {
+      "text": "a",
+      "startFrame": 14,
+      "endFrame": 16,
+      "clipId": "c1",
+      "wordIndex": 1
+    },
+    {
+      "text": "todos.",
+      "startFrame": 18,
+      "endFrame": 34,
+      "clipId": "c1",
+      "wordIndex": 2
+    },
+    {
+      "text": "Ahora",
+      "startFrame": 34,
+      "endFrame": 40,
+      "clipId": "c3",
+      "wordIndex": 5
+    },
+    {
+      "text": "Esto",
+      "startFrame": 41,
+      "endFrame": 46,
+      "clipId": "c3",
+      "wordIndex": 6
+    },
+    {
+      "text": "va",
+      "startFrame": 47,
+      "endFrame": 53,
+      "clipId": "c3",
+      "wordIndex": 7
+    },
+    {
+      "text": "Nuevo",
+      "startFrame": 54,
+      "endFrame": 66,
+      "clipId": "c4",
+      "wordIndex": 0
+    },
+    {
+      "text": "tema",
+      "startFrame": 69,
+      "endFrame": 81,
+      "clipId": "c4",
+      "wordIndex": 1
+    },
+    {
+      "text": "aquí",
+      "startFrame": 99,
+      "endFrame": 108,
+      "clipId": "c4",
+      "wordIndex": 2
+    }
+  ],
+  "expectedLines": [
+    {
+      "text": "Hola a todos.",
+      "startFrame": 3,
+      "endFrame": 34
+    },
+    {
+      "text": "Ahora Esto va",
+      "startFrame": 34,
+      "endFrame": 54
+    },
+    {
+      "text": "Nuevo tema",
+      "startFrame": 54,
+      "endFrame": 96
+    },
+    {
+      "text": "aquí",
+      "startFrame": 99,
+      "endFrame": 114
+    }
+  ]
+}

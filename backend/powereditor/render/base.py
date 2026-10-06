@@ -9,6 +9,7 @@ from powereditor.pipeline.ffmpeg import FractionCallback
 @dataclass(frozen=True)
 class RenderSettings:
     audio_crossfade_ms: int
+    punch_in_scale: float = 1.1
 
 
 @dataclass(frozen=True)

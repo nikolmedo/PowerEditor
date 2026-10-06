@@ -145,7 +145,7 @@ def test_same_take_uses_the_heuristic_threshold() -> None:
     assert engine.same_take(_take(0), _take(1), 0.65).same is False
 
 
-def test_transition_between_is_a_cut_for_now() -> None:
-    decision = HeuristicEngine().transition_between(_segment("a", 0), _segment("b", 1))
+def test_transition_between_consecutive_lines_of_one_take_is_a_cut() -> None:
+    decision = HeuristicEngine().transition_between(_segment("a", 0), _segment("b", 1), 0.0)
 
     assert (decision.type, decision.topic_change) == ("cut", False)

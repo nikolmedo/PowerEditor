@@ -121,6 +121,7 @@ class RemotionRenderer:
                 props = {
                     "project": project.model_dump(by_alias=True, mode="json"),
                     "audioCrossfadeMs": settings.audio_crossfade_ms,
+                    "punchInScale": settings.punch_in_scale,
                     "mediaBaseUrl": base_url,
                 }
                 props_file.write_text(json.dumps(props), encoding="utf-8")

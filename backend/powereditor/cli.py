@@ -13,7 +13,9 @@ from rich.table import Table
 from powereditor import doctor as doctor_module
 from powereditor.decide.model_engine import ModelUsageReport
 from powereditor.eval.takes_eval import DEFAULT_BENCHMARK, evaluate_takes, load_benchmark
-from powereditor.models import ProjectPreset
+from powereditor.export.subtitle_files import SubtitleFormat, write_subtitles
+from powereditor.export.subtitles import rebuild_subtitles
+from powereditor.models import ProjectPreset, load_project, write_text_atomic
 from powereditor.pipeline.analyze import analyze_project
 from powereditor.pipeline.ffmpeg import FfmpegError, MediaTools, MissingToolError
 from powereditor.pipeline.ingest import ingest_files, load_manifest
@@ -321,3 +323,28 @@ def render(
         f" (setup {result.timing.setup_s:.1f}s, render {result.timing.render_s:.1f}s):"
         f" {result.realtime_factor:.2f}x realtime"
     )
+
+
+@app.command("export-subtitles")
+def export_subtitles(
+    project_id: str,
+    file_format: Annotated[
+        SubtitleFormat, typer.Option("--format", help="srt, or ass (karaoke tags for karaoke).")
+    ] = "srt",
+    output: Annotated[
+        str, typer.Option(help="File name (without extension) under the project's exports/.")
+    ] = "subtitles",
+) -> None:
+    """Write the project's subtitles as SRT or ASS, timed on the edited timeline."""
+    console = Console()
+    service = SettingsService.default()
+    try:
+        layout = ProjectLayout.for_project(service.paths, project_id)
+        if not layout.project_file.is_file():
+            raise render_job.ProjectNotFoundError(f"project {project_id!r} has no project.json")
+        project = rebuild_subtitles(load_project(layout.project_file))
+        target = layout.root / "exports" / f"{Path(output).name}.{file_format}"
+        write_text_atomic(target, write_subtitles(project, file_format))
+    except (ValueError, OSError, *PIPELINE_ERRORS) as exc:
+        raise _fail(console, exc) from exc
+    console.print(f"Output: {target}", soft_wrap=True)

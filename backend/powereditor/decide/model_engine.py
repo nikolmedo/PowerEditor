@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic import Field
 
-from powereditor.decide.heuristic import HeuristicEngine
+from powereditor.decide.heuristic import HeuristicEngine, topic_transition
 from powereditor.decide.prompts import (
     BEST_TAKE_ID,
     MAX_CHOICE_TAKES,
@@ -118,7 +118,8 @@ class ModelDecisionEngine:
         self._fallback = fallback
         self._routes = dict(routes)
         self._min_confidence = min_confidence
-        self._memo: dict[tuple[str, str, str, str], Answer] = {}
+        # None records a bad output, so the same question and state is not asked again.
+        self._memo: dict[tuple[str, str, str, str], Answer | None] = {}
         self._disabled: set[str] = set()
         self._usage = {
             feature: FeatureUsage(provider_id=route.provider_id, model=route.model)
@@ -174,17 +175,20 @@ class ModelDecisionEngine:
             return SameTakeDecision(same=answer.value, confidence=answer.confidence)
         return base.model_copy(update={"confidence": min(base.confidence, _confidence(answer))})
 
-    def transition_between(self, prev: Segment, next: Segment) -> TransitionDecision:
-        base = self._fallback.transition_between(prev, next)
+    def transition_between(
+        self, prev: Segment, next: Segment, pause_s: float | None = None
+    ) -> TransitionDecision:
+        base = self._fallback.transition_between(prev, next, pause_s)
         feature: FeatureId = "topic_change"
         if feature not in self._routes:
             return base
         state = {"previous_segment": prev.text, "next_segment": next.text}
         answer = self._ask(state, {feature: TOPIC_CHANGE})[feature]
         if isinstance(answer, NoulAnswer) and self._accepts(feature, answer):
-            # Topic transitions land in Phase 5; until then the cut type stays.
-            return base.model_copy(
-                update={"topic_change": answer.value, "confidence": answer.confidence}
+            return TransitionDecision(
+                type=topic_transition(prev, next) if answer.value else "cut",
+                topic_change=answer.value,
+                confidence=answer.confidence,
             )
         return base.model_copy(update={"confidence": min(base.confidence, _confidence(answer))})
 
@@ -264,17 +268,19 @@ class ModelDecisionEngine:
             memo_key = (route.provider_id, route.model, prompt.question_id, key)
             if memo_key in self._memo:
                 results[feature] = self._memo[memo_key]
+                if results[feature] is None:
+                    self._usage[feature].fallbacks += 1
             else:
                 groups.setdefault((route.provider_id, route.model), []).append(feature)
         for (provider_id, model), features in groups.items():
             questions = {prompts[f].question_id: prompts[f].question for f in features}
             answers = self._call(self._routes[features[0]], features, state, questions)
             for feature in features:
-                answer = answers.get(prompts[feature].question_id) if answers else None
+                answer = None if answers is None else answers.get(prompts[feature].question_id)
                 results[feature] = answer
-                if answer is not None:
+                if answers is not None:
                     self._memo[(provider_id, model, prompts[feature].question_id, key)] = answer
-                else:
+                if answer is None:
                     self._usage[feature].fallbacks += 1
         return results
 
@@ -285,6 +291,8 @@ class ModelDecisionEngine:
         state: dict[str, Any],
         questions: dict[str, Question],
     ) -> dict[str, Answer] | None:
+        """The provider's answers; `{}` for a bad output (worth remembering), `None` when the
+        provider is disabled or failed in a way that says nothing about this question."""
         if route.provider_id in self._disabled:
             return None
         try:
@@ -292,9 +300,6 @@ class ModelDecisionEngine:
         except ProviderError as exc:
             for feature in features:
                 self._usage[feature].failures += 1
-            if exc.code != "provider_bad_output":
-                # Auth, missing client, timeouts and outages repeat on every call.
-                self._disabled.add(route.provider_id)
             logger.warning(
                 "%s (%s) failed for %s: %s; using the heuristic",
                 route.provider_id,
@@ -302,6 +307,10 @@ class ModelDecisionEngine:
                 ", ".join(features),
                 exc.message,
             )
+            if exc.code == "provider_bad_output":
+                return {}
+            # Auth, missing client, timeouts and outages repeat on every call.
+            self._disabled.add(route.provider_id)
             return None
         self._record(features, result.usage)
         return result.answers

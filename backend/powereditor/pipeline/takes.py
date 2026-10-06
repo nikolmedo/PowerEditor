@@ -24,7 +24,7 @@ from powereditor.pipeline.vad import read_wav
 from powereditor.pipeline.visual import NullVisualExtractor, VisualFeatureExtractor
 
 TAKES_STAGE = "takes"
-TAKES_STAGE_VERSION = 1
+TAKES_STAGE_VERSION = 2
 
 
 class TakeEntry(CamelModel):
@@ -86,15 +86,37 @@ def _group_entries(
     ]
 
 
+def _pauses_before(segments: Sequence[Segment]) -> dict[str, float]:
+    """Silence recorded right before each segment, after whatever its source said last."""
+    pauses: dict[str, float] = {}
+    previous_end: dict[str, float] = {}
+    for segment in sorted(segments, key=lambda s: (s.source_id, s.start)):
+        if segment.source_id in previous_end:
+            pauses[segment.id] = max(segment.start - previous_end[segment.source_id], 0.0)
+        previous_end[segment.source_id] = segment.end
+    return pauses
+
+
 def _with_transitions(
-    entries: list[TakeEntry], segments: Mapping[str, Segment], engine: DecisionEngine
+    entries: list[TakeEntry], segments: Sequence[Segment], engine: DecisionEngine
 ) -> list[TakeEntry]:
+    """A topic change gets the engine's transition; the cuts inside a block alternate
+    between a plain cut and a punch-in, so the zoom toggles at every cut."""
+    by_id = {segment.id: segment for segment in segments}
+    pauses = _pauses_before(segments)
     previous: Segment | None = None
+    zoomed = False
     result: list[TakeEntry] = []
     for entry in entries:
-        segment = segments[entry.segment_id]
+        segment = by_id[entry.segment_id]
         if not entry.removed and previous is not None:
-            transition = engine.transition_between(previous, segment).type
+            pause = pauses.get(segment.id) if segment.source_id == previous.source_id else None
+            decision = engine.transition_between(previous, segment, pause)
+            if decision.topic_change:
+                transition, zoomed = decision.type, False
+            else:
+                zoomed = not zoomed
+                transition = "punch_in" if zoomed else "cut"
             entry = entry.model_copy(update={"transition": transition})
         if not entry.removed:
             previous = segment
@@ -149,14 +171,13 @@ def select_takes(
         clusters.append(cluster)
         all_features.extend(features)
         entries.extend(_group_entries(group, decision, cluster.id))
-    by_id = {segment.id: segment for segment in segments}
     return TakeSelection(
         takes=takes,
         clusters=clusters,
         features=all_features,
         decisions=decisions,
         flags=flags,
-        entries=_with_transitions(entries, by_id, engine),
+        entries=_with_transitions(entries, segments, engine),
     )
 
 

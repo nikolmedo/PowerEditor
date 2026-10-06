@@ -87,6 +87,16 @@ class TimelineWord(CamelModel):
     start_frame: int = Field(ge=0)
     end_frame: int = Field(ge=0)
     clip_id: str
+    word_index: int | None = Field(default=None, ge=0)
+    """Index of the word in `Subtitles.sourceWords[<clip's source>]`, for text edits."""
+
+
+class SourceWord(CamelModel):
+    """A transcribed word in source seconds; its text may have been edited."""
+
+    text: str
+    start: float = Field(ge=0.0)
+    end: float = Field(ge=0.0)
 
 
 class SubtitleStyle(CamelModel):
@@ -100,6 +110,9 @@ class SubtitleStyle(CamelModel):
 class Subtitles(CamelModel):
     style: SubtitleStyle
     words: list[TimelineWord]
+    """Timeline words derived from `source_words` and the clips; rebuilt after every edit."""
+    source_words: dict[str, list[SourceWord]] = Field(default_factory=dict)
+    """Words per source id in source time, so edits never need a new transcription."""
 
 
 class Overlay(CamelModel):

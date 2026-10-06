@@ -104,7 +104,10 @@ def render_project(
             project,
             layout.media_dir,
             video,
-            RenderSettings(audio_crossfade_ms=settings.audio_crossfade_ms),
+            RenderSettings(
+                audio_crossfade_ms=settings.audio_crossfade_ms,
+                punch_in_scale=settings.punch_in_scale,
+            ),
             lambda fraction: progress("render", fraction, "composition"),
         )
         progress("final-pass", 0.0, "loudnorm")

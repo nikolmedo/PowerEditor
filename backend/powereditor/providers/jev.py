@@ -43,6 +43,7 @@ from powereditor.providers.questions import (
     Question,
     QuestionAnswers,
     ScoreAnswer,
+    scale_fraction,
 )
 
 TYPESAFE_BASE_URL = "https://api.typesafe.ai/v1"
@@ -116,8 +117,8 @@ def _answer(key: str, question: Question, raw: Any) -> Answer:
             if answer.choice not in question.options:
                 raise ProviderError("provider_bad_output", f"Jev picked an unknown {key!r}.")
             return answer
-        top = len(question.levels) - 1
-        return ScoreAnswer(value=float(raw["score"]) / top, confidence=raw["confidence"])
+        value = scale_fraction(float(raw["score"]), len(question.levels))
+        return ScoreAnswer(value=value, confidence=raw["confidence"])
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise ProviderError("provider_bad_output", f"Jev sent a malformed {key!r}.") from exc
 
