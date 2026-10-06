@@ -14,6 +14,7 @@ from powereditor.render import job as job_module
 from powereditor.render.base import RenderSettings, RenderTiming
 from powereditor.render.job import EmptyTimelineError, MusicNotFoundError, render_project
 from powereditor.render.remotion_render import RemotionRenderer, RenderError
+from powereditor.runtime.manager import BrowserPathTooLongError
 from powereditor.settings_store import SettingsService
 from tests.media import FFPROBE, ffmpeg_lavfi, needs_ffmpeg
 
@@ -258,3 +259,19 @@ def test_create_renderer_uses_the_prebuilt_bundle_from_the_data_dir(
         assert (work / "package.json").is_file()
     else:
         assert (renderer.bundle_dir, renderer.work_dir) == (None, None)
+
+
+def test_render_cli_reports_a_browser_path_windows_cannot_start(
+    isolated_environment: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _project_layout(isolated_environment)
+
+    def too_deep(service: SettingsService) -> RemotionRenderer:
+        raise BrowserPathTooLongError("the render browser path is too long")
+
+    monkeypatch.setattr(job_module, "create_renderer", too_deep)
+
+    result = CliRunner().invoke(cli.app, ["render", "demo"])
+
+    assert result.exit_code == 1
+    assert "path_too_long" in result.output

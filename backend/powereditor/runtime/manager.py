@@ -8,6 +8,8 @@ next to the app, say) waiting instead of downloading the same archive again.
 
 The Chrome Headless Shell Remotion renders with is installed by Remotion itself
 (`ensure-browser.mjs` under the render Node), into `bin/remotion/node_modules/.remotion`.
+Chrome does not start from a path at or past Windows' MAX_PATH, so when the data dir is deep
+enough to push it there the browser lives in `PowerEditor/b` under `%LOCALAPPDATA%` instead.
 """
 
 import hashlib
@@ -20,7 +22,7 @@ import sys
 import tempfile
 import time
 import zipfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -46,6 +48,9 @@ LOCK_POLL_S = 0.2
 LOCK_TIMEOUT_S = 30 * 60.0
 BROWSER = "browser"
 BROWSER_CACHE_DIR = "remotion"
+# Windows' MAX_PATH is 260; the browser's own files sit below its executable's folder.
+MAX_PATH_CHARS = 240
+SHORT_BROWSER_ROOT = ("PowerEditor", "b")
 _BROWSER_EXECUTABLES = {
     "win32": "win64/chrome-headless-shell-win64/chrome-headless-shell.exe",
     "linux": "linux64/chrome-headless-shell-linux64/chrome-headless-shell",
@@ -54,6 +59,10 @@ _BROWSER_EXECUTABLES = {
 
 class RuntimeInstallError(RuntimeError):
     code = "runtime_install_failed"
+
+
+class BrowserPathTooLongError(RuntimeInstallError):
+    code = "path_too_long"
 
 
 class RuntimeChecksumError(RuntimeInstallError):
@@ -222,8 +231,27 @@ def install_download(
     return target
 
 
-def browser_cache_dir(bin_dir: Path) -> Path:
-    return bin_dir / BROWSER_CACHE_DIR
+def _too_long_for_windows(cache_dir: Path, platform: str) -> bool:
+    executable = browser_executable(cache_dir, platform)
+    return platform == "win32" and executable is not None and len(str(executable)) >= MAX_PATH_CHARS
+
+
+def browser_cache_dir(
+    bin_dir: Path, platform: str = sys.platform, environ: Mapping[str, str] | None = None
+) -> Path:
+    """Where Remotion keeps the browser: `bin/remotion`, or a short root when that is too deep."""
+    default = bin_dir / BROWSER_CACHE_DIR
+    if not _too_long_for_windows(default, platform):
+        return default
+    local = (os.environ if environ is None else environ).get("LOCALAPPDATA")
+    if local:
+        short = Path(local, *SHORT_BROWSER_ROOT)
+        if not _too_long_for_windows(short, platform):
+            return short
+    raise BrowserPathTooLongError(
+        f"the render browser path under {bin_dir} reaches {MAX_PATH_CHARS} characters, which "
+        "Windows cannot start; choose a shorter data folder"
+    )
 
 
 def prepare_browser_cache(cache_dir: Path) -> Path:
@@ -323,13 +351,19 @@ class RuntimeManager:
                     download_bytes=spec.size,
                 )
             )
-        browser = browser_executable(browser_cache_dir(self.bin_dir), self.platform)
+        try:
+            browser = browser_executable(
+                browser_cache_dir(self.bin_dir, self.platform), self.platform
+            )
+        except BrowserPathTooLongError:
+            # Reported as missing; installing it explains why it cannot be placed.
+            browser = None
         browser_found = browser is not None and browser.is_file()
         statuses.append(
             RuntimeStatus(
                 name=BROWSER,
                 version=None,
-                supported=browser is not None,
+                supported=self.platform in _BROWSER_EXECUTABLES,
                 installed=browser_found,
                 path=str(browser) if browser_found else None,
                 download_bytes=None,
@@ -341,8 +375,9 @@ class RuntimeManager:
         if name == BROWSER:
             if self.node is None or self.composition_dir is None:
                 raise RuntimeInstallError("the render browser needs Node and the composition")
+            cache_dir = browser_cache_dir(self.bin_dir, self.platform)
             script = self.composition_dir / "scripts" / "ensure-browser.mjs"
-            install_browser(self.node(), script, browser_cache_dir(self.bin_dir), progress)
+            install_browser(self.node(), script, cache_dir, progress)
         else:
             spec = next((s for s in self.downloads if s.name == name), None)
             if spec is None:

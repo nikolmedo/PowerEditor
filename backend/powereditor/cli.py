@@ -6,7 +6,6 @@ import webbrowser
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
-from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -17,7 +16,7 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from powereditor import COPYRIGHT, sidecar
+from powereditor import COPYRIGHT, app_version, sidecar
 from powereditor import doctor as doctor_module
 from powereditor.api.app import ENV_DEV_CORS, ENV_SESSION_TOKEN
 from powereditor.api.session_token import TOKEN_HEADER, TOKEN_QUERY
@@ -39,6 +38,7 @@ from powereditor.render.quality import RenderQuality
 from powereditor.render.remotion_render import RenderError
 from powereditor.resources import Resources
 from powereditor.runtime.manager import (
+    BrowserPathTooLongError,
     RuntimeInstallError,
     RuntimeManager,
     UnknownRuntimeError,
@@ -64,6 +64,7 @@ PIPELINE_ERRORS = (
     render_job.ProjectNotFoundError,
     render_job.EmptyTimelineError,
     render_job.MusicNotFoundError,
+    BrowserPathTooLongError,
 )
 
 
@@ -76,7 +77,7 @@ def _fail(console: Console, exc: Exception) -> typer.Exit:
 def _print_version(requested: bool) -> None:
     if not requested:
         return
-    typer.echo(f"PowerEditor {package_version('powereditor')}")
+    typer.echo(f"PowerEditor {app_version()}")
     typer.echo(COPYRIGHT)
     raise typer.Exit()
 

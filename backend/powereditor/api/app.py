@@ -1,7 +1,6 @@
 import os
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from importlib.metadata import version
 from pathlib import Path
 from typing import cast
 
@@ -11,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from powereditor import doctor, settings_store
+from powereditor import app_version, doctor, settings_store
 from powereditor.api.origin_guard import LocalOriginGuard
 from powereditor.api.routes_audio import router as audio_router
 from powereditor.api.routes_jobs import router as jobs_router
@@ -108,7 +107,7 @@ def create_app(
         yield
         jobs.shutdown()
 
-    app = FastAPI(title="PowerEditor", version=version("powereditor"), lifespan=lifespan)
+    app = FastAPI(title="PowerEditor", version=app_version(), lifespan=lifespan)
     dev = dev_cors if dev_cors is not None else dev_cors_enabled()
     if dev:
         app.add_middleware(
@@ -140,7 +139,7 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": version("powereditor")}
+        return {"status": "ok", "version": app_version()}
 
     @app.get("/api/doctor")
     def run_doctor(request: Request) -> doctor.DoctorReport:

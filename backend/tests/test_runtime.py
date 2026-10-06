@@ -290,3 +290,58 @@ def test_cli_installs_and_reports_runtimes(tmp_path: Path, monkeypatch: pytest.M
     assert after.output.count("installed") == 1
     assert unknown.exit_code == 1
     assert "unknown_runtime" in unknown.output
+
+
+def _deep_bin_dir(root: Path, length: int) -> Path:
+    """A bin dir whose browser executable path is about `length` characters long."""
+    executable = manager.browser_executable(root / "bin" / manager.BROWSER_CACHE_DIR, "win32")
+    assert executable is not None
+    padding = max(length - len(str(executable)), 1)
+    return root / ("d" * padding) / "bin"
+
+
+def test_browser_stays_in_the_data_dir_when_its_path_is_short(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+
+    cache = manager.browser_cache_dir(bin_dir, "win32", {"LOCALAPPDATA": "C:/Local"})
+
+    assert cache == bin_dir / "remotion"
+
+
+def test_a_too_long_browser_path_moves_under_a_short_root_on_windows(tmp_path: Path) -> None:
+    bin_dir = _deep_bin_dir(tmp_path, 250)
+
+    cache = manager.browser_cache_dir(bin_dir, "win32", {"LOCALAPPDATA": "C:/Local"})
+
+    assert cache == Path("C:/Local", "PowerEditor", "b")
+    assert manager.browser_cache_dir(bin_dir, "linux", {}) == bin_dir / "remotion"
+
+
+def test_a_too_long_browser_path_without_a_short_root_is_a_typed_error(tmp_path: Path) -> None:
+    bin_dir = _deep_bin_dir(tmp_path, 250)
+
+    with pytest.raises(manager.BrowserPathTooLongError) as excinfo:
+        manager.browser_cache_dir(bin_dir, "win32", {})
+    with pytest.raises(manager.BrowserPathTooLongError):
+        manager.browser_cache_dir(bin_dir, "win32", {"LOCALAPPDATA": str(tmp_path / ("l" * 200))})
+
+    assert excinfo.value.code == "path_too_long"
+
+
+def test_status_reports_a_browser_that_cannot_fit_as_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    runtimes = RuntimeManager(bin_dir=_deep_bin_dir(tmp_path, 250), downloads=(), platform="win32")
+
+    (browser,) = runtimes.statuses()
+
+    assert (browser.name, browser.supported, browser.installed) == ("browser", True, False)
+    with pytest.raises(manager.BrowserPathTooLongError):
+        RuntimeManager(
+            bin_dir=_deep_bin_dir(tmp_path, 250),
+            downloads=(),
+            platform="win32",
+            node=lambda: "node",
+            composition_dir=tmp_path,
+        ).install("browser", lambda _: None)
