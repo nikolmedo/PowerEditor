@@ -6,14 +6,13 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
-from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from powereditor import cli
 from powereditor.api import app as app_module
 from powereditor.api.app import ENV_DEV_CORS, ENV_WEB_DIR, create_app, resolve_web_dir
 from powereditor.config import REPO_ROOT
-from tests.api_client import make_client, make_service
+from tests.api_client import local_client, make_client, make_service
 
 
 @pytest.fixture
@@ -76,7 +75,7 @@ def test_web_dir_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.parametrize(("dev", "allowed"), [(True, "http://localhost:5173"), (False, None)])
 def test_cors_only_for_the_vite_dev_server(tmp_path: Path, dev: bool, allowed: str | None) -> None:
-    client = TestClient(create_app(settings_service=make_service(tmp_path), dev_cors=dev))
+    client = local_client(create_app(settings_service=make_service(tmp_path), dev_cors=dev))
 
     vite = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
     other = client.get("/api/health", headers={"Origin": "http://evil.example"})

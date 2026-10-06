@@ -10,6 +10,7 @@ from powereditor.api.app import create_app
 from powereditor.config import Settings
 from powereditor.paths import AppPaths
 from powereditor.settings_store import InMemorySecretStore, SettingsService
+from tests.api_client import local_client
 
 SECRET = "sk-super-secret-value"
 
@@ -28,7 +29,7 @@ def _client(
     handler: Callable[[httpx.Request], httpx.Response] | None = None,
 ) -> TestClient:
     transport = httpx.MockTransport(handler) if handler is not None else None
-    return TestClient(create_app(settings_service=service, openai_transport=transport))
+    return local_client(create_app(settings_service=service, openai_transport=transport))
 
 
 def test_health(tmp_path: Path) -> None:
@@ -164,7 +165,7 @@ def test_doctor_endpoint_returns_camel_case_report(tmp_path: Path) -> None:
 
     app = create_app(settings_service=_service(tmp_path), doctor_runner=runner)
 
-    body = TestClient(app).get("/api/doctor").json()
+    body = local_client(app).get("/api/doctor").json()
 
     assert "pythonVersion" in body
     assert isinstance(body["ok"], bool)
@@ -185,7 +186,7 @@ def test_validation_errors_do_not_echo_request_body(tmp_path: Path) -> None:
 
 
 def test_default_app_uses_isolated_stores(isolated_environment: Path) -> None:
-    body = TestClient(create_app()).get("/api/settings").json()
+    body = local_client(create_app()).get("/api/settings").json()
 
     assert body["secrets"]["openaiApiKey"] == {"set": False, "source": None}
     assert body["secrets"]["typesafeApiKey"] == {"set": False, "source": None}

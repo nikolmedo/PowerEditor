@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from powereditor.api.app import create_app
 from powereditor.api.services import Pipelines
 from powereditor.settings_store import SettingsService
-from tests.api_client import make_service, wait_for_job
+from tests.api_client import local_client, make_service, wait_for_job
 
 TIMEOUT = 10
 
@@ -43,7 +43,7 @@ def _client(data: Path, models: FakeWhisperModels, transcriber: str = "local") -
         pipelines=Pipelines(whisper_models=models),
         doctor_runner=_all_tools_found,
     )
-    return TestClient(app)
+    return local_client(app)
 
 
 @pytest.fixture(autouse=True)

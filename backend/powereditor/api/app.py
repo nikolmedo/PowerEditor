@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from powereditor import doctor, settings_store
+from powereditor.api.origin_guard import LocalOriginGuard
 from powereditor.api.routes_jobs import router as jobs_router
 from powereditor.api.routes_media import contained_file
 from powereditor.api.routes_media import router as media_router
@@ -70,7 +71,9 @@ def _mount_web_app(app: FastAPI, web_dir: Path) -> None:
         if not index.is_file():
             raise HTTPException(
                 status_code=404,
-                detail="The web app is not built: run `corepack pnpm --filter web build`.",
+                detail=(
+                    "The web app is not built: run `corepack pnpm --filter @powereditor/web build`."
+                ),
             )
         folder, _, name = path.rpartition("/")
         asset = contained_file(web_dir / folder, name) if name and ".." not in path else None
@@ -105,7 +108,8 @@ def create_app(
         jobs.shutdown()
 
     app = FastAPI(title="PowerEditor", version=version("powereditor"), lifespan=lifespan)
-    if dev_cors if dev_cors is not None else dev_cors_enabled():
+    dev = dev_cors if dev_cors is not None else dev_cors_enabled()
+    if dev:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=[VITE_DEV_ORIGIN],
@@ -113,6 +117,10 @@ def create_app(
             allow_headers=["*"],
             expose_headers=["ETag"],
         )
+    # Added last, so it runs first: a refused request never reaches CORS or a route.
+    app.add_middleware(
+        LocalOriginGuard, extra_origins=frozenset({VITE_DEV_ORIGIN} if dev else set())
+    )
     app.state.settings_service = settings_service
     app.state.openai_transport = openai_transport
     app.state.doctor_runner = doctor_runner

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from powereditor.api.app import create_app
@@ -24,6 +25,16 @@ SUBTITLES_FIXTURE = (
 def fixture_project() -> Project:
     data: dict[str, Any] = json.loads(SUBTITLES_FIXTURE.read_text(encoding="utf-8"))
     return Project.model_validate(data["project"])
+
+
+LOCAL_BASE_URL = "http://127.0.0.1:8765"
+LOCAL_WS_URL = "ws://127.0.0.1:8765"
+"""Tests talk to the app as the browser does: through the loopback host the server binds.
+`websocket_connect` ignores the base URL, so WebSocket tests pass `LOCAL_WS_URL` paths."""
+
+
+def local_client(app: FastAPI) -> TestClient:
+    return TestClient(app, base_url=LOCAL_BASE_URL)
 
 
 def make_service(data_dir: Path) -> SettingsService:
@@ -48,7 +59,7 @@ def make_client(
         web_dir=web_dir or data_dir / "no-web-build",
     )
     app.state.revealer = revealer
-    return TestClient(app)
+    return local_client(app)
 
 
 def stored_project(data_dir: Path, *, analyzed: bool = True) -> ProjectLayout:
@@ -63,7 +74,7 @@ def stored_project(data_dir: Path, *, analyzed: bool = True) -> ProjectLayout:
 
 def wait_for_job(client: TestClient, job_id: str) -> dict[str, Any]:
     """Follow the job's event stream to its terminal event."""
-    with client.websocket_connect(f"/api/jobs/{job_id}/events") as socket:
+    with client.websocket_connect(f"{LOCAL_WS_URL}/api/jobs/{job_id}/events") as socket:
         while True:
             event: dict[str, Any] = socket.receive_json()
             if event["status"] in ("succeeded", "failed", "cancelled"):

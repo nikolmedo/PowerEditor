@@ -11,7 +11,7 @@ from powereditor.projects import ProjectMeta
 from powereditor.render.remotion_render import RenderTimeoutError
 from powereditor.settings_store import SettingsService
 from powereditor.transcribe.factory import TranscriberConfigError
-from tests.api_client import make_client, stored_project, wait_for_job
+from tests.api_client import LOCAL_WS_URL, make_client, stored_project, wait_for_job
 
 TIMEOUT = 10
 
@@ -61,7 +61,7 @@ def test_analyze_streams_progress_until_done(tmp_path: Path) -> None:
         started = client.post(f"/api/projects/{layout.project_id}/analyze")
         job_id = started.json()["id"]
         assert pipelines.started.wait(TIMEOUT)
-        with client.websocket_connect(f"/api/jobs/{job_id}/events") as socket:
+        with client.websocket_connect(f"{LOCAL_WS_URL}/api/jobs/{job_id}/events") as socket:
             first = socket.receive_json()
             pipelines.release.set()
             events = [first]
@@ -196,7 +196,7 @@ def test_events_of_an_unknown_job_close_with_4404(tmp_path: Path) -> None:
     with (
         make_client(tmp_path / "data") as client,
         pytest.raises(WebSocketDisconnect) as closed,
-        client.websocket_connect("/api/jobs/nope/events") as socket,
+        client.websocket_connect(f"{LOCAL_WS_URL}/api/jobs/nope/events") as socket,
     ):
         socket.receive_json()
 
