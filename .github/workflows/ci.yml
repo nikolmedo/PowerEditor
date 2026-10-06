@@ -60,7 +60,8 @@ jobs:
         run: uv run pytest -q -m "not slow"
 
   composition:
-    name: Composition (${{ matrix.os }})
+    # Root scripts run recursively, so typecheck, lint and tests cover both packages.
+    name: Composition and web (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -86,6 +87,9 @@ jobs:
 
       - name: Tests
         run: corepack pnpm -r test
+
+      - name: Web build
+        run: corepack pnpm --filter @powereditor/web build
 
       - name: Generated TS types are up to date
         run: corepack pnpm -r check:types

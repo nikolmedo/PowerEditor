@@ -62,7 +62,7 @@ Packaging as an installer was a non-goal in the first draft. It is now in scope 
 ## Architecture
 
 ```
-web/ (React UI + @remotion/player)                         [planned, Phase 6]
+web/ (React UI + @remotion/player)                         [Phase 6: settings screens done]
    │  REST + WebSocket (job progress), loopback 127.0.0.1:8765
 backend/ (FastAPI): settings, ingest, transcription, VAD, clustering, decisions, media serving
    │  subprocess
@@ -162,7 +162,7 @@ PowerEditor/
         overlays/            # LowerThird, Title, Cta, Logo, ProgressBar, ImageOverlay
         color/               # CSS/SVG filter builders
       test/
-  web/                       # planned (Phase 6)
+  web/                       # React UI (Phase 6)
     src/
       steps/                 # LoadStep, ReviewStep, ExportStep
       settings/              # Settings, Providers and Features screens
@@ -531,7 +531,7 @@ The deterministic heuristic engine stays the default and the always-available fa
 - Steps 1 and 3 + step 2 with player and read-only timeline (source colors, badges).
 - Settings screen (keys + test connection), first-run setup check, Providers and Features screens, jobs WebSocket, media range serving.
 - **Acceptance:** full flow load → process → view → export without the CLI; no setting requires editing a file.
-- **Status:** 6a (backend API for the UI) done: projects (create from paths or uploads, list, ETag-guarded save, delete, subtitle rebuild and text edit), job manager with WebSocket progress and cancel, media Range serving, exports list and reveal, first-run setup with a Whisper download job, web app serving with SPA fallback, `serve --open`. Render quality is not wired yet: the Remotion render script has no quality option. Next: 6b, the React UI.
+- **Status:** 6a (backend API for the UI) done: projects (create from paths or uploads, list, ETag-guarded save, delete, subtitle rebuild and text edit), job manager with WebSocket progress and cancel, media Range serving, exports list and reveal, first-run setup with a Whisper download job, web app serving with SPA fallback, `serve --open`. Render quality is not wired yet: the Remotion render script has no quality option. 6b-1 done: `web/` (React + Vite + TypeScript, zustand, zundo prepared) with the app shell (Load → Review → Export header, projects home, settings sidebar), first-run setup checklist with the Whisper download job over WebSocket, General settings with 422 field messages, Providers (create/edit/delete, write-only API key, CLI path, confirmed custom base URL, test connection, model list, terms notices for local clients) and Features screens, Spanish/English strings in `web/src/i18n/`, light and dark themes; the local API refuses foreign `Host` headers and cross-site writes and WebSockets. Next: 6b-2, the Load, Review and Export steps.
 
 ### Phase 7: Editing
 

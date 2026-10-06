@@ -4,7 +4,7 @@ Record your video, say the line again when you trip over it, and let PowerEditor
 
 PowerEditor runs on your own Windows PC. Your footage never leaves it unless you choose a cloud model.
 
-> **Status:** early development. The analysis pipeline and the render engine work today from the command line (Phases 0–3 of [PLAN.md](PLAN.md)). Take selection is heuristic by default; AI models can answer individual decisions from the command line (Phase 4). The graphical app and the installer are planned. Features below are marked **planned** when they do not exist yet.
+> **Status:** early development. The analysis pipeline and the render engine work today from the command line (Phases 0–3 of [PLAN.md](PLAN.md)). Take selection is heuristic by default; AI models can answer individual decisions from the command line (Phase 4). The graphical app has its settings screens (setup checklist, general settings, AI providers and features); the load, review and export steps and the installer are planned. Features below are marked **planned** when they do not exist yet.
 
 ## Why PowerEditor
 
@@ -17,23 +17,23 @@ Talking-head videos (reels, tutorials, course lessons, YouTube) are cheap to rec
 
 ## Features
 
-| Feature                                                                                                         | Status                |
-| --------------------------------------------------------------------------------------------------------------- | --------------------- |
-| Ingest any phone or camera file (VFR to CFR mezzanine, 540p preview proxy)                                      | Available             |
-| Word-level transcription: local Whisper or OpenAI `whisper-1`                                                   | Available             |
-| Silence detection and removal (Silero VAD + loudness floor)                                                     | Available             |
-| Draft project built automatically from the analysis                                                             | Available             |
-| MP4 render with click-free cuts and -14 LUFS loudness normalization                                             | Available             |
-| Best-take selection when a phrase was recorded several times (heuristic, or an AI model per feature)            | Available             |
-| Bring your own AI model per feature: OpenAI, Gemini, Claude, DeepSeek, Jev, by API key or a logged-in local CLI | Available (no UI yet) |
-| Animated subtitles (karaoke, clean, bold pop, minimal) + SRT/ASS export                                         | Planned               |
-| Automatic transitions (punch-in within a topic, fade or slide between topics)                                   | Planned               |
-| Color matching across sources, presets and sliders                                                              | Planned               |
-| Music with automatic ducking under the voice                                                                    | Planned               |
-| Titles, lower thirds, logo, progress bar, automatic call-to-action                                              | Planned               |
-| 3-step app: Load → Review/Adjust → Export, with undo/redo                                                       | Planned               |
-| Windows installer with automatic updates                                                                        | Planned               |
-| FCPXML export for other editors (via OpenTimelineIO)                                                            | Planned               |
+| Feature                                                                                                         | Status      |
+| --------------------------------------------------------------------------------------------------------------- | ----------- |
+| Ingest any phone or camera file (VFR to CFR mezzanine, 540p preview proxy)                                      | Available   |
+| Word-level transcription: local Whisper or OpenAI `whisper-1`                                                   | Available   |
+| Silence detection and removal (Silero VAD + loudness floor)                                                     | Available   |
+| Draft project built automatically from the analysis                                                             | Available   |
+| MP4 render with click-free cuts and -14 LUFS loudness normalization                                             | Available   |
+| Best-take selection when a phrase was recorded several times (heuristic, or an AI model per feature)            | Available   |
+| Bring your own AI model per feature: OpenAI, Gemini, Claude, DeepSeek, Jev, by API key or a logged-in local CLI | Available   |
+| Animated subtitles (karaoke, clean, bold pop, minimal) + SRT/ASS export                                         | Planned     |
+| Automatic transitions (punch-in within a topic, fade or slide between topics)                                   | Planned     |
+| Color matching across sources, presets and sliders                                                              | Planned     |
+| Music with automatic ducking under the voice                                                                    | Planned     |
+| Titles, lower thirds, logo, progress bar, automatic call-to-action                                              | Planned     |
+| 3-step app: Load → Review/Adjust → Export, with undo/redo (settings screens available)                          | In progress |
+| Windows installer with automatic updates                                                                        | Planned     |
+| FCPXML export for other editors (via OpenTimelineIO)                                                            | Planned     |
 
 ## How it works
 
@@ -82,7 +82,7 @@ uv run powereditor render demo     # writes <data dir>/projects/demo/exports/fin
 
 You should never need to edit a file to configure PowerEditor.
 
-- **Settings** (transcriber, Whisper model and device, language, silence padding, loudness target, tool paths) are stored in `settings.json` inside the user data dir: `%LOCALAPPDATA%\PowerEditor` on Windows. Today they are set through the local API (`PATCH /api/settings`); the settings screen comes with the UI.
+- **Settings** (transcriber, Whisper model and device, language, silence padding, loudness target, tool paths) are stored in `settings.json` inside the user data dir: `%LOCALAPPDATA%\PowerEditor` on Windows. Set them in the app under **Configuración › General** (or through `PATCH /api/settings`).
 - **API keys** are stored in the OS keyring (Windows Credential Locker), never in plain files.
 - **`.env`** is a developer override only. The accepted variables are the fields of `Settings` in `backend/powereditor/config.py`; `.env.example` is the template.
 - `POWEREDITOR_DATA_DIR` moves the data dir (projects, models, downloaded binaries, logs, settings).
@@ -114,37 +114,38 @@ Dense reference for coding agents. Read this before exploring; it should save mo
 
 ### Repo map
 
-| Path                                           | Responsibility                                                                                                                                                                                                             |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/powereditor/cli.py`                   | Typer CLI: `doctor`, `serve` (`--open`, `--dev`), `ingest`, `transcribe`, `analyze`, `render`, `export-subtitles`, `eval-takes`, `providers list`, `features`                                                              |
-| `backend/powereditor/api/`                     | FastAPI app (`app.py`: health, doctor, web app with SPA fallback, dev CORS); routes for settings/secrets, providers, projects, jobs (+ WebSocket), media, setup; `services.py` holds the injectable pipelines              |
-| `backend/powereditor/projects.py`              | `ProjectStore`: project folders, `meta.json`, status, ETag-guarded `project.json` writes                                                                                                                                   |
-| `backend/powereditor/jobs.py`                  | `JobManager`: thread-pool jobs, one active per project, throttled progress events, cooperative cancel                                                                                                                      |
-| `backend/powereditor/process.py`               | `kill_tree`, `ProcessScope` / `tracked()`: a cancelled job kills its ffmpeg and Remotion process trees                                                                                                                     |
-| `backend/powereditor/models.py`                | Pydantic models, single source of truth for `project.json` and stage results                                                                                                                                               |
-| `backend/powereditor/schema_gen.py`            | Writes `packages/composition/schema/project.schema.json` from `Project`                                                                                                                                                    |
-| `backend/powereditor/config.py`                | `.env` developer overrides (pydantic-settings), `REPO_ROOT`                                                                                                                                                                |
-| `backend/powereditor/settings_store.py`        | Settings layering, user `settings.json`, keyring and in-memory secret stores                                                                                                                                               |
-| `backend/powereditor/paths.py`                 | User data dir layout, executable resolution (configured → `<data dir>/bin` → `PATH`)                                                                                                                                       |
-| `backend/powereditor/doctor.py`                | Dependency probes                                                                                                                                                                                                          |
-| `backend/powereditor/timeline.py`              | Clip frame layout; mirrored by `packages/composition/src/timeline.ts`                                                                                                                                                      |
-| `backend/powereditor/pipeline/`                | Stage runner + cache (`runner.py`), ffmpeg helpers, ingest, transcription, VAD, segmentation, loudness, color stats, takes, draft builder, `analyze.py`                                                                    |
-| `backend/powereditor/providers/`               | `ModelProvider` contract (`base.py`), settings types and base-URL trust (`config.py`), `registry.py`, typed questions (`questions.py`), Jev (`jev.py`), API adapters (`api/`), local CLI adapters (`local_cli/`)           |
-| `backend/powereditor/decide/`                  | `DecisionEngine` protocol (`base.py`), `HeuristicEngine`, feature prompts (`prompts.py`), per-feature `ModelDecisionEngine` (`model_engine.py`), `create_engine` factory                                                   |
-| `backend/powereditor/eval/takes_eval.py`       | Take benchmark evaluator behind `powereditor eval-takes`                                                                                                                                                                   |
-| `backend/powereditor/transcribe/`              | `Transcriber` protocol, factory, faster-whisper and OpenAI implementations                                                                                                                                                 |
-| `backend/powereditor/render/`                  | Render job: voice rebuild (`audio_mix.py`), Remotion runner, Node resolution, loopback media server, final pass                                                                                                            |
-| `backend/powereditor/export/subtitles.py`      | Subtitle remap (source → timeline words), `rebuild_subtitles`, text edits (`retime_words`, `edit_subtitle_text`), line grouping                                                                                            |
-| `backend/powereditor/export/subtitle_files.py` | SRT and ASS writers (ASS `\k` karaoke tags for `karaoke_highlight`) behind `powereditor export-subtitles`                                                                                                                  |
-| `backend/powereditor/export/otio_export.py`    | OpenTimelineIO → FCPXML / `.otio` (optional `nle` extra)                                                                                                                                                                   |
-| `backend/tests/`                               | pytest suite; `conftest.py` isolates data dir, env and secrets; `media.py` builds lavfi fixtures                                                                                                                           |
-| `packages/composition/src/`                    | Remotion composition (`ProjectVideo.tsx`, `Root.tsx`, `timeline.ts`, clips, `transitions/` (`transitionStyle`, `ClipTransition`), `subtitles/` (`remapWords`, `groupLines`, presets, bundled Inter font), overlays, color) |
-| `packages/composition/scripts/`                | `gen-types.mjs` (schema → TS), `render.mjs` (CLI render, NDJSON progress)                                                                                                                                                  |
-| `packages/composition/test/`                   | vitest                                                                                                                                                                                                                     |
-| `PLAN.md`                                      | Product plan, architecture, phases                                                                                                                                                                                         |
-| `odd/tasks/powereditor-app.md`                 | Progress log, decisions, measurements, review history                                                                                                                                                                      |
+| Path                                           | Responsibility                                                                                                                                                                                                                                            |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/powereditor/cli.py`                   | Typer CLI: `doctor`, `serve` (`--open`, `--dev`), `ingest`, `transcribe`, `analyze`, `render`, `export-subtitles`, `eval-takes`, `providers list`, `features`                                                                                             |
+| `backend/powereditor/api/`                     | FastAPI app (`app.py`: health, doctor, web app with SPA fallback, dev CORS); `origin_guard.py` (Host and Origin checks); routes for settings/secrets, providers, projects, jobs (+ WebSocket), media, setup; `services.py` holds the injectable pipelines |
+| `backend/powereditor/projects.py`              | `ProjectStore`: project folders, `meta.json`, status, ETag-guarded `project.json` writes                                                                                                                                                                  |
+| `backend/powereditor/jobs.py`                  | `JobManager`: thread-pool jobs, one active per project, throttled progress events, cooperative cancel                                                                                                                                                     |
+| `backend/powereditor/process.py`               | `kill_tree`, `ProcessScope` / `tracked()`: a cancelled job kills its ffmpeg and Remotion process trees                                                                                                                                                    |
+| `backend/powereditor/models.py`                | Pydantic models, single source of truth for `project.json` and stage results                                                                                                                                                                              |
+| `backend/powereditor/schema_gen.py`            | Writes `packages/composition/schema/project.schema.json` from `Project`                                                                                                                                                                                   |
+| `backend/powereditor/config.py`                | `.env` developer overrides (pydantic-settings), `REPO_ROOT`                                                                                                                                                                                               |
+| `backend/powereditor/settings_store.py`        | Settings layering, user `settings.json`, keyring and in-memory secret stores                                                                                                                                                                              |
+| `backend/powereditor/paths.py`                 | User data dir layout, executable resolution (configured → `<data dir>/bin` → `PATH`)                                                                                                                                                                      |
+| `backend/powereditor/doctor.py`                | Dependency probes                                                                                                                                                                                                                                         |
+| `backend/powereditor/timeline.py`              | Clip frame layout; mirrored by `packages/composition/src/timeline.ts`                                                                                                                                                                                     |
+| `backend/powereditor/pipeline/`                | Stage runner + cache (`runner.py`), ffmpeg helpers, ingest, transcription, VAD, segmentation, loudness, color stats, takes, draft builder, `analyze.py`                                                                                                   |
+| `backend/powereditor/providers/`               | `ModelProvider` contract (`base.py`), settings types and base-URL trust (`config.py`), `registry.py`, typed questions (`questions.py`), Jev (`jev.py`), API adapters (`api/`), local CLI adapters (`local_cli/`)                                          |
+| `backend/powereditor/decide/`                  | `DecisionEngine` protocol (`base.py`), `HeuristicEngine`, feature prompts (`prompts.py`), per-feature `ModelDecisionEngine` (`model_engine.py`), `create_engine` factory                                                                                  |
+| `backend/powereditor/eval/takes_eval.py`       | Take benchmark evaluator behind `powereditor eval-takes`                                                                                                                                                                                                  |
+| `backend/powereditor/transcribe/`              | `Transcriber` protocol, factory, faster-whisper and OpenAI implementations                                                                                                                                                                                |
+| `backend/powereditor/render/`                  | Render job: voice rebuild (`audio_mix.py`), Remotion runner, Node resolution, loopback media server, final pass                                                                                                                                           |
+| `backend/powereditor/export/subtitles.py`      | Subtitle remap (source → timeline words), `rebuild_subtitles`, text edits (`retime_words`, `edit_subtitle_text`), line grouping                                                                                                                           |
+| `backend/powereditor/export/subtitle_files.py` | SRT and ASS writers (ASS `\k` karaoke tags for `karaoke_highlight`) behind `powereditor export-subtitles`                                                                                                                                                 |
+| `backend/powereditor/export/otio_export.py`    | OpenTimelineIO → FCPXML / `.otio` (optional `nle` extra)                                                                                                                                                                                                  |
+| `backend/tests/`                               | pytest suite; `conftest.py` isolates data dir, env and secrets; `media.py` builds lavfi fixtures                                                                                                                                                          |
+| `packages/composition/src/`                    | Remotion composition (`ProjectVideo.tsx`, `Root.tsx`, `timeline.ts`, clips, `transitions/` (`transitionStyle`, `ClipTransition`), `subtitles/` (`remapWords`, `groupLines`, presets, bundled Inter font), overlays, color)                                |
+| `packages/composition/scripts/`                | `gen-types.mjs` (schema → TS), `render.mjs` (CLI render, NDJSON progress)                                                                                                                                                                                 |
+| `packages/composition/test/`                   | vitest                                                                                                                                                                                                                                                    |
+| `PLAN.md`                                      | Product plan, architecture, phases                                                                                                                                                                                                                        |
+| `odd/tasks/powereditor-app.md`                 | Progress log, decisions, measurements, review history                                                                                                                                                                                                     |
 
-Not yet present: `web/` (UI, Phase 6b).
+| `web/src/` | React UI (Vite): `App.tsx` (routes), `shell/` (header with steps, sidebar, projects home, step placeholders), `settings/` (Setup, General, Providers, Features screens + pure form logic), `api/` (typed client, error mapping, job WebSocket), `store/` (zustand; `project.ts` with zundo for Phase 7), `i18n/` (`es.json`, `en.json`), `ui/` (form primitives, `useResource`) |
+| `web/test/` | vitest + Testing Library (jsdom): API client, i18n key parity, form logic, screens with a mocked `api` |
 
 ### Data flow
 
@@ -169,7 +170,9 @@ Never hand-edit the schema or `types.generated.ts`. Both are in `.prettierignore
 
 ### Local API
 
-`powereditor serve` listens on `127.0.0.1:8765`. The API is under `/api`; the built web app (`web/dist`, or `POWEREDITOR_WEB_DIR`) is served at `/` with an `index.html` fallback for client routes. `--dev` (env `POWEREDITOR_DEV_CORS=1`) allows CORS from the Vite dev server `http://localhost:5173` only. Route errors carry `detail: {code, message}`.
+`powereditor serve` listens on `127.0.0.1:8765`. The API is under `/api`; the built web app (`web/dist`, or `POWEREDITOR_WEB_DIR`) is served at `/` with an `index.html` fallback for client routes. `--dev` (env `POWEREDITOR_DEV_CORS=1`) allows CORS from the Vite dev server `http://localhost:5173` only. Route errors carry `detail: {code, message}`; validation errors carry `detail: [{loc, msg, type}]`.
+
+Other web pages can reach `127.0.0.1`, so `LocalOriginGuard` (`api/origin_guard.py`) answers only a `Host` of `127.0.0.1`, `localhost` or `[::1]` on the server's own port (DNS rebinding), and refuses POST/PUT/PATCH/DELETE and WebSocket upgrades whose `Origin` is another site (`403 forbidden_host` / `forbidden_origin`; a WebSocket is closed before the handshake). Requests without `Origin` (curl, the CLI) pass. The Vite origin is accepted only with `--dev`. Tests use `tests/api_client.local_client` (base URL `http://127.0.0.1:8765`) and `LOCAL_WS_URL` for WebSockets.
 
 | Route                                                                                                | Purpose                                                                                                                |
 | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -230,6 +233,7 @@ corepack pnpm typecheck
 corepack pnpm lint
 corepack pnpm -r test
 corepack pnpm -r check:types
+corepack pnpm --filter @powereditor/web build
 corepack pnpm format:check
 ```
 
@@ -237,6 +241,9 @@ CI (`.github/workflows/ci.yml`) runs the same commands on Windows and Linux.
 
 ### How to extend
 
+- **Web app (dev):** run `uv run powereditor serve --dev` in `backend/` and `corepack pnpm --filter @powereditor/web dev` at the root, then open `http://localhost:5173`. Vite proxies `/api` (and the job WebSocket) to `127.0.0.1:8765`; without `--dev` the backend refuses the Vite origin. `corepack pnpm --filter @powereditor/web build` writes `web/dist`, which `serve` hosts.
+- **Screen:** add a component under `web/src/settings/` or `web/src/shell/`, a `case` in `screenFor()` in `web/src/App.tsx`, and a sidebar entry in `NAV` (`shell/AppShell.tsx`). Load data with `useResource(useCallback(() => api.x(), []))`; add the call to `api/endpoints.ts` and its types to `api/types.ts`. Show failures with `<ErrorNotice error={...} />`. Keep decisions in pure functions next to the screen (see `providerForm.ts`) and test them directly; render-test the screen with `vi.mock("../src/api/endpoints")`.
+- **UI string:** never hardcode text in components. Add the key to both `web/src/i18n/es.json` (default) and `en.json` (flat dotted keys); `t("key")` from `useT()` is typed by `es.json`, and `test/i18n.test.ts` fails when the files drift. A backend error code `x` is shown as `error.x` when that key exists, otherwise the server message.
 - **Pipeline stage:** add a module under `pipeline/`, compute through `run_stage(layout, stage, version, inputs, params, ResultModel, compute, outputs=...)`, put the result model in `models.py` (or the module), wire it into `pipeline/analyze.py`, add tests with lavfi fixtures from `tests/media.py`.
 - **CLI command:** add an `@app.command()` in `cli.py`; get settings with `SettingsService.default()`; catch `PIPELINE_ERRORS` and exit through `_fail()` so errors print a code.
 - **API route:** create an `APIRouter(prefix="/api")` module in `api/`, inject the service with the `ServiceDep` pattern from `routes_settings.py`, and `include_router` it in `create_app()`. Test with `create_app(settings_service=...)` and FastAPI's `TestClient`.
