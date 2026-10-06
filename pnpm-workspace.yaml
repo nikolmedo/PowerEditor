@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "web"
+  - "desktop"
 
 minimumReleaseAgeExclude:
   - "@remotion/bundler@4.0.533"
@@ -47,6 +48,9 @@ supportedArchitectures:
     - x64
 
 # Only esbuild may run an install script (it links its platform binary); every other
-# dependency's lifecycle scripts stay blocked.
+# dependency's lifecycle scripts stay blocked. electron-winstaller comes with
+# electron-builder, whose NSIS target does not use it. Electron itself downloads its
+# binary on first run, without an install script.
 allowBuilds:
+  electron-winstaller: false
   esbuild: true

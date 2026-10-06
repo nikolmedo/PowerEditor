@@ -1,0 +1,67 @@
+{
+  "name": "@powereditor/desktop",
+  "productName": "PowerEditor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PowerEditor desktop app: an Electron shell around the local PowerEditor engine.",
+  "author": "PowerEditor contributors",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json && electron .",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "vitest": "5.0.3"
+  },
+  "build": {
+    "appId": "io.github.nikolmedo.powereditor",
+    "productName": "PowerEditor",
+    "copyright": "PowerEditor contributors",
+    "directories": {
+      "output": "../dist/installer",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/backend/powereditor",
+        "to": "backend"
+      }
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PowerEditor",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "PowerEditor-Setup-${version}-x64.${ext}"
+    }
+  }
+}
