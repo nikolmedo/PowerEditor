@@ -11,8 +11,9 @@ import type { Clip, Project, Source } from "./types";
 export type ProjectVideoProps = {
   project: Project;
   /**
-   * Edge fade at both ends of every clip (UserSettings.audioCrossfadeMs). Remotion applies
-   * volume per video frame, so this softens cuts but cannot ramp within a frame.
+   * Edge fade at both ends of every clip (UserSettings.audioCrossfadeMs), for Player preview
+   * only. Remotion applies volume per video frame, so the preview can still click at cuts;
+   * renders are muted and the backend rebuilds the voice sample-accurately with ffmpeg.
    */
   audioCrossfadeMs: number;
   /** Where render-time media is served; each source loads `${mediaBaseUrl}/<mezzanine file name>`. */

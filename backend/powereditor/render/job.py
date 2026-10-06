@@ -1,15 +1,22 @@
-"""Render a project end to end: composition render -> loudness final pass -> export."""
+"""Render a project end to end: voice rebuild -> video render -> final pass -> export.
+
+Every intermediate lives next to the export (same filesystem) and the export is
+written as `<name>.part.mp4`, then moved into place only once the final pass
+succeeds, so a failed render never leaves a truncated or half-written export.
+"""
 
 import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from powereditor.models import load_project
+from powereditor.models import Project, load_project
 from powereditor.pipeline.ffmpeg import MediaTools
+from powereditor.pipeline.ingest import probe_media
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress
+from powereditor.render.audio_mix import VoiceGraph, build_voice_filtergraph, render_voice
 from powereditor.render.base import Renderer, RenderSettings, RenderTiming
-from powereditor.render.final_pass import normalize_loudness
+from powereditor.render.final_pass import finalize_export
 from powereditor.render.node_runtime import resolve_render_node
 from powereditor.render.remotion_render import RemotionRenderer
 from powereditor.settings_store import SettingsService
@@ -20,6 +27,10 @@ _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]*$")
 
 class ProjectNotFoundError(FileNotFoundError):
     code = "project_not_found"
+
+
+class EmptyTimelineError(ValueError):
+    code = "empty_timeline"
 
 
 @dataclass(frozen=True)
@@ -40,6 +51,17 @@ def create_renderer(service: SettingsService) -> Renderer:
     return RemotionRenderer(node)
 
 
+def _voice_graph(project: Project, media_dir: Path, ffprobe: str, crossfade_ms: int) -> VoiceGraph:
+    media = {s.id: media_dir / Path(s.mezzanine_path).name for s in project.sources}
+    used = {clip.source_id for clip in project.clips if not clip.removed}
+    silent = {
+        source_id
+        for source_id in used
+        if source_id in media and not probe_media(ffprobe, media[source_id]).has_audio
+    }
+    return build_voice_filtergraph(project, crossfade_ms, media, silent_sources=silent)
+
+
 def render_project(
     layout: ProjectLayout,
     service: SettingsService,
@@ -54,34 +76,51 @@ def render_project(
     if not layout.project_file.is_file():
         raise ProjectNotFoundError(f"project {layout.project_id!r} has no project.json")
     project = load_project(layout.project_file)
+    frames = timeline_layout(project).duration_in_frames
+    if frames == 0:
+        raise EmptyTimelineError(f"project {layout.project_id!r} has no clips left to render")
+    video_seconds = frames / project.fps
     settings = service.get_effective()
     tools = MediaTools.from_settings(service)
     renderer = renderer or create_renderer(service)
     exports = layout.root / "exports"
+    exports.mkdir(parents=True, exist_ok=True)
     output = exports / f"{name}.mp4"
-    intermediate = exports / f".{name}.render.mp4"
-    video_seconds = timeline_layout(project).duration_in_frames / project.fps
+    partial = exports / f"{name}.part.mp4"
+    video = exports / f".{name}.video.mp4"
+    voice = exports / f".{name}.voice.wav"
 
     started = time.perf_counter()
     try:
+        progress("audio", 0.0, "voice")
+        graph = _voice_graph(project, layout.media_dir, tools.ffprobe, settings.audio_crossfade_ms)
+        render_voice(
+            tools.ffmpeg,
+            graph,
+            voice,
+            on_progress=lambda fraction: progress("audio", fraction, "voice"),
+        )
         timing = renderer.render(
             project,
             layout.media_dir,
-            intermediate,
+            video,
             RenderSettings(audio_crossfade_ms=settings.audio_crossfade_ms),
             lambda fraction: progress("render", fraction, "composition"),
         )
         progress("final-pass", 0.0, "loudnorm")
-        normalize_loudness(
+        finalize_export(
             tools.ffmpeg,
-            intermediate,
-            output,
+            video,
+            voice,
+            partial,
             settings.target_lufs,
             duration=video_seconds,
             on_progress=lambda fraction: progress("final-pass", fraction, "loudnorm"),
         )
+        partial.replace(output)
     finally:
-        intermediate.unlink(missing_ok=True)
+        for temporary in (video, voice, partial):
+            temporary.unlink(missing_ok=True)
     return RenderResult(
         output=output,
         video_seconds=video_seconds,

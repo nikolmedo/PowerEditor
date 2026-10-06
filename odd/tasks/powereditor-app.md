@@ -77,7 +77,8 @@ Reviewed boundary: `f35332a` (phase-0).
 - `045420e` (rename): unavailable — mechanical rename counted as 4399 lines, exceeds native review budget; verified by full suite instead.
 - `f78a4fd` (2a): high, granted, 4 lenses approved + acknowledged. WARNING advisories → follow-ups: vad.py:179-182 and :144-152 (full WAV in memory), ingest.py:275-276, OpenAI retry on non-idempotent timeouts (openai_whisper.py:140-148), zero-length segment padded into a clip (draft_builder.py:96-99).
 - `f6cf249` (2b): high, granted, 4 lenses approved + acknowledged. WARNING advisories → follow-ups: pnpm-workspace supportedArchitectures/allowBuilds scope (R1-001), composition id duplicated in render.mjs, empty-edit mismatch (job.py:63), partial/non-atomic export on final-pass failure (job.py:75-84), Remotion renderer untested (remotion_render.py:73-134), loudnorm on silent audio (final_pass.py:34-46).
-- Reviewed boundary: `f6cf249`.
+- `5c4afe5` (2c): high, granted, 4 lenses → `correction_required` (CRITICAL R4-voice-argv-length: per-clip `-i` + inline filtergraph exceeds the Windows 32767-char command line at ~100 clips). One bounded correction `02bf674`: render voice in batches of 40 clips with `-/filter_complex` script files, join exact-length PCM parts with the concat demuxer; tests for batching and renumbering. Targeted validation approved + acknowledged. Follow-ups: POSIX kill-tree for render timeout (remotion_render.py:88-94), voice rendered before media check (job.py:54-62), decode from start per clip (audio_mix.py:133).
+- Reviewed boundary: `02bf674`.
 
 - 2a done (delegated): 1b follow-ups fixed (encoder in cache key, WAV tracked output, atomic stage outputs, CLI error codes, OpenAI per-chunk retry); VAD (Silero ONNX bundled in faster-whisper, no torch, + dB floor; EnergyDetector fallback); segmentation; LUFS (ebur128) + color stats; draft builder + `export/subtitles.remap_words`; `analyze_project` + `powereditor analyze`. Evidence: pytest 156 passed (parent re-run); ruff/mypy clean; smoke on gated-tone clip kept 5.18 of 10 s, second run fully cached. RED strong for follow-ups, weak for new modules.
 - Contract for 2b: clip frames = round((out-in)/speed*fps); composition must match.
@@ -87,5 +88,14 @@ Reviewed boundary: `f35332a` (phase-0).
 - Phase 2 measurement (ARM64 host, x64 Node+Chrome emulated, 1080p30, 12.1 s output): 114 s wall = 0.11x realtime (~30 s fixed startup + ~0.17 s/frame). A/V sync pass (17 ms). Loudness pass (-14.0 LUFS). **Clicks at cuts FAIL**: Remotion volume callbacks only change gain at video-frame boundaries.
 - Fix path for clicks (needed under any render engine): rebuild audio sample-accurately with ffmpeg in the final pass (atrim/atempo/afade/concat) and drop Remotion audio.
 
+- User decision (2026-10-06): keep Remotion as render engine (WYSIWYG); fix clicks by rebuilding audio with ffmpeg in the final pass.
+- Delivery: PRs #1 (phase-0), #2 (slice 1), #3 (slice 2) created and merged into `main` in order with merge commits (retargeted to main before each merge). Next slices branch from `main`.
+
+### Slice 2c — `feat/phase-2c-audio`
+- [x] 2c Sample-accurate audio rebuild in final pass (drop Remotion audio) + 2b WARNING follow-ups.
+
+- 2c done (delegated): `render/audio_mix.py` rebuilds voice audio sample-accurately (atrim/atempo/afade/apad/concat, cumulative frame→sample boundaries, anullsrc for silent sources); Remotion renders muted; final pass muxes video copy + rebuilt voice with two-pass loudnorm (skips silent audio). 2b follow-ups fixed: empty_timeline error, atomic export (.part + cleanup), composition id single source (composition.json), renderer tests with fake node + timeout (taskkill tree), pnpm-workspace comments. Evidence: pytest 201 passed, vitest 15 passed (parent re-run). Click test: cut jump 0.96–0.99x steady (was up to 3.4x); A/V 2.666667 s both; -14.0 LUFS. Phase 2 acceptance now met.
+- Note: Player preview still uses frame-level fades (can click in preview only).
+
 ## Next step
-User decision: keep Remotion (WYSIWYG, slow on ARM64) vs plan B (FFmpeg render). Then 2c audio rebuild.
+Update PLAN.md with new user requirements (docs/CI/releases/auto-update; multi-provider models), then slice 3.

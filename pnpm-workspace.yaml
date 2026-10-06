@@ -1,8 +1,6 @@
 packages:
   - "packages/*"
 
-# Remotion ships no win32-arm64 compositor; renders on ARM64 Windows run under an
-# x64 Node, so the x64 native packages must be installed alongside the host ones.
 minimumReleaseAgeExclude:
   - "@remotion/bundler@4.0.533"
   - "@remotion/captions@4.0.533"
@@ -35,6 +33,10 @@ minimumReleaseAgeExclude:
   - "@remotion/zod-types@4.0.533"
   - remotion@4.0.533
 
+# Remotion ships no win32-arm64 compositor, so on ARM64 Windows renders run under an
+# emulated x64 Node (see backend/powereditor/render/node_runtime.py). That Node loads
+# x64 native packages (@remotion/compositor-win32-x64-msvc, @esbuild/win32-x64), so
+# optional dependencies are installed for x64 in addition to the host CPU.
 supportedArchitectures:
   os:
     - current
@@ -42,5 +44,7 @@ supportedArchitectures:
     - current
     - x64
 
+# Only esbuild may run an install script (it links its platform binary); every other
+# dependency's lifecycle scripts stay blocked.
 allowBuilds:
   esbuild: true
