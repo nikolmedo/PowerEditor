@@ -29,6 +29,10 @@ vision = [
 embeddings = [
     "sentence-transformers>=6.1.0",
 ]
+nle = [
+    "opentimelineio>=0.18.1",
+    "otio-fcpx-xml-adapter>=1.0.0",
+]
 
 [dependency-groups]
 dev = [
@@ -67,6 +71,8 @@ module = [
     "cv2.*",
     "sentence_transformers",
     "sentence_transformers.*",
+    "opentimelineio",
+    "opentimelineio.*",
 ]
 ignore_missing_imports = true
 
