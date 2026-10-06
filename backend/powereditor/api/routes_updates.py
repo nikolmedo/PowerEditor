@@ -13,7 +13,8 @@ router = APIRouter(prefix="/api")
 @router.get("/updates")
 def check_for_updates(request: Request, service: ServiceDep, force: bool = False) -> UpdateStatus:
     """The newest published release against the running version. With the
-    `checkForUpdates` setting off only `force` (the user's "Check now") asks GitHub."""
+    `checkForUpdates` setting off only `force` (the user's "Check now") asks GitHub, and
+    forced checks reach GitHub at most once a minute (`FORCED_CHECK_INTERVAL`)."""
     enabled = service.get_effective().check_for_updates
     if not enabled and not force:
         return UpdateStatus(current=app_version(), enabled=False)

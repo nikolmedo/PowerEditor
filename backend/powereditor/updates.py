@@ -3,7 +3,9 @@
 `releases/latest` returns the newest *published* release only (never a draft or a
 prerelease), so a draft made by the release workflow stays invisible until a maintainer
 publishes it. Answers are cached for six hours; a failed check is reported, not raised, and
-not cached, so the next check tries again.
+not cached, so the next automatic check tries again. A forced check ("Check now") asks GitHub
+at most once a minute and otherwise repeats the last outcome: unauthenticated GitHub API calls
+are limited to 60 an hour per address.
 """
 
 import re
@@ -19,6 +21,7 @@ from powereditor.models import CamelModel
 
 LATEST_RELEASE_URL = "https://api.github.com/repos/nikolmedo/PowerEditor/releases/latest"
 CACHE_FOR = timedelta(hours=6)
+FORCED_CHECK_INTERVAL = timedelta(seconds=60)
 TIMEOUT_SECONDS = 10.0
 CACHE_FILE_NAME = "update-check.json"
 INSTALLER_ASSET = re.compile(r"PowerEditor-Setup-.+-x64\.exe")
@@ -49,9 +52,18 @@ class ReleaseInfo(CamelModel):
 
 
 class _CachedCheck(CamelModel):
-    checked_at: datetime
-    release: ReleaseInfo | None
+    attempted_at: datetime | None = None
+    """The last request to GitHub, answered or not."""
+    checked_at: datetime | None = None
+    """The last answered request; None when none succeeded yet."""
+    release: ReleaseInfo | None = None
     """None while the repository has no published release (GitHub answers 404)."""
+
+    @property
+    def last_attempt_failed(self) -> bool:
+        return self.checked_at is None or (
+            self.attempted_at is not None and self.attempted_at > self.checked_at
+        )
 
 
 class UpdateStatus(CamelModel):
@@ -104,6 +116,26 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _within(moment: datetime | None, now: datetime, span: timedelta) -> bool:
+    return moment is not None and timedelta(0) <= now - moment < span
+
+
+def _status_from(current: str, cached: _CachedCheck) -> UpdateStatus:
+    release = cached.release
+    if release is None:
+        return UpdateStatus(current=current, checked_at=cached.checked_at)
+    return UpdateStatus(
+        current=current,
+        latest=release.version,
+        update_available=is_newer(release.version, current),
+        release_url=release.release_url,
+        installer_url=release.installer_url,
+        sha256_url=release.sha256_url,
+        notes=release.notes,
+        checked_at=cached.checked_at,
+    )
+
+
 class UpdateChecker:
     def __init__(
         self,
@@ -116,26 +148,25 @@ class UpdateChecker:
         self.now = now
 
     def status(self, current: str, force: bool = False) -> UpdateStatus:
-        cached = None if force else self._fresh_cache()
-        if cached is None:
+        now = self.now()
+        cached = self._load()
+        if force:
+            ask = not _within(cached.attempted_at, now, FORCED_CHECK_INTERVAL)
+        else:
+            ask = not _within(cached.checked_at, now, CACHE_FOR)
+        if ask:
+            cached.attempted_at = now
             try:
-                cached = _CachedCheck(checked_at=self.now(), release=self._fetch(current))
+                cached = _CachedCheck(
+                    attempted_at=now, checked_at=now, release=self._fetch(current)
+                )
             except UpdateCheckFailed:
+                self._store(cached)
                 return UpdateStatus(current=current, error="update_check_failed")
             self._store(cached)
-        release = cached.release
-        if release is None:
-            return UpdateStatus(current=current, checked_at=cached.checked_at)
-        return UpdateStatus(
-            current=current,
-            latest=release.version,
-            update_available=is_newer(release.version, current),
-            release_url=release.release_url,
-            installer_url=release.installer_url,
-            sha256_url=release.sha256_url,
-            notes=release.notes,
-            checked_at=cached.checked_at,
-        )
+        elif force and cached.last_attempt_failed:
+            return UpdateStatus(current=current, error="update_check_failed")
+        return _status_from(current, cached)
 
     def _fetch(self, current: str) -> ReleaseInfo | None:
         headers = {
@@ -153,13 +184,11 @@ class UpdateChecker:
             raise UpdateCheckFailed(str(exc)) from exc
         return _release_info(release)
 
-    def _fresh_cache(self) -> _CachedCheck | None:
+    def _load(self) -> _CachedCheck:
         try:
-            cached = _CachedCheck.model_validate_json(self.cache_file.read_bytes())
+            return _CachedCheck.model_validate_json(self.cache_file.read_bytes())
         except (OSError, ValidationError):
-            return None
-        age = self.now() - cached.checked_at
-        return cached if timedelta(0) <= age < CACHE_FOR else None
+            return _CachedCheck()
 
     def _store(self, cached: _CachedCheck) -> None:
         try:

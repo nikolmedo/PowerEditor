@@ -132,12 +132,56 @@ def test_an_answer_is_reused_for_six_hours(tmp_path: Path) -> None:
 
 def test_force_skips_the_cache(tmp_path: Path) -> None:
     github = FakeGitHub(httpx.Response(200, json=release()))
-    updates = checker(tmp_path, github)
+    clock = Clock()
+    updates = checker(tmp_path, github, clock)
 
     updates.status("0.1.0")
-    updates.status("0.1.0", force=True)
+    clock.now += timedelta(seconds=61)
+    forced = updates.status("0.1.0", force=True)
 
     assert len(github.requests) == 2
+    assert forced.checked_at == clock.now
+
+
+def test_forced_checks_ask_github_at_most_once_a_minute(tmp_path: Path) -> None:
+    github = FakeGitHub(httpx.Response(200, json=release()))
+    clock = Clock()
+    first = checker(tmp_path, github, clock).status("0.1.0", force=True)
+    clock.now += timedelta(seconds=59)
+    # A new checker per request, as in the route: the limit lives in the cache file.
+    again = checker(tmp_path, github, clock).status("0.1.0", force=True)
+    clock.now += timedelta(seconds=2)
+    later = checker(tmp_path, github, clock).status("0.1.0", force=True)
+
+    assert len(github.requests) == 2
+    assert again == first
+    assert later.checked_at == clock.now
+
+
+def test_a_failed_forced_check_is_not_retried_within_a_minute(tmp_path: Path) -> None:
+    clock = Clock()
+    limited = FakeGitHub(httpx.Response(403, json={"message": "API rate limit exceeded"}))
+    failed = checker(tmp_path, limited, clock).status("0.1.0", force=True)
+    clock.now += timedelta(seconds=30)
+    github = FakeGitHub(httpx.Response(200, json=release()))
+    again = checker(tmp_path, github, clock).status("0.1.0", force=True)
+    clock.now += timedelta(seconds=31)
+    retried = checker(tmp_path, github, clock).status("0.1.0", force=True)
+
+    assert failed.error == again.error == "update_check_failed"
+    assert (retried.error, retried.update_available, len(github.requests)) == (None, True, 1)
+
+
+def test_a_failed_forced_check_does_not_hide_a_fresh_answer(tmp_path: Path) -> None:
+    clock = Clock()
+    checker(tmp_path, FakeGitHub(httpx.Response(200, json=release())), clock).status("0.1.0")
+    clock.now += timedelta(minutes=5)
+    offline = FakeGitHub(httpx.ConnectError("offline"))
+    checker(tmp_path, offline, clock).status("0.1.0", force=True)
+
+    automatic = checker(tmp_path, offline, clock).status("0.1.0")
+
+    assert (automatic.error, automatic.update_available, len(offline.requests)) == (None, True, 1)
 
 
 @pytest.mark.parametrize(
