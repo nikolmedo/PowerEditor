@@ -210,6 +210,8 @@ Each stage: input → output JSON in `<project>/cache/<stage>.json`. The cache k
    - `ffprobe` each file.
    - Build a high-quality H.264 CFR **mezzanine** (for render) and a 540p H.264 **proxy** (for preview). Phones record VFR, and HEVC/ProRes do not play well in the browser.
    - Extract mono 16 kHz WAV audio.
+   - One ffmpeg run writes all three from a single decode. The mezzanine is capped at the largest render (1080×1920 / 1920×1080) and never upscaled; hardware encoders (NVENC, QSV, AMF, Media Foundation on the GPU) and D3D11VA decoding for HEVC/AV1/VP9 are used when a probe proves they work, with a software retry; a source that already is a valid mezzanine is stream-copied; two sources ingest at once with a hardware encoder.
+   - Measured on the Snapdragon X dev host (Pixel 4K HEVC, 60 s): 100 s → 19.5 s per minute of footage; the full 572 s file ingests in 147 s (was ~17 min). A 1080p H.264 phone clip: 25 s → 10.3 s (7.7 s with the native ARM64 FFmpeg).
 2. **Transcribe** → `Word{text, start, end, prob | None}`, normalized for both providers.
    - Initial prompt with filler words ("Eh, este, mmm...") so Whisper keeps them.
 3. **VAD** → speech ranges, configurable padding.

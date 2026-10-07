@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from powereditor.config import REPO_ROOT
-from powereditor.runtime.manifest import DOWNLOADS, RuntimeDownload
+from powereditor.runtime.manifest import TOOL_DOWNLOADS, RuntimeDownload
 
 ENV_WEB_DIR = "POWEREDITOR_WEB_DIR"
 ENV_COMPOSITION_DIR = "POWEREDITOR_COMPOSITION_DIR"
@@ -92,7 +92,7 @@ def tool_candidates(
     bin_dir: Path,
     runtime_dir: Path | None,
     which: Which | None = None,
-    downloads: Sequence[RuntimeDownload] = DOWNLOADS,
+    downloads: Sequence[RuntimeDownload] = TOOL_DOWNLOADS,
 ) -> list[str]:
     """Every existing binary for `name`, best first, without duplicates."""
     found: list[str] = []
@@ -113,7 +113,7 @@ def resolve_tool(
     bin_dir: Path,
     runtime_dir: Path | None,
     which: Which | None = None,
-    downloads: Sequence[RuntimeDownload] = DOWNLOADS,
+    downloads: Sequence[RuntimeDownload] = TOOL_DOWNLOADS,
 ) -> str | None:
     candidates = tool_candidates(name, configured, bin_dir, runtime_dir, which, downloads)
     return candidates[0] if candidates else None

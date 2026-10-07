@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 from pydantic import BaseModel, computed_field
 
 from powereditor.models import CamelModel
+from powereditor.process import hidden_console_flags
 
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 Locator = Callable[[str], str | None]
@@ -61,6 +62,7 @@ def default_runner(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
         text=True,
         timeout=VERSION_TIMEOUT_SECONDS,
         check=False,
+        creationflags=hidden_console_flags(),
     )
 
 

@@ -19,7 +19,7 @@ from typing import IO
 
 from powereditor.models import Project
 from powereditor.pipeline.ffmpeg import FractionCallback
-from powereditor.process import kill_tree, tracked
+from powereditor.process import hidden_console_flags, kill_tree, tracked
 from powereditor.render.base import RenderSettings, RenderTiming
 from powereditor.render.media_server import serve_directory
 from powereditor.render.quality import QUALITY_PROFILES, remotion_args
@@ -174,6 +174,7 @@ class RemotionRenderer:
                         text=True,
                         encoding="utf-8",
                         errors="replace",
+                        creationflags=hidden_console_flags(),
                     ) as process,
                     tracked(process),
                 ):

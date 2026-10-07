@@ -188,7 +188,7 @@ function registerUpdater(t: Translate): void {
     if (!fromApp(event) || !installer) return false;
     log(`running installer ${installer}`);
     const launch = await launchInstaller(installer, directory, (file) =>
-      spawn(file, [], { detached: true, stdio: "ignore" }),
+      spawn(file, [], { detached: true, stdio: "ignore", windowsHide: true }),
     );
     if (launch.started) {
       app.quit();
