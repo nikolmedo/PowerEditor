@@ -64,6 +64,24 @@ def test_trims_segment_bounds_to_speech() -> None:
     assert _summary(segments) == [("hola mundo", 0.5, 1.4)]
 
 
+def test_drops_a_segment_whose_trimmed_span_holds_none_of_its_words() -> None:
+    words = _words(("uno", 0.0, 0.5), ("dos", 0.5, 4.0), ("tres", 4.0, 4.5))
+
+    segments = segment_words("s", words, [(0.0, 0.5), (4.0, 4.5)], 5.0, pause_s=0.6)
+
+    assert _summary(segments) == [("uno", 0.0, 0.5), ("tres", 4.0, 4.5)]
+    assert [s.id for s in segments] == ["seg-s-0000", "seg-s-0002"]
+
+
+def test_drops_a_zero_length_span_inside_a_stretched_word() -> None:
+    words = _words(("uno", 0.0, 0.5), ("dos", 0.5, 4.0), ("tres", 4.0, 4.5))
+    speech = [(0.0, 0.5), (2.0, 2.0), (4.0, 4.5)]
+
+    segments = segment_words("s", words, speech, 5.0, pause_s=0.6)
+
+    assert [s.text for s in segments] == ["uno", "tres"]
+
+
 def test_segment_outside_any_speech_keeps_word_bounds() -> None:
     words = _words(("eco", 2.0, 2.5))
 

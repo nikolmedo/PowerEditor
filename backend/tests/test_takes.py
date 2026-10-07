@@ -18,9 +18,9 @@ LINES = [
 ]
 
 
-def _segments(source_id: str = "a") -> list[Segment]:
+def _segments(source_id: str = "a", lines: list[tuple[float, str]] = LINES) -> list[Segment]:
     segments = []
-    for index, (start, text) in enumerate(LINES):
+    for index, (start, text) in enumerate(lines):
         step = 0.3
         words = [
             Word(text=word, start=start + i * step, end=start + (i + 1) * step)
@@ -60,6 +60,26 @@ def test_select_takes_orders_entries_and_flags_alternatives() -> None:
         "grp-a-0000": "take-a-0002",
         "grp-a-0003": "take-a-0003",
     }
+
+
+def test_select_takes_removes_fragments_said_around_the_chosen_take() -> None:
+    lines = [
+        (0.0, "Me hubiera gustado saber esto antes de empezar a correr"),
+        (4.0, "antes"),
+        (5.0, "a correr"),
+        (6.0, "Ojalá alguien me hubiera contado esto antes de empezar a correr"),
+        (10.0, "Me hubiera"),
+        (11.0, "El calzado es lo más importante cuando empezás a correr"),
+    ]
+
+    selection = select_takes(
+        _segments(lines=lines), HeuristicEngine(), TextSimilarity(language="es"), language="es"
+    )
+
+    kept = [e.segment_id for e in selection.entries if not e.removed]
+    assert len(kept) == 2
+    assert kept[1] == "seg-a-0005"
+    assert {e.take_group_id for e in selection.entries[:5]} == {"grp-a-0000"}
 
 
 def test_build_draft_applies_take_entries() -> None:
