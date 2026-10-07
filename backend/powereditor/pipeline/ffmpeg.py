@@ -3,6 +3,7 @@ import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import cache
+from pathlib import Path
 from typing import IO
 
 from powereditor.process import hidden_console_flags, tracked
@@ -140,17 +141,10 @@ def list_encoders(ffmpeg: str) -> str:
 
 
 ENCODER_PROBE_TIMEOUT_S = 30.0
+DECODER_PROBE_FRAMES = 2
 
 
-@cache
-def encoder_works(ffmpeg: str, encoder: str) -> bool:
-    """Whether `encoder` can encode one frame here: an encoder can be listed and still fail,
-    such as Media Foundation on Windows editions without the media features."""
-    command = [
-        ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
-        "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
-        "-frames:v", "1", "-pix_fmt", "yuv420p", "-c:v", encoder, "-f", "null", "-",
-    ]  # fmt: skip
+def _probe_succeeds(command: list[str]) -> bool:
     try:
         result = subprocess.run(
             command,
@@ -162,3 +156,38 @@ def encoder_works(ffmpeg: str, encoder: str) -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     return result.returncode == 0
+
+
+@cache
+def encoder_works(
+    ffmpeg: str, encoder: str, options: tuple[str, ...] = (), pix_fmt: str = "yuv420p"
+) -> bool:
+    """Whether `encoder` can encode one frame here: an encoder can be listed and still fail,
+    such as Media Foundation on Windows editions without the media features, or a GPU
+    encoder on a machine without that GPU."""
+    command = [
+        ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+        "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
+        "-frames:v", "1", "-pix_fmt", pix_fmt, "-c:v", encoder, *options, "-f", "null", "-",
+    ]  # fmt: skip
+    return _probe_succeeds(command)
+
+
+@cache
+def list_hwaccels(ffmpeg: str) -> str:
+    return run_capture([ffmpeg, "-hide_banner", "-hwaccels"])
+
+
+def hwaccel_decodes(ffmpeg: str, hwaccel: str, source: Path) -> bool:
+    """Whether `hwaccel` decodes the first frames of `source` on the GPU.
+
+    ffmpeg silently decodes in software when the GPU cannot, so the frames are kept in GPU
+    memory and downloaded explicitly: `hwdownload` fails on software frames.
+    """
+    command = [
+        ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+        "-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel.removesuffix("va"),
+        "-i", str(source), "-map", "0:v:0", "-frames:v", str(DECODER_PROBE_FRAMES),
+        "-vf", "hwdownload,format=nv12|p010", "-f", "null", "-",
+    ]  # fmt: skip
+    return _probe_succeeds(command)

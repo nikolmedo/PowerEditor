@@ -8,8 +8,10 @@ from typing import Any
 
 import pytest
 
+from powereditor import process as process_module
 from powereditor.paths import AppPaths
 from powereditor.pipeline import ingest as ingest_module
+from powereditor.pipeline.encoders import MF_HARDWARE, encoder_probe
 from powereditor.pipeline.ffmpeg import (
     FfmpegError,
     MediaTools,
@@ -20,19 +22,23 @@ from powereditor.pipeline.ffmpeg import (
 )
 from powereditor.pipeline.ingest import (
     IngestedSource,
+    IngestPlan,
     ProbeResult,
+    can_copy_video,
+    choose_encoder,
+    fallback_plans,
+    ingest_args,
     ingest_files,
+    ingest_parallelism,
     ingest_source,
-    mezzanine_args,
+    mezzanine_size,
     parse_rate,
     probe_media,
-    proxy_args,
-    select_video_encoder,
-    software_encoder,
     source_id_for,
     target_fps,
 )
 from powereditor.pipeline.runner import ProjectLayout
+from powereditor.process import ProcessScope, process_scope
 
 FFMPEG = shutil.which("ffmpeg")
 FFPROBE = shutil.which("ffprobe")
@@ -65,33 +71,6 @@ def _probe(**overrides: Any) -> ProbeResult:
 
 
 @pytest.mark.parametrize(
-    ("listing", "cuda", "expected"),
-    [
-        (NVENC_LISTING, False, "libx264"),
-        (NVENC_LISTING, True, "h264_nvenc"),
-        (" V....D libx264  libx264 H.264\n", True, "libx264"),
-        (LGPL_LISTING, False, "h264_mf"),
-        (LGPL_LISTING, True, "h264_nvenc"),
-        (OPENH264_ONLY_LISTING, False, "libopenh264"),
-        (" V....D libx264  libx264 H.264\n" + LGPL_LISTING, False, "libx264"),
-    ],
-)
-def test_select_video_encoder(listing: str, cuda: bool, expected: str) -> None:
-    assert select_video_encoder(listing, cuda) == expected
-
-
-def test_media_foundation_that_cannot_encode_falls_back_to_openh264() -> None:
-    probed: list[str] = []
-
-    def works(encoder: str) -> bool:
-        probed.append(encoder)
-        return encoder != "h264_mf"
-
-    assert software_encoder(LGPL_LISTING, works) == "libopenh264"
-    assert probed == ["h264_mf"]
-
-
-@pytest.mark.parametrize(
     ("raw", "expected"), [("30000/1001", 29.97), ("25/1", 25.0), ("0/0", 0.0), ("24", 24.0)]
 )
 def test_parse_rate(raw: str, expected: float) -> None:
@@ -108,6 +87,132 @@ def test_probe_flags_vfr_and_display_size() -> None:
 @pytest.mark.parametrize(("avg", "expected"), [(23.976, 24), (29.97, 30), (59.94, 60), (25, 25)])
 def test_target_fps_snaps_to_standard_rates(avg: float, expected: int) -> None:
     assert target_fps(_probe(avg_frame_rate=avg, r_frame_rate=avg)) == expected
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"width": 3840, "height": 2160, "rotation": -90}, (1080, 1920)),
+        ({"width": 3840, "height": 2160}, (1920, 1080)),
+        ({"width": 1920, "height": 1080}, (1920, 1080)),
+        ({"width": 1440, "height": 1080}, (1440, 1080)),
+        ({"width": 2880, "height": 2160}, (1440, 1080)),
+        ({"width": 320, "height": 240}, (320, 240)),
+        ({"width": 2560, "height": 1081}, (1920, 810)),
+    ],
+)
+def test_mezzanine_fits_the_largest_render_and_never_upscales(
+    overrides: dict[str, Any], expected: tuple[int, int]
+) -> None:
+    assert mezzanine_size(_probe(**overrides)) == expected
+
+
+PHONE_H264 = {"width": 1080, "height": 1920, "pix_fmt": "yuv420p", "profile": "High"}
+
+
+@pytest.mark.parametrize(
+    ("overrides", "fps", "expected"),
+    [
+        ({}, 30, True),
+        ({"profile": "Main"}, 30, True),
+        ({"video_codec": "hevc"}, 30, False),
+        ({"pix_fmt": "yuvj420p"}, 30, False),
+        ({"pix_fmt": "yuv420p10le", "profile": "High 10"}, 30, False),
+        ({"color_range": "pc"}, 30, False),
+        ({"avg_frame_rate": 29.97, "r_frame_rate": 29.97}, 30, False),
+        ({"avg_frame_rate": 27.5}, 30, False),
+        ({"avg_frame_rate": 23.976, "r_frame_rate": 23.976}, 24, False),
+        ({}, 25, False),
+        ({"rotation": 90}, 30, False),
+        ({"width": 2160, "height": 3840}, 30, False),
+    ],
+)
+def test_video_is_copied_only_when_it_already_is_a_valid_mezzanine(
+    overrides: dict[str, Any], fps: int, expected: bool
+) -> None:
+    assert can_copy_video(_probe(**{**PHONE_H264, **overrides}), fps) is expected
+
+
+def _plan(**overrides: Any) -> IngestPlan:
+    values: dict[str, Any] = {"fps": 30, "width": 1080, "height": 1920, "encoder": "libx264"}
+    values.update(overrides)
+    return IngestPlan(**values)
+
+
+def _outputs(args: list[str]) -> list[str]:
+    return [arg for arg in args if arg.endswith((".mp4", ".wav")) and arg != "in.mov"]
+
+
+def _output_args(args: list[str], output: str) -> list[str]:
+    """The options between the previous output (or the filter graph) and `output`."""
+    end = args.index(output)
+    previous = [i for i, arg in enumerate(args[:end]) if arg in _outputs(args)]
+    start = previous[-1] + 1 if previous else args.index("-filter_complex") + 2
+    return args[start:end]
+
+
+def test_one_ffmpeg_run_writes_mezzanine_proxy_and_wav_from_one_decode() -> None:
+    args = ingest_args(Path("in.mov"), _plan(), Path("m.mp4"), Path("p.mp4"), Path("a.wav"))
+
+    assert args.count("-i") == 1
+    assert _outputs(args) == ["m.mp4", "p.mp4", "a.wav"]
+    graph = args[args.index("-filter_complex") + 1]
+    assert graph.startswith("[0:v]fps=30,scale=1080:1920:out_range=tv,format=yuv420p,split=2")
+    assert graph.endswith("scale=540:960[p]")
+    mezzanine = _output_args(args, "m.mp4")
+    assert mezzanine[:2] == ["-map", "[m]"] and "libx264" in mezzanine
+    proxy = _output_args(args, "p.mp4")
+    assert proxy[:2] == ["-map", "[p]"]
+    assert proxy[proxy.index("-g") + 1] == "12"
+    wav = _output_args(args, "a.wav")
+    assert wav[wav.index("-ar") + 1] == "16000" and "pcm_s16le" in wav
+    assert "-r" not in args and "-hwaccel" not in args
+
+
+def test_hardware_plans_decode_on_the_gpu_and_feed_nv12() -> None:
+    plan = _plan(encoder=MF_HARDWARE, hwaccel="d3d11va")
+    args = ingest_args(Path("in.mov"), plan, Path("m.mp4"), Path("p.mp4"), Path("a.wav"))
+
+    assert args[: args.index("-i")] == ["-hwaccel", "d3d11va"]
+    assert "format=nv12" in args[args.index("-filter_complex") + 1]
+    assert _output_args(args, "p.mp4")[2:6] == ["-map", "0:a:0", "-c:v", "h264_mf"]
+
+
+def test_a_copied_mezzanine_keeps_the_video_stream_and_still_gets_a_proxy() -> None:
+    plan = _plan(copy_video=True)
+    args = ingest_args(Path("in.mov"), plan, Path("m.mp4"), Path("p.mp4"), Path("a.wav"))
+
+    mezzanine = _output_args(args, "m.mp4")
+    assert mezzanine[:4] == ["-map", "0:v:0", "-c:v", "copy"]
+    assert args[args.index("-filter_complex") + 1] == (
+        "[0:v]fps=30,scale=540:960:out_range=tv,format=yuv420p[p]"
+    )
+
+
+def test_a_source_without_audio_writes_no_wav() -> None:
+    args = ingest_args(
+        Path("in.mov"), _plan(has_audio=False), Path("m.mp4"), Path("p.mp4"), Path("a.wav")
+    )
+
+    assert _outputs(args) == ["m.mp4", "p.mp4"]
+    assert "0:a:0" not in args
+
+
+def test_failed_hardware_runs_retry_in_software() -> None:
+    hardware = _plan(encoder=MF_HARDWARE, hwaccel="d3d11va")
+
+    assert fallback_plans(hardware, "h264_mf") == [
+        hardware,
+        _plan(encoder=MF_HARDWARE),
+        _plan(encoder="h264_mf"),
+    ]
+    assert fallback_plans(_plan(), "libx264") == [_plan()]
+
+
+def test_two_sources_ingest_at_once_only_with_a_hardware_encoder() -> None:
+    assert ingest_parallelism(MF_HARDWARE, sources=5) == 2
+    assert ingest_parallelism(MF_HARDWARE, sources=1) == 1
+    assert ingest_parallelism("libx264", sources=5) == 1
 
 
 def test_parse_progress_seconds() -> None:
@@ -150,7 +255,8 @@ def clips(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
         [FFMPEG, "-v", "error", "-y", *rotate, str(rotated)],
         check=True,
     )
-    return {"accented": accented, "vfr": vfr, "rotated": rotated}
+    cfr = _make_clip(root / "cfr.mp4", [], "testsrc2=size=320x240:rate=30:duration=2")
+    return {"accented": accented, "vfr": vfr, "rotated": rotated, "cfr": cfr}
 
 
 def _tools() -> MediaTools:
@@ -204,16 +310,17 @@ def test_ingest_produces_cfr_mezzanine_proxy_and_wav(
 
     manifest = ingest_files(
         layout,
-        [clips["accented"], clips["vfr"], clips["rotated"]],
+        [clips["accented"], clips["vfr"], clips["rotated"], clips["cfr"]],
         _tools(),
         cuda_available=False,
         progress=record,
     )
 
-    assert len(manifest.sources) == 3
-    accented, vfr, rotated = manifest.sources
+    assert len(manifest.sources) == 4
+    accented, vfr, rotated, cfr = manifest.sources
     assert accented.fps == 24
-    assert accented.video_encoder == "libx264"
+    assert accented.video_encoder == choose_encoder(_tools().ffmpeg, False)
+    assert accented.video_decoder != "copy"
     mezz = _stream(Path(accented.mezzanine_path))
     assert mezz["r_frame_rate"] == mezz["avg_frame_rate"] == "24/1"
     assert mezz["format_duration"] == pytest.approx(2.0, abs=0.15)
@@ -233,6 +340,13 @@ def test_ingest_produces_cfr_mezzanine_proxy_and_wav(
     assert (rotated_proxy["width"], rotated_proxy["height"]) == (540, 720)
     assert rotated.wav_path is None
 
+    assert cfr.video_decoder == "copy"
+    copied = _stream(Path(cfr.mezzanine_path))
+    assert (copied["codec_name"], copied["width"]) == ("h264", 320)
+    assert copied["avg_frame_rate"] == "30/1"
+    assert copied["format_duration"] == pytest.approx(2.0, abs=0.15)
+    assert _stream(Path(cfr.proxy_path))["height"] == 540
+
     stage = f"ingest-{accented.source_id}"
     fractions = [f for s, f, _ in events if s == stage]
     assert fractions == sorted(fractions)
@@ -249,39 +363,48 @@ def test_ingest_produces_cfr_mezzanine_proxy_and_wav(
     monkeypatch.setattr(subprocess, "run", forbidden)
     again = ingest_files(layout, [clips["accented"]], _tools(), cuda_available=False)
     assert again.sources[0] == accented
-    assert len(again.sources) == 3
+    assert len(again.sources) == 4
 
 
 class FakeFfmpeg:
-    """Stands in for ffmpeg: writes the last argument as the output file."""
+    """Stands in for ffmpeg: writes every `.part` output named in the arguments."""
 
-    def __init__(self, fail_on: str | None = None) -> None:
+    def __init__(self, fail_when: str | None = None) -> None:
         self.outputs: list[Path] = []
         self.calls: list[list[str]] = []
-        self.fail_on = fail_on
+        self.scopes: list[ProcessScope | None] = []
+        self.fail_when = fail_when
 
     def __call__(self, ffmpeg: str, args: list[str], *rest: object) -> None:
         self.calls.append(list(args))
-        output = Path(args[-1])
-        self.outputs.append(output)
-        if output.suffix == ".wav":
-            with wave.open(str(output), "wb") as handle:
-                handle.setnchannels(1)
-                handle.setsampwidth(2)
-                handle.setframerate(16000)
-                handle.writeframes(b"\x00\x00" * 1600)
-        else:
-            output.write_bytes(b"video")
-        if self.fail_on is not None and self.fail_on in output.name:
+        self.scopes.append(process_module._current_scope.get())
+        for output in (Path(arg) for arg in args if ".part." in arg):
+            self.outputs.append(output)
+            if output.suffix == ".wav":
+                with wave.open(str(output), "wb") as handle:
+                    handle.setnchannels(1)
+                    handle.setsampwidth(2)
+                    handle.setframerate(16000)
+                    handle.writeframes(b"\x00\x00" * 1600)
+            else:
+                output.write_bytes(b"video")
+        if self.fail_when is not None and self.fail_when in args:
             raise FfmpegError("simulated crash")
 
 
 @pytest.fixture
 def fake_media(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
-    state: dict[str, Any] = {"listing": " V....D libx264  libx264 H.264\n", "ffmpeg": FakeFfmpeg()}
+    state: dict[str, Any] = {
+        "listing": " V....D libx264  libx264 H.264\n",
+        "ffmpeg": FakeFfmpeg(),
+        "works": lambda encoder: True,
+        "hwaccel": None,
+    }
     monkeypatch.setattr(ingest_module, "probe_media", lambda ffprobe, path: _probe())
     monkeypatch.setattr(ingest_module, "list_encoders", lambda ffmpeg: state["listing"])
-    monkeypatch.setattr(ingest_module, "encoder_works", lambda ffmpeg, encoder: True)
+    monkeypatch.setattr(ingest_module, "encoder_probe", lambda ffmpeg: state["works"])
+    monkeypatch.setattr(ingest_module, "list_hwaccels", lambda ffmpeg: "")
+    monkeypatch.setattr(ingest_module, "select_hwaccel", lambda *args: state["hwaccel"])
     monkeypatch.setattr(ingest_module, "run_ffmpeg", lambda *args: state["ffmpeg"](*args))
     source = tmp_path / "clip.mp4"
     source.write_bytes(b"source")
@@ -295,44 +418,53 @@ def _ingest(state: dict[str, Any], cuda: bool = False) -> IngestedSource:
     return ingest_source(state["layout"], state["source"], tools, cuda_available=cuda)
 
 
+def test_ingest_is_one_ffmpeg_run(fake_media: dict[str, Any]) -> None:
+    entry = _ingest(fake_media)
+
+    assert len(fake_media["ffmpeg"].calls) == 1
+    assert [path.name for path in fake_media["ffmpeg"].outputs] == [
+        f"{entry.source_id}.mezzanine.part.mp4",
+        f"{entry.source_id}.proxy.part.mp4",
+        f"{entry.source_id}.part.wav",
+    ]
+    assert entry.video_decoder == "software"
+
+
 def test_ingest_cache_key_includes_video_encoder(fake_media: dict[str, Any]) -> None:
     first = _ingest(fake_media)
-    runs = len(fake_media["ffmpeg"].outputs)
     assert _ingest(fake_media) == first
-    assert len(fake_media["ffmpeg"].outputs) == runs
+    assert len(fake_media["ffmpeg"].calls) == 1
 
     fake_media["listing"] = NVENC_LISTING
     again = _ingest(fake_media, cuda=True)
 
     assert again.video_encoder == "h264_nvenc"
-    assert len(fake_media["ffmpeg"].outputs) == 2 * runs
+    assert len(fake_media["ffmpeg"].calls) == 2
 
 
 def test_ingest_missing_or_corrupt_wav_is_a_cache_miss(fake_media: dict[str, Any]) -> None:
     entry = _ingest(fake_media)
-    runs = len(fake_media["ffmpeg"].outputs)
     assert entry.wav_path is not None
 
     Path(entry.wav_path).unlink()
     _ingest(fake_media)
-    assert len(fake_media["ffmpeg"].outputs) == 2 * runs
+    assert len(fake_media["ffmpeg"].calls) == 2
 
     Path(entry.wav_path).write_bytes(b"not a wav file")
     _ingest(fake_media)
-    assert len(fake_media["ffmpeg"].outputs) == 3 * runs
+    assert len(fake_media["ffmpeg"].calls) == 3
 
 
 def test_ingest_writes_outputs_atomically(fake_media: dict[str, Any]) -> None:
-    fake_media["ffmpeg"] = FakeFfmpeg(fail_on="proxy")
+    fake_media["ffmpeg"] = FakeFfmpeg(fail_when="-i")
 
     with pytest.raises(FfmpegError):
         _ingest(fake_media)
 
-    written = fake_media["ffmpeg"].outputs
-    assert all(".part" in path.name for path in written)
+    assert len(fake_media["ffmpeg"].outputs) == 3
+    assert all(".part" in path.name for path in fake_media["ffmpeg"].outputs)
     media_dir: Path = fake_media["layout"].media_dir
-    assert not any(path.name.endswith(".proxy.mp4") for path in media_dir.iterdir())
-    assert not any(".part" in path.name for path in media_dir.iterdir())
+    assert list(media_dir.iterdir()) == []
     assert (
         not fake_media["layout"]
         .cache_file(f"ingest-{source_id_for(fake_media['source'])}")
@@ -340,47 +472,60 @@ def test_ingest_writes_outputs_atomically(fake_media: dict[str, Any]) -> None:
     )
 
 
-def test_an_lgpl_ffmpeg_encodes_with_openh264_at_a_fixed_bitrate(tmp_path: Path) -> None:
-    source, out = tmp_path / "in.mov", tmp_path / "out.mp4"
+def test_a_failed_gpu_decode_is_retried_in_software(fake_media: dict[str, Any]) -> None:
+    fake_media["listing"] = LGPL_LISTING
+    fake_media["hwaccel"] = "d3d11va"
+    fake_media["ffmpeg"] = FakeFfmpeg(fail_when="-hwaccel")
+    events: list[str] = []
 
-    mezzanine = mezzanine_args(source, out, 30, "libopenh264")
-    proxy = proxy_args(source, out, 30, encoder="libopenh264")
-    default_proxy = proxy_args(source, out, 30)
+    entry = ingest_source(
+        fake_media["layout"],
+        fake_media["source"],
+        MediaTools(ffmpeg="ffmpeg", ffprobe="ffprobe"),
+        cuda_available=False,
+        progress=lambda stage, fraction, message: events.append(message),
+    )
 
-    assert mezzanine[mezzanine.index("-c:v") + 1 :][:3] == ["libopenh264", "-b:v", "20M"]
-    assert proxy[proxy.index("-c:v") + 1 :][:3] == ["libopenh264", "-b:v", "2M"]
-    assert "-crf" not in mezzanine and "-crf" not in proxy
-    assert default_proxy[default_proxy.index("-c:v") + 1] == "libx264"
-
-
-def test_media_foundation_encodes_at_a_fixed_bitrate_with_the_high_profile(tmp_path: Path) -> None:
-    source, out = tmp_path / "in.mov", tmp_path / "out.mp4"
-
-    mezzanine = mezzanine_args(source, out, 30, "h264_mf")
-    proxy = proxy_args(source, out, 30, encoder="h264_mf")
-
-    codec = ["h264_mf", "-rate_control", "u_vbr", "-b:v", "20M", "-profile:v", "100"]
-    assert mezzanine[mezzanine.index("-c:v") + 1 :][:7] == codec
-    assert proxy[proxy.index("-c:v") + 1 :][:5] == [
-        "h264_mf",
-        "-rate_control",
-        "u_vbr",
-        "-b:v",
-        "2M",
-    ]
-    assert "-crf" not in mezzanine and "-crf" not in proxy
+    assert (entry.video_decoder, entry.video_encoder) == ("software", MF_HARDWARE)
+    assert ["-hwaccel" in call for call in fake_media["ffmpeg"].calls] == [True, False]
+    assert events[0] == "preparing"
+    assert "retrying in software" in events
+    assert Path(entry.mezzanine_path).is_file()
 
 
 def test_ingest_with_an_lgpl_ffmpeg_uses_media_foundation_for_both_files(
     fake_media: dict[str, Any],
 ) -> None:
     fake_media["listing"] = LGPL_LISTING
+    fake_media["works"] = lambda encoder: encoder == "h264_mf"
 
     entry = _ingest(fake_media)
 
     assert entry.video_encoder == "h264_mf"
-    codecs = [args[args.index("-c:v") + 1] for args in fake_media["ffmpeg"].calls if "-c:v" in args]
-    assert codecs == ["h264_mf", "h264_mf"]
+    (args,) = fake_media["ffmpeg"].calls
+    assert [args[i + 1] for i, arg in enumerate(args) if arg == "-c:v"] == ["h264_mf", "h264_mf"]
+
+
+def test_sources_ingest_two_at_a_time_inside_the_job_process_scope(
+    fake_media: dict[str, Any], tmp_path: Path
+) -> None:
+    fake_media["listing"] = LGPL_LISTING
+    sources = [tmp_path / f"clip{i}.mp4" for i in range(3)]
+    for source in sources:
+        source.write_bytes(source.name.encode())
+    scope = ProcessScope()
+
+    with process_scope(scope):
+        manifest = ingest_files(
+            fake_media["layout"],
+            [*sources, sources[0]],
+            MediaTools(ffmpeg="ffmpeg", ffprobe="ffprobe"),
+            cuda_available=False,
+        )
+
+    assert [entry.source_id for entry in manifest.sources] == [source_id_for(s) for s in sources]
+    assert len(fake_media["ffmpeg"].calls) == 3
+    assert fake_media["ffmpeg"].scopes == [scope, scope, scope]
 
 
 def _media_foundation_listed() -> bool:
@@ -397,23 +542,22 @@ def test_encoder_probe_rejects_an_encoder_ffmpeg_does_not_have() -> None:
 @pytest.mark.ffmpeg
 @needs_ffmpeg
 @pytest.mark.skipif(sys.platform != "win32", reason="Media Foundation is Windows only")
+@pytest.mark.parametrize("encoder", ["h264_mf", MF_HARDWARE])
 def test_media_foundation_writes_high_profile_mezzanine_and_proxy(
-    clips: dict[str, Path], tmp_path: Path
+    clips: dict[str, Path], tmp_path: Path, encoder: str
 ) -> None:
     if not _media_foundation_listed():
         pytest.skip("this ffmpeg has no h264_mf")
     assert FFMPEG is not None
-    assert encoder_works(FFMPEG, "h264_mf") is True
-    mezzanine, proxy = tmp_path / "m.mp4", tmp_path / "p.mp4"
+    if not encoder_probe(FFMPEG)(encoder):
+        pytest.skip(f"{encoder} cannot encode on this machine")
+    mezzanine, proxy, wav = tmp_path / "m.mp4", tmp_path / "p.mp4", tmp_path / "a.wav"
+    plan = IngestPlan(fps=24, width=320, height=240, encoder=encoder)
 
-    run_ffmpeg(FFMPEG, mezzanine_args(clips["accented"], mezzanine, 24, "h264_mf"))
-    run_ffmpeg(FFMPEG, proxy_args(clips["accented"], proxy, 24, "h264_mf"))
+    run_ffmpeg(FFMPEG, ingest_args(clips["accented"], plan, mezzanine, proxy, wav))
 
-    for path, height in ((mezzanine, 240), (proxy, 540)):
+    for path, size in ((mezzanine, (320, 240)), (proxy, (720, 540))):
         stream = _stream(path)
-        assert (stream["codec_name"], stream["profile"], stream["height"]) == (
-            "h264",
-            "High",
-            height,
-        )
+        assert (stream["codec_name"], stream["profile"]) == ("h264", "High")
+        assert (stream["width"], stream["height"]) == size
         assert stream["format_duration"] == pytest.approx(2.0, abs=0.1)

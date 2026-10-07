@@ -1,18 +1,33 @@
+import contextvars
 import hashlib
 import json
 import logging
 import os
+import sys
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from pydantic import Field, ValidationError
 
 from powereditor.models import CamelModel, write_text_atomic
+from powereditor.pipeline.encoders import (
+    decoder_probe,
+    encoder_probe,
+    input_pix_fmt,
+    is_hardware,
+    select_hwaccel,
+    select_video_encoder,
+    software_encoder,
+    video_codec_args,
+)
 from powereditor.pipeline.ffmpeg import (
+    FfmpegError,
     MediaTools,
-    encoder_works,
     list_encoders,
+    list_hwaccels,
     run_capture,
     run_ffmpeg,
 )
@@ -21,10 +36,15 @@ from powereditor.transcribe.base import audio_duration
 
 logger = logging.getLogger(__name__)
 
-INGEST_STAGE_VERSION = 2
+INGEST_STAGE_VERSION = 3
 MANIFEST_STAGE = "ingest"
 STANDARD_FPS = (24, 25, 30, 50, 60)
 VFR_TOLERANCE = 0.01
+COPY_FPS_TOLERANCE = 0.001
+"""Frames per second a copied stream may differ from the target: 23.976 is not 24."""
+MEZZANINE_SHORT_SIDE = 1080
+MEZZANINE_LONG_SIDE = 1920
+"""The largest render (1080x1920 or 1920x1080 at scale 1): a bigger mezzanine only costs time."""
 PROXY_SHORT_SIDE = 540
 PROXY_GOP = 12
 WAV_SAMPLE_RATE = 16000
@@ -32,9 +52,9 @@ MEZZANINE_CRF = 18
 MEZZANINE_BITRATE = "20M"
 PROXY_CRF = 28
 PROXY_BITRATE = "2M"
-
-_MEZZANINE_SHARE = 0.6
-_PROXY_SHARE = 0.3
+HARDWARE_PARALLELISM = 2
+"""Sources ingested at once with a hardware encoder; a software encode already uses every core."""
+COPYABLE_PROFILES = frozenset({"Constrained Baseline", "Baseline", "Main", "High"})
 
 
 class ProbeResult(CamelModel):
@@ -47,6 +67,9 @@ class ProbeResult(CamelModel):
     has_audio: bool
     video_codec: str
     audio_codec: str | None
+    pix_fmt: str = "unknown"
+    profile: str = "unknown"
+    color_range: str = "unknown"
 
     @property
     def is_vfr(self) -> bool:
@@ -69,6 +92,8 @@ class IngestedSource(CamelModel):
     probe: ProbeResult
     fps: int
     video_encoder: str
+    video_decoder: str = "software"
+    """`d3d11va` when the GPU decoded the source, `copy` when the video stream was copied."""
     mezzanine_path: str
     proxy_path: str
     wav_path: str | None
@@ -113,6 +138,9 @@ def parse_probe(data: dict[str, Any]) -> ProbeResult:
         has_audio=audio is not None,
         video_codec=str(video.get("codec_name", "unknown")),
         audio_codec=str(audio.get("codec_name")) if audio else None,
+        pix_fmt=str(video.get("pix_fmt", "unknown")),
+        profile=str(video.get("profile", "unknown")),
+        color_range=str(video.get("color_range", "unknown")),
     )
 
 
@@ -147,39 +175,6 @@ def probe_audio_duration(ffprobe: str, path: Path) -> float:
     return duration
 
 
-def _listed_encoders(encoders_listing: str) -> set[str]:
-    return {line.split()[1] for line in encoders_listing.splitlines() if len(line.split()) > 1}
-
-
-EncoderCheck = Callable[[str], bool]
-
-
-def _always_works(encoder: str) -> bool:
-    return True
-
-
-def software_encoder(encoders_listing: str, works: EncoderCheck = _always_works) -> str:
-    """libx264 when the build has it (developer machines). The LGPL build the app downloads
-    has none: Windows' own Media Foundation encoder comes next, OpenH264 last.
-
-    `works` confirms Media Foundation can encode on this machine before it is chosen.
-    """
-    listed = _listed_encoders(encoders_listing)
-    if "libx264" in listed:
-        return "libx264"
-    if "h264_mf" in listed and works("h264_mf"):
-        return "h264_mf"
-    return "libopenh264" if "libopenh264" in listed else "libx264"
-
-
-def select_video_encoder(
-    encoders_listing: str, cuda_available: bool, works: EncoderCheck = _always_works
-) -> str:
-    if cuda_available and "h264_nvenc" in _listed_encoders(encoders_listing):
-        return "h264_nvenc"
-    return software_encoder(encoders_listing, works)
-
-
 def target_fps(probe: ProbeResult) -> int:
     rate = probe.avg_frame_rate or probe.r_frame_rate
     return min(STANDARD_FPS, key=lambda candidate: abs(candidate - rate))
@@ -190,83 +185,142 @@ def source_id_for(path: Path) -> str:
     return "src-" + hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
 
 
-def _video_codec_args(encoder: str, crf: int, preset: str, bitrate: str) -> list[str]:
-    """`bitrate` applies to Media Foundation and OpenH264, which encode at a target bitrate."""
-    if encoder == "h264_nvenc":
-        return ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", str(crf + 1)]
-    if encoder == "h264_mf":
-        # Media Foundation takes the profile as a number: 100 is High.
-        return ["-c:v", "h264_mf", "-rate_control", "u_vbr", "-b:v", bitrate, "-profile:v", "100"]
-    if encoder == "libopenh264":
-        return ["-c:v", "libopenh264", "-b:v", bitrate, "-profile:v", "high"]
-    return ["-c:v", "libx264", "-preset", preset, "-crf", str(crf)]
+def _even(value: float) -> int:
+    return max(2, round(value / 2) * 2)
+
+
+def mezzanine_size(probe: ProbeResult) -> tuple[int, int]:
+    """Display size scaled down to fit the largest render, keeping the aspect ratio."""
+    width, height = probe.display_width, probe.display_height
+    factor = min(
+        1.0, MEZZANINE_SHORT_SIDE / min(width, height), MEZZANINE_LONG_SIDE / max(width, height)
+    )
+    if factor == 1.0:
+        return width, height
+    return _even(width * factor), _even(height * factor)
+
+
+def proxy_size(width: int, height: int) -> tuple[int, int]:
+    factor = PROXY_SHORT_SIDE / min(width, height)
+    return _even(width * factor), _even(height * factor)
+
+
+def can_copy_video(probe: ProbeResult, fps: int) -> bool:
+    """Whether the source's video stream already is a valid mezzanine: 8-bit 4:2:0 H.264 in
+    TV range, constant `fps`, upright and no larger than the mezzanine."""
+    return (
+        probe.video_codec == "h264"
+        and probe.pix_fmt == "yuv420p"
+        and probe.profile in COPYABLE_PROFILES
+        and probe.color_range != "pc"
+        and not probe.is_vfr
+        and abs(probe.avg_frame_rate - fps) <= COPY_FPS_TOLERANCE
+        and probe.rotation == 0
+        and mezzanine_size(probe) == (probe.width, probe.height)
+    )
+
+
+@dataclass(frozen=True)
+class IngestPlan:
+    fps: int
+    width: int
+    height: int
+    """Mezzanine size, after rotation."""
+    encoder: str
+    hwaccel: str | None = None
+    copy_video: bool = False
+    has_audio: bool = True
+
+    @property
+    def decoder(self) -> str:
+        return "copy" if self.copy_video else (self.hwaccel or "software")
 
 
 def _audio_args(bitrate: str) -> list[str]:
     return ["-c:a", "aac", "-b:a", bitrate, "-ar", "48000"]
 
 
-def mezzanine_args(source: Path, output: Path, fps: int, encoder: str) -> list[str]:
-    return [
+def _filter_graph(plan: IngestPlan) -> str:
+    pix_fmt = input_pix_fmt(plan.encoder)
+    proxy_width, proxy_height = proxy_size(plan.width, plan.height)
+    proxy_scale = f"scale={proxy_width}:{proxy_height}"
+    if plan.copy_video:
+        return f"[0:v]fps={plan.fps},{proxy_scale}:out_range=tv,format={pix_fmt}[p]"
+    mezzanine = f"fps={plan.fps},scale={plan.width}:{plan.height}:out_range=tv,format={pix_fmt}"
+    return f"[0:v]{mezzanine},split=2[m][p0];[p0]{proxy_scale}[p]"
+
+
+def ingest_args(
+    source: Path, plan: IngestPlan, mezzanine: Path, proxy: Path, wav: Path
+) -> list[str]:
+    """One ffmpeg run: a single decode feeds the mezzanine, the proxy and the WAV.
+
+    The `fps` filter makes both videos constant frame rate; `out_range=tv` maps full-range
+    phone video (yuvj420p) to the TV range every player expects.
+    """
+    audio_map = ["-map", "0:a:0"] if plan.has_audio else []
+    if plan.copy_video:
+        mezzanine_video = ["-map", "0:v:0", "-c:v", "copy"]
+    else:
+        codec = video_codec_args(
+            plan.encoder, bitrate=MEZZANINE_BITRATE, crf=MEZZANINE_CRF, preset="medium"
+        )
+        mezzanine_video = ["-map", "[m]", *codec]
+    proxy_codec = video_codec_args(
+        plan.encoder, bitrate=PROXY_BITRATE, crf=PROXY_CRF, preset="veryfast"
+    )
+    gop = ["-g", str(PROXY_GOP), "-keyint_min", str(PROXY_GOP), "-sc_threshold", "0"]
+    args = ["-hwaccel", plan.hwaccel] if plan.hwaccel else []
+    args += [
         "-i", str(source),
-        "-map", "0:v:0", "-map", "0:a:0?",
-        *_video_codec_args(encoder, MEZZANINE_CRF, "medium", MEZZANINE_BITRATE),
-        "-r", str(fps), "-fps_mode", "cfr", "-pix_fmt", "yuv420p",
-        *_audio_args("192k"),
-        "-movflags", "+faststart",
-        str(output),
+        "-filter_complex", _filter_graph(plan),
+        *mezzanine_video, *audio_map, *(_audio_args("192k") if plan.has_audio else []),
+        "-movflags", "+faststart", str(mezzanine),
+        "-map", "[p]", *audio_map, *proxy_codec, *gop,
+        *(_audio_args("96k") if plan.has_audio else []),
+        "-movflags", "+faststart", str(proxy),
     ]  # fmt: skip
+    if plan.has_audio:
+        args += [
+            "-map", "0:a:0", "-vn",
+            "-ac", "1", "-ar", str(WAV_SAMPLE_RATE), "-c:a", "pcm_s16le",
+            str(wav),
+        ]  # fmt: skip
+    return args
 
 
-def proxy_args(source: Path, output: Path, fps: int, encoder: str = "libx264") -> list[str]:
-    short = PROXY_SHORT_SIDE
-    scale = f"scale='if(gt(iw,ih),-2,{short})':'if(gt(iw,ih),{short},-2)'"
-    return [
-        "-i", str(source),
-        "-map", "0:v:0", "-map", "0:a:0?",
-        "-vf", scale,
-        *_video_codec_args(encoder, PROXY_CRF, "veryfast", PROXY_BITRATE),
-        "-g", str(PROXY_GOP), "-keyint_min", str(PROXY_GOP), "-sc_threshold", "0",
-        "-r", str(fps), "-fps_mode", "cfr", "-pix_fmt", "yuv420p",
-        *_audio_args("96k"),
-        "-movflags", "+faststart",
-        str(output),
-    ]  # fmt: skip
+def fallback_plans(plan: IngestPlan, software: str) -> list[IngestPlan]:
+    """`plan`, then software decoding, then a software encoder: a GPU can fail mid-file."""
+    candidates = [plan, replace(plan, hwaccel=None), replace(plan, hwaccel=None, encoder=software)]
+    return list(dict.fromkeys(candidates))
 
 
-def wav_args(source: Path, output: Path) -> list[str]:
-    return [
-        "-i", str(source),
-        "-map", "0:a:0", "-vn",
-        "-ac", "1", "-ar", str(WAV_SAMPLE_RATE), "-c:a", "pcm_s16le",
-        str(output),
-    ]  # fmt: skip
-
-
-def _scaled(progress: ProgressCallback, stage: str, start: float, share: float, label: str) -> Any:
-    def report(fraction: float) -> None:
-        progress(stage, start + share * fraction, label)
-
-    return report
+def ingest_parallelism(encoder: str, *, sources: int) -> int:
+    limit = HARDWARE_PARALLELISM if is_hardware(encoder) else 1
+    return max(1, min(limit, sources))
 
 
 def _partial(path: Path) -> Path:
     return path.with_name(f"{path.stem}.part{path.suffix}")
 
 
-def _encode_atomic(
+def _run_atomic(
     ffmpeg: str,
-    build_args: Callable[[Path], list[str]],
-    output: Path,
+    args: list[str],
+    outputs: list[Path],
     duration: float,
     on_progress: Callable[[float], None],
 ) -> None:
-    partial = _partial(output)
+    """Run ffmpeg writing every output under its `.part` name; rename them all only when
+    ffmpeg succeeds."""
+    partials = [_partial(path) for path in outputs]
     try:
-        run_ffmpeg(ffmpeg, build_args(partial), duration, on_progress)
-        partial.replace(output)
+        run_ffmpeg(ffmpeg, args, duration, on_progress)
+        for partial, output in zip(partials, outputs, strict=True):
+            partial.replace(output)
     finally:
-        partial.unlink(missing_ok=True)
+        for partial in partials:
+            partial.unlink(missing_ok=True)
 
 
 def _ingest_outputs(entry: "IngestedSource") -> list[Path]:
@@ -276,6 +330,65 @@ def _ingest_outputs(entry: "IngestedSource") -> list[Path]:
 
 def _wav_readable(entry: "IngestedSource") -> bool:
     return entry.wav_path is None or bool(audio_duration(Path(entry.wav_path)))
+
+
+def choose_encoder(ffmpeg: str, cuda_available: bool) -> str:
+    return select_video_encoder(list_encoders(ffmpeg), cuda_available, encoder_probe(ffmpeg))
+
+
+def plan_ingest(
+    ffmpeg: str,
+    source: Path,
+    probe: ProbeResult,
+    encoder: str,
+    fps: int | None = None,
+    platform: str = sys.platform,
+) -> IngestPlan:
+    chosen_fps = fps or target_fps(probe)
+    width, height = mezzanine_size(probe)
+    codec = (probe.video_codec, probe.profile, probe.pix_fmt)
+    decodes = decoder_probe(ffmpeg, source, codec)
+    return IngestPlan(
+        fps=chosen_fps,
+        width=width,
+        height=height,
+        encoder=encoder,
+        hwaccel=select_hwaccel(list_hwaccels(ffmpeg), platform, probe.video_codec, decodes),
+        copy_video=can_copy_video(probe, chosen_fps),
+        has_audio=probe.has_audio,
+    )
+
+
+def _encode_with_fallback(
+    ffmpeg: str,
+    source: Path,
+    plan: IngestPlan,
+    software: str,
+    outputs: tuple[Path, Path, Path],
+    duration: float,
+    report: Callable[[float, str], None],
+) -> IngestPlan:
+    """Run `plan`, falling back to software decoding and encoding; return the plan that ran."""
+    mezzanine, proxy, wav = outputs
+    written = [mezzanine, proxy, *([wav] if plan.has_audio else [])]
+    attempts = fallback_plans(plan, software)
+    for attempt in attempts:
+        args = ingest_args(source, attempt, _partial(mezzanine), _partial(proxy), _partial(wav))
+        try:
+            _run_atomic(ffmpeg, args, written, duration, lambda f: report(f, "encoding"))
+            return attempt
+        except FfmpegError as exc:
+            if attempt is attempts[-1]:
+                raise
+            logger.warning(
+                "Ingest of %s with %s decoding and %s failed, retrying in software: %s",
+                source.name,
+                attempt.decoder,
+                attempt.encoder,
+                exc,
+            )
+            report(0.0, "retrying in software")
+    raise AssertionError("fallback_plans is never empty")
 
 
 def ingest_source(
@@ -289,66 +402,48 @@ def ingest_source(
 ) -> IngestedSource:
     source_id = source_id_for(source)
     stage = f"ingest-{source_id}"
+    progress(stage, 0.0, "preparing")
     media = layout.media_dir
-    mezzanine = media / f"{source_id}.mezzanine.mp4"
-    proxy = media / f"{source_id}.proxy.mp4"
-    wav = media / f"{source_id}.wav"
+    outputs = (
+        media / f"{source_id}.mezzanine.mp4",
+        media / f"{source_id}.proxy.mp4",
+        media / f"{source_id}.wav",
+    )
+    encoder = choose_encoder(tools.ffmpeg, cuda_available)
+    software = software_encoder(list_encoders(tools.ffmpeg), encoder_probe(tools.ffmpeg))
 
-    listing = list_encoders(tools.ffmpeg)
-
-    def works(name: str) -> bool:
-        return encoder_works(tools.ffmpeg, name)
-
-    encoder = select_video_encoder(listing, cuda_available, works)
-    proxy_encoder = software_encoder(listing, works)
+    def report(fraction: float, message: str) -> None:
+        progress(stage, fraction, message)
 
     def compute() -> IngestedSource:
         layout.ensure()
         probe = probe_media(tools.ffprobe, source)
-        chosen_fps = fps or target_fps(probe)
-        _encode_atomic(
-            tools.ffmpeg,
-            lambda out: mezzanine_args(source, out, chosen_fps, encoder),
-            mezzanine,
-            probe.duration,
-            _scaled(progress, stage, 0.0, _MEZZANINE_SHARE, "mezzanine"),
+        plan = plan_ingest(tools.ffmpeg, source, probe, encoder, fps)
+        used = _encode_with_fallback(
+            tools.ffmpeg, source, plan, software, outputs, probe.duration, report
         )
-        _encode_atomic(
-            tools.ffmpeg,
-            lambda out: proxy_args(source, out, chosen_fps, proxy_encoder),
-            proxy,
-            probe.duration,
-            _scaled(progress, stage, _MEZZANINE_SHARE, _PROXY_SHARE, "proxy"),
-        )
-        wav_path: str | None = None
-        if probe.has_audio:
-            start = _MEZZANINE_SHARE + _PROXY_SHARE
-            _encode_atomic(
-                tools.ffmpeg,
-                lambda out: wav_args(source, out),
-                wav,
-                probe.duration,
-                _scaled(progress, stage, start, 1.0 - start, "audio"),
-            )
-            wav_path = str(wav)
         return IngestedSource(
             source_id=source_id,
             original_path=str(source.resolve()),
             probe=probe,
-            fps=chosen_fps,
-            video_encoder=encoder,
-            mezzanine_path=str(mezzanine),
-            proxy_path=str(proxy),
-            wav_path=wav_path,
+            fps=used.fps,
+            video_encoder=used.encoder,
+            video_decoder=used.decoder,
+            mezzanine_path=str(outputs[0]),
+            proxy_path=str(outputs[1]),
+            wav_path=str(outputs[2]) if used.has_audio else None,
         )
 
     params = {
         "fps": fps,
         "videoEncoder": encoder,
-        "mezzanineVideoArgs": _video_codec_args(
-            encoder, MEZZANINE_CRF, "medium", MEZZANINE_BITRATE
+        "mezzanineMaxSize": [MEZZANINE_SHORT_SIDE, MEZZANINE_LONG_SIDE],
+        "mezzanineVideoArgs": video_codec_args(
+            encoder, bitrate=MEZZANINE_BITRATE, crf=MEZZANINE_CRF, preset="medium"
         ),
-        "proxyVideoArgs": _video_codec_args(proxy_encoder, PROXY_CRF, "veryfast", PROXY_BITRATE),
+        "proxyVideoArgs": video_codec_args(
+            encoder, bitrate=PROXY_BITRATE, crf=PROXY_CRF, preset="veryfast"
+        ),
     }
     return run_stage(
         layout,
@@ -384,12 +479,34 @@ def ingest_files(
     fps: int | None = None,
     progress: ProgressCallback = no_progress,
 ) -> IngestManifest:
+    """Ingest `sources`, two at a time with a hardware encoder (GPUs encode several streams)."""
     layout.ensure()
     by_id = {entry.source_id: entry for entry in load_manifest(layout).sources}
-    for source in sources:
-        entry = ingest_source(
+    unique = list({source_id_for(source): source for source in sources}.values())
+
+    def ingest_one(source: Path) -> IngestedSource:
+        return ingest_source(
             layout, source, tools, cuda_available=cuda_available, fps=fps, progress=progress
         )
+
+    for source in unique:  # the encoder probes below take a moment on a first run
+        progress(f"ingest-{source_id_for(source)}", 0.0, "preparing")
+    workers = ingest_parallelism(choose_encoder(tools.ffmpeg, cuda_available), sources=len(unique))
+    if workers == 1:
+        entries = [ingest_one(source) for source in unique]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ingest") as pool:
+            # Each worker runs in a copy of this context so a job cancel still reaches the
+            # ffmpeg processes it starts (the process scope is a context variable).
+            futures = [
+                pool.submit(contextvars.copy_context().run, ingest_one, source) for source in unique
+            ]
+            try:
+                entries = [future.result() for future in futures]
+            except BaseException:
+                pool.shutdown(cancel_futures=True)
+                raise
+    for entry in entries:
         by_id[entry.source_id] = entry
     manifest = IngestManifest(sources=list(by_id.values()))
     write_text_atomic(
