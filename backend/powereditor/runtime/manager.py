@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from powereditor.models import CamelModel
-from powereditor.process import tracked
+from powereditor.process import hidden_console_flags, tracked
 from powereditor.resources import Resources
 from powereditor.runtime.manifest import DOWNLOADS, RuntimeDownload
 
@@ -286,6 +286,7 @@ def install_browser(node: str, script: Path, cache_dir: Path, progress: Progress
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                creationflags=hidden_console_flags(),
             ) as process,
             tracked(process),
         ):

@@ -12,6 +12,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from powereditor.process import hidden_console_flags
 from powereditor.resources import tool_candidates
 
 PROBE_TIMEOUT_S = 15
@@ -34,6 +35,7 @@ def probe_node_arch(node: str) -> str | None:
             text=True,
             timeout=PROBE_TIMEOUT_S,
             check=False,
+            creationflags=hidden_console_flags(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None

@@ -79,6 +79,7 @@ def run_render(
 
 def explorer_revealer(path: Path) -> None:
     # explorer.exe exits with 1 even when it opened the window, so the code is ignored.
+    # It is the one launch that must show a window, so it skips `hidden_console_flags`.
     subprocess.Popen(["explorer", f"/select,{path}"])
 
 

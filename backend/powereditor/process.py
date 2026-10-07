@@ -5,12 +5,30 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+# `subprocess.CREATE_NO_WINDOW` only exists on Windows builds of Python.
+_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
+
+def hidden_console_flags(extra: int = 0) -> int:
+    """`creationflags` for launching a console program without a console window.
+
+    The desktop engine is a windowed executable, so on Windows each console child (ffmpeg,
+    ffprobe, node, taskkill) would otherwise open its own console on top of the app.
+    `extra` adds other Windows flags; elsewhere the result is 0, which POSIX accepts.
+    """
+    if sys.platform == "win32":
+        return _CREATE_NO_WINDOW | extra
+    return 0
+
 
 def kill_tree(process: "subprocess.Popen[str]") -> None:
     """Kill a child process and its descendants so its pipes close."""
     if sys.platform == "win32":
         subprocess.run(
-            ["taskkill", "/T", "/F", "/PID", str(process.pid)], capture_output=True, check=False
+            ["taskkill", "/T", "/F", "/PID", str(process.pid)],
+            capture_output=True,
+            check=False,
+            creationflags=hidden_console_flags(),
         )
     process.kill()
 

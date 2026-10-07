@@ -10,7 +10,6 @@ shims on Windows, where `cmd.exe` would interpret shell metacharacters.
 import json
 import re
 import subprocess
-import sys
 import tempfile
 import time
 from collections.abc import Callable, Sequence
@@ -18,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
-from powereditor.process import kill_tree
+from powereditor.process import hidden_console_flags, kill_tree
 from powereditor.providers.base import (
     CheckResult,
     JudgmentRequest,
@@ -55,9 +54,6 @@ class CliOutput:
 def run_cli(
     args: Sequence[str], *, stdin: str | None, cwd: Path | None, timeout_s: float
 ) -> CliOutput:
-    flags = 0
-    if sys.platform == "win32":
-        flags = subprocess.CREATE_NO_WINDOW
     try:
         process = subprocess.Popen(
             list(args),
@@ -68,7 +64,7 @@ def run_cli(
             encoding="utf-8",
             errors="replace",
             cwd=cwd,
-            creationflags=flags,
+            creationflags=hidden_console_flags(),
         )
     except FileNotFoundError as exc:
         raise ProviderError("cli_not_found", f"{args[0]} was not found.") from exc

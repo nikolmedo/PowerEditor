@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import cache
 from typing import IO
 
-from powereditor.process import tracked
+from powereditor.process import hidden_console_flags, tracked
 from powereditor.settings_store import SettingsService
 
 FractionCallback = Callable[[float], None]
@@ -72,6 +72,7 @@ def run_ffmpeg(
             text=True,
             encoding="utf-8",
             errors="replace",
+            creationflags=hidden_console_flags(),
         ) as process,
         tracked(process),
     ):
@@ -93,7 +94,13 @@ def run_ffmpeg(
 
 def run_capture(args: Sequence[str]) -> str:
     result = subprocess.run(
-        list(args), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
+        list(args),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        creationflags=hidden_console_flags(),
     )
     if result.returncode != 0:
         raise FfmpegError(f"{args[0]} exited with code {result.returncode}: {result.stderr[-500:]}")
@@ -102,7 +109,9 @@ def run_capture(args: Sequence[str]) -> str:
 
 def run_capture_bytes(args: Sequence[str]) -> bytes:
     """Run a command and return its raw stdout (e.g. ffmpeg rawvideo on pipe:1)."""
-    result = subprocess.run(list(args), capture_output=True, check=False)
+    result = subprocess.run(
+        list(args), capture_output=True, check=False, creationflags=hidden_console_flags()
+    )
     if result.returncode != 0:
         stderr = result.stderr.decode("utf-8", errors="replace")[-500:]
         raise FfmpegError(f"{args[0]} exited with code {result.returncode}: {stderr}")
@@ -118,6 +127,7 @@ def run_ffmpeg_stderr(ffmpeg: str, args: Sequence[str]) -> str:
         encoding="utf-8",
         errors="replace",
         check=False,
+        creationflags=hidden_console_flags(),
     )
     if result.returncode != 0:
         raise FfmpegError(f"ffmpeg exited with code {result.returncode}: {result.stderr[-500:]}")
@@ -143,7 +153,11 @@ def encoder_works(ffmpeg: str, encoder: str) -> bool:
     ]  # fmt: skip
     try:
         result = subprocess.run(
-            command, capture_output=True, timeout=ENCODER_PROBE_TIMEOUT_S, check=False
+            command,
+            capture_output=True,
+            timeout=ENCODER_PROBE_TIMEOUT_S,
+            check=False,
+            creationflags=hidden_console_flags(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
