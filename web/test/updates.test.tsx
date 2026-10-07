@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../src/api/endpoints";
@@ -32,7 +32,7 @@ function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
 
 function fakeDesktop(
   final: DesktopUpdateState,
-): DesktopUpdates & { emit: (s: DesktopUpdateState) => void } {
+): DesktopUpdates & { emit: (s: DesktopUpdateState) => void; subscribed: () => boolean } {
   let listener: ((state: DesktopUpdateState) => void) | null = null;
   return {
     download: vi.fn(() => Promise.resolve(final)),
@@ -42,6 +42,7 @@ function fakeDesktop(
       return () => (listener = null);
     },
     emit: (state) => listener?.(state),
+    subscribed: () => listener !== null,
   };
 }
 
@@ -134,8 +135,10 @@ describe("UpdateBanner", () => {
     window.powereditor = { updates: desktop };
     render(<UpdateBanner />);
     await screen.findByRole("button", { name: t("updates.download") });
+    // The banner subscribes in an effect; emitting earlier would drop the event.
+    await waitFor(() => expect(desktop.subscribed()).toBe(true));
 
-    desktop.emit({ status: "downloading", version: "0.2.0", received: 25, total: 100 });
+    act(() => desktop.emit({ status: "downloading", version: "0.2.0", received: 25, total: 100 }));
 
     expect(await screen.findByText(t("updates.downloading", { percent: 25 }))).toBeTruthy();
   });

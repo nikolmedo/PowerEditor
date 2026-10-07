@@ -504,5 +504,5 @@
   "settings.section.updates": "Actualizaciones",
   "settings.checkForUpdates": "Buscar actualizaciones automáticamente",
   "settings.checkForUpdates.hint": "Consulta en GitHub si hay una versión publicada más nueva, como mucho cada seis horas. No se envía nada sobre ti ni tus proyectos.",
-  "about.noRelease": "Todavía no se ha publicado ninguna versión."
+  "about.noRelease": "No se encontró ninguna versión publicada."
 }

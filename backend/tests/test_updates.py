@@ -114,6 +114,23 @@ def test_no_published_release_yet_is_not_an_error(tmp_path: Path) -> None:
     assert len(github.requests) == 1
 
 
+def test_no_release_is_checked_again_after_fifteen_minutes(tmp_path: Path) -> None:
+    # A private repository also answers 404, and becoming public must show up soon.
+    github = FakeGitHub(httpx.Response(404, json={"message": "Not Found"}))
+    clock = Clock()
+    updates = checker(tmp_path, github, clock)
+
+    updates.status("0.1.0")
+    clock.now += timedelta(minutes=14)
+    updates.status("0.1.0")
+    github.response = httpx.Response(200, json=release("v0.2.0"))
+    clock.now += timedelta(minutes=2)
+    found = updates.status("0.1.0")
+
+    assert len(github.requests) == 2
+    assert (found.latest, found.update_available) == ("0.2.0", True)
+
+
 def test_an_answer_is_reused_for_six_hours(tmp_path: Path) -> None:
     github = FakeGitHub(httpx.Response(200, json=release()))
     clock = Clock()

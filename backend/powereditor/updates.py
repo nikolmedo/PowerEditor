@@ -21,6 +21,8 @@ from powereditor.models import CamelModel
 
 LATEST_RELEASE_URL = "https://api.github.com/repos/nikolmedo/PowerEditor/releases/latest"
 CACHE_FOR = timedelta(hours=6)
+NO_RELEASE_CACHE_FOR = timedelta(minutes=15)
+"""A 404 (no published release, or a private repository) is re-checked soon after."""
 FORCED_CHECK_INTERVAL = timedelta(seconds=60)
 TIMEOUT_SECONDS = 10.0
 CACHE_FILE_NAME = "update-check.json"
@@ -153,7 +155,8 @@ class UpdateChecker:
         if force:
             ask = not _within(cached.attempted_at, now, FORCED_CHECK_INTERVAL)
         else:
-            ask = not _within(cached.checked_at, now, CACHE_FOR)
+            span = CACHE_FOR if cached.release is not None else NO_RELEASE_CACHE_FOR
+            ask = not _within(cached.checked_at, now, span)
         if ask:
             cached.attempted_at = now
             try:

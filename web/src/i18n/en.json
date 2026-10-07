@@ -504,5 +504,5 @@
   "settings.section.updates": "Updates",
   "settings.checkForUpdates": "Check for updates automatically",
   "settings.checkForUpdates.hint": "Asks GitHub for a newer published version at most every six hours. Nothing about you or your projects is sent.",
-  "about.noRelease": "No version has been published yet."
+  "about.noRelease": "No published version found."
 }
