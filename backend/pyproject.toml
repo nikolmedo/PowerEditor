@@ -1,6 +1,6 @@
 [project]
 name = "powereditor"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local automatic video editor backend"
 requires-python = ">=3.12"
 license = { file = "../LICENSE" }
