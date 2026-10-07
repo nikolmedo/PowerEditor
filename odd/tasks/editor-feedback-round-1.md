@@ -73,11 +73,11 @@ T1 is split into four commits.
   | `pytest -q` | 738 passed, 2 skipped |
   | `eval-takes` | unchanged at 100% clustering and 100% best take |
 - Parent spot check: only the commit is on the branch, and the tree is clean apart from this doc.
-- Native review: T1a has not been assessed yet. Run `gentle-ai review assess --cwd <repo> --agent claude-code --base-ref db6963c --committed-only --json` on resume.
+- Native review: T1a plus this doc (base `db6963c`, up to `5f8d63f`) was assessed as medium risk. The user granted the review, the reliability lens approved it, and it was acknowledged (lineage `review-2971b4c9057f6bd2`, authority burned). The next reviewed boundary is `5f8d63f`.
+  - One advisory finding was not blocking: `segmentation.py:101` drops a phrase made only of zero-duration words, and no test covers that case. Add a test in T1c.
 
 ## Next step
-1. Run the pending review assessment for `9db1464`, as noted under Verification evidence.
-2. Do T1b, then T1c and T1d.
-3. Then T2, then T3.
+1. Do T1b, then T1c and T1d.
+2. Then T2, then T3.
 
 To restart the dev servers, run `uv run powereditor serve --dev` in `backend/` and `corepack pnpm --filter @powereditor/web dev` at the root, then open `http://localhost:5173`.
