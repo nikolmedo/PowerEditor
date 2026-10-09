@@ -86,9 +86,22 @@ def test_project_round_trips_with_camel_case_keys() -> None:
     # Fields added later have defaults, so older project files still load.
     defaults = {
         "normalizeSources": False,
-        "audioTracks": [track | {"duckingDb": 12.0} for track in payload["audioTracks"]],
+        "audioTracks": [
+            track | {"duckingDb": 12.0, "muted": False} for track in payload["audioTracks"]
+        ],
     }
     assert dumped == payload | defaults
+
+
+def test_audio_track_mute_round_trips() -> None:
+    payload = _project_payload()
+    payload["audioTracks"][0]["muted"] = True
+
+    project = Project.model_validate(payload)
+
+    assert project.audio_tracks[0].muted is True
+    dumped = project.model_dump(by_alias=True, mode="json")
+    assert dumped["audioTracks"][0]["muted"] is True
 
 
 def test_models_accept_python_field_names() -> None:

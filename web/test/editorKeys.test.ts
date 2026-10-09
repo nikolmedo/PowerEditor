@@ -33,6 +33,15 @@ describe("editorCommand", () => {
     expect(press("ArrowLeft", { alt: true })).toBeNull();
     expect(press("a")).toBeNull();
   });
+
+  it("maps the timeline zoom keys and leaves Ctrl zoom to the browser", () => {
+    expect(press("=")).toEqual({ type: "zoom", direction: 1 });
+    expect(press("+", { shift: true })).toEqual({ type: "zoom", direction: 1 });
+    expect(press("-")).toEqual({ type: "zoom", direction: -1 });
+    expect(press("\\")).toEqual({ type: "zoomFit" });
+    expect(press("=", { ctrl: true })).toBeNull();
+    expect(press("-", { meta: true })).toBeNull();
+  });
 });
 
 describe("ownsKeys", () => {

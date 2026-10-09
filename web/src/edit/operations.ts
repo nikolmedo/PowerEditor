@@ -119,8 +119,8 @@ function takeOwner(project: Project, clipId: string): Clip | undefined {
 
 /**
  * Keep `alternativeId` instead of the take `keptId`. The alternative moves into the kept take's
- * place on the timeline and inherits its incoming transition and its list of alternatives.
- * The choice is now the user's, so the new take is fully confident and the old one loses the
+ * place on the timeline and inherits its incoming transition, its volume (the level set on that
+ * segment of the voice lane survives a take change) and its list of alternatives. The choice is now the user's, so the new take is fully confident and the old one loses the
  * engine's confidence (it describes a decision that no longer holds).
  */
 export function swapTake(project: Project, keptId: string, alternativeId: string): Project {
@@ -131,6 +131,7 @@ export function swapTake(project: Project, keptId: string, alternativeId: string
     ...alternative,
     removed: kept.removed,
     transitionIn: kept.transitionIn,
+    volume: kept.volume,
     decisionConfidence: MANUAL_CONFIDENCE,
     alternativeTakeIds: [keptId, ...kept.alternativeTakeIds.filter((id) => id !== alternativeId)],
   };
@@ -138,6 +139,7 @@ export function swapTake(project: Project, keptId: string, alternativeId: string
     ...kept,
     removed: true,
     transitionIn: alternative.transitionIn,
+    volume: alternative.volume,
     decisionConfidence: null,
     alternativeTakeIds: [],
   };

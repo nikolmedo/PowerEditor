@@ -82,9 +82,9 @@ def _voice_graph(project: Project, media_dir: Path, ffprobe: str, crossfade_ms: 
 
 
 def music_track(project: Project, media_dir: Path) -> tuple[AudioTrack, Path] | None:
-    """The project's music track and its file in `media_dir`, if it has one."""
+    """The project's music track and its file in `media_dir`, if it has one and it is not muted."""
     track = next((t for t in project.audio_tracks if t.kind == "music" and t.source_path), None)
-    if track is None or track.source_path is None:
+    if track is None or track.source_path is None or track.muted:
         return None
     path = media_dir / Path(track.source_path).name
     if not path.is_file():

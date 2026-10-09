@@ -1,5 +1,6 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { translate } from "../src/i18n";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MusicFile } from "../src/api/types";
 import { uploadMusic, type Upload } from "../src/api/upload";
@@ -7,6 +8,8 @@ import { musicTrack } from "../src/edit/audio";
 import { AudioPanel } from "../src/review/AudioPanel";
 import { useProjectStore } from "../src/store/project";
 import { PROJECT } from "./fixtures/reviewProject";
+
+const t = (key: Parameters<typeof translate>[1]) => translate("es", key);
 
 vi.mock("../src/api/upload", async (importActual) => ({
   ...(await importActual<typeof import("../src/api/upload")>()),
@@ -87,5 +90,51 @@ describe("AudioPanel music upload", () => {
 
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("AudioPanel track focus and mute", () => {
+  const stored = () => useProjectStore.getState().project;
+  const trackOf = (id: string) => stored()?.audioTracks.find((track) => track.id === id);
+
+  beforeEach(() => useProjectStore.getState().load("p1", PROJECT, "etag"));
+
+  it("mutes the voice and the music from their own sections", async () => {
+    const user = userEvent.setup();
+    render(<AudioPanel projectId="p1" project={PROJECT} />);
+
+    const voice = screen.getByRole("region", { name: t("audio.voice") });
+    await user.click(within(voice).getByRole("checkbox", { name: t("audio.mute") }));
+    expect(trackOf("voice")?.muted).toBe(true);
+    expect(trackOf("m1")?.muted).toBeUndefined();
+
+    const music = screen.getByRole("region", { name: t("audio.music") });
+    await user.click(within(music).getByRole("checkbox", { name: t("audio.mute") }));
+    expect(trackOf("m1")?.muted).toBe(true);
+  });
+
+  it("highlights the focused track and sets the selected clip's level from the voice", () => {
+    const clip = PROJECT.clips.find((candidate) => candidate.id === "k2") ?? null;
+    render(<AudioPanel projectId="p1" project={PROJECT} focusTrack="voice" clip={clip} />);
+
+    const voice = screen.getByRole("region", { name: t("audio.voice") });
+    expect(voice.hasAttribute("data-focused")).toBe(true);
+    expect(
+      screen.getByRole("region", { name: t("audio.music") }).hasAttribute("data-focused"),
+    ).toBe(false);
+    const level = within(voice).getByRole("slider", { name: new RegExp(t("audio.clipLevel")) });
+    fireEvent.change(level, { target: { value: "0.5" } });
+    expect(stored()?.clips.find((candidate) => candidate.id === "k2")?.volume).toBe(0.5);
+  });
+
+  it("shows no clip level without a selected clip or when the music is focused", () => {
+    const clip = PROJECT.clips[0] ?? null;
+    const { rerender } = render(<AudioPanel projectId="p1" project={PROJECT} focusTrack="voice" />);
+    expect(screen.queryByText(t("audio.clipLevel"))).toBeNull();
+    rerender(<AudioPanel projectId="p1" project={PROJECT} focusTrack="music" clip={clip} />);
+    expect(screen.queryByText(t("audio.clipLevel"))).toBeNull();
+    expect(
+      screen.getByRole("region", { name: t("audio.music") }).hasAttribute("data-focused"),
+    ).toBe(true);
   });
 });

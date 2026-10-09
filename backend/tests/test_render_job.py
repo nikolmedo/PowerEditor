@@ -135,10 +135,15 @@ def test_render_project_passes_the_quality_and_the_concurrency_override(
     assert (result.quality, result.concurrency) == ("draft", 3)
 
 
-def _add_music(layout: ProjectLayout, file_name: str = "music.wav") -> None:
+def _add_music(layout: ProjectLayout, file_name: str = "music.wav", muted: bool = False) -> None:
     project = load_project(layout.project_file)
     music = AudioTrack(
-        id="music", kind="music", source_path=file_name, volume=0.5, ducking_enabled=True
+        id="music",
+        kind="music",
+        source_path=file_name,
+        volume=0.5,
+        ducking_enabled=True,
+        muted=muted,
     )
     save_project(
         project.model_copy(update={"audio_tracks": [*project.audio_tracks, music]}),
@@ -178,6 +183,24 @@ def test_render_project_refuses_a_missing_music_file_before_rendering(tmp_path: 
 
     assert excinfo.value.code == "music_not_found"
     assert renderer.calls == 0
+
+
+def test_render_project_skips_a_muted_music_track(tmp_path: Path) -> None:
+    layout = _project_layout(tmp_path)
+    # The file is missing on purpose: a muted track is never read, so it cannot fail.
+    _add_music(layout, "gone.mp3", muted=True)
+    messages: list[str] = []
+
+    result = render_project(
+        layout,
+        SettingsService.default(),
+        renderer=FakeRenderer(),
+        progress=lambda stage, fraction, message: messages.append(message),
+    )
+
+    assert "music" not in messages
+    video_s, audio_s = _durations(result.output)
+    assert audio_s == pytest.approx(video_s, abs=1 / 30)
 
 
 def test_render_project_refuses_an_empty_timeline_before_rendering(tmp_path: Path) -> None:

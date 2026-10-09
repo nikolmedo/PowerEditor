@@ -132,6 +132,8 @@ class AudioTrack(CamelModel):
     ducking_enabled: bool
     ducking_db: float = Field(default=12.0, ge=0.0, le=30.0)
     """How far a ducked track drops under speech."""
+    muted: bool = False
+    """A muted voice plays every clip at zero gain; a muted music track is left out of the mix."""
 
 
 class TimelineWord(CamelModel):

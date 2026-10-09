@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { ApiError } from "../api/client";
 import { api } from "../api/endpoints";
+import { setTrackMuted } from "../edit/audio";
 import { setRemoved, swapTake, trimClip } from "../edit/operations";
 import { moveOverlay, removeOverlay, setOverlaySpan } from "../edit/overlays";
 import { useT, type MessageKey } from "../i18n";
@@ -12,14 +13,14 @@ import { Link } from "../shell/AppShell";
 import { useProjectStore } from "../store/project";
 import { ErrorNotice, Status } from "../ui/primitives";
 import { useResource } from "../ui/useResource";
-import { AudioPanel } from "./AudioPanel";
+import { AudioPanel, type FocusTrack } from "./AudioPanel";
 import { ClipPanel } from "./ClipPanel";
 import { ColorPanel } from "./ColorPanel";
 import { editorCommand, ownsKeys } from "./editorKeys";
 import { GraphicsPanel } from "./GraphicsPanel";
 import { PreviewVideo, projectMediaBase } from "./PreviewVideo";
 import { SubtitlesPanel } from "./SubtitlesPanel";
-import { Timeline } from "./Timeline";
+import { Timeline, type TimelineHandle } from "./Timeline";
 import { buildTimeline, neighbourClip, type TimelineClip } from "./timelineModel";
 import { TransitionsPanel } from "./TransitionsPanel";
 import { useAutosave, type AutosaveState } from "./useAutosave";
@@ -92,9 +93,12 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
   const preview = settings.data?.settings ?? PREVIEW_DEFAULTS;
   const { edit, undo, redo } = useProjectStore();
   const playerRef = useRef<PlayerRef>(null);
+  const timelineRef = useRef<TimelineHandle>(null);
   const [frame, setFrame] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
+  /** The audio track picked on the timeline; the Audio tab opens on it. */
+  const [selectedTrackId, setSelectedTrackId] = useState<FocusTrack | null>(null);
   const [panel, setPanel] = useState<PanelName>("clip");
 
   const metadata = videoMetadata(project);
@@ -155,6 +159,8 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         if (target) select(target);
         return;
       }
+      if (command.type === "zoom") return timelineRef.current?.zoom(command.direction);
+      if (command.type === "zoomFit") return timelineRef.current?.fit();
       if (!selectedId) return;
       if (command.type === "toggleRemoved") {
         const removed = project.clips.find((clip) => clip.id === selectedId)?.removed ?? false;
@@ -205,7 +211,14 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         )}
         {panel === "transitions" && <TransitionsPanel clip={selected} />}
         {panel === "subtitles" && <SubtitlesPanel project={project} />}
-        {panel === "audio" && <AudioPanel projectId={projectId} project={project} />}
+        {panel === "audio" && (
+          <AudioPanel
+            projectId={projectId}
+            project={project}
+            focusTrack={selectedTrackId}
+            clip={selected}
+          />
+        )}
         {panel === "color" && <ColorPanel project={project} clip={selected} />}
         {panel === "graphics" && (
           <GraphicsPanel
@@ -218,16 +231,32 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         )}
       </aside>
       <Timeline
+        ref={timelineRef}
         model={model}
         frame={frame}
         selectedId={selectedId}
         onSeek={seek}
-        onSelect={select}
+        onSelect={(clip) => {
+          select(clip);
+          setSelectedTrackId(null);
+        }}
         onSwapNext={swapNext}
         onOpenTakes={(clip) => {
           select(clip);
           setPanel("clip");
         }}
+        selectedTrackId={selectedTrackId}
+        onSelectVoice={(segment) => {
+          setSelectedId(segment.clipId);
+          seek(segment.startFrame);
+          setSelectedTrackId("voice");
+          setPanel("audio");
+        }}
+        onSelectMusic={() => {
+          setSelectedTrackId("music");
+          setPanel("audio");
+        }}
+        onToggleMute={(trackId, muted) => edit((current) => setTrackMuted(current, trackId, muted))}
         selectedOverlayId={selectedOverlayId}
         onSelectOverlay={(id) => {
           setSelectedOverlayId(id);
