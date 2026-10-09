@@ -363,7 +363,7 @@ To cut a release:
 
 1. `python scripts/version.py set x.y.z`, then commit (`chore: release x.y.z`) and merge to `main`.
 2. `git tag vx.y.z` on that commit and `git push origin vx.y.z`.
-3. `.github/workflows/release.yml` (windows-latest x64; also `workflow_dispatch` with a `tag`) checks the tag against `VERSION`, runs the backend and pnpm test suites, runs `python scripts/build_installer.py --smoke`, writes `SHA256SUMS.txt` (`scripts/checksums.py`) and the notes (`scripts/release_notes.py`: Features, Fixes and Docs from the Conventional Commits since the previous tag), and creates a **draft** release with the installer, the checksums, `LICENSE` and `THIRD_PARTY_NOTICES.md`.
+3. `.github/workflows/release.yml` (windows-latest x64; also `workflow_dispatch` with a `tag`) checks the tag against `VERSION`, checks that CI passed for the tagged commit (for a merge commit, its PR head; CI runs on pull requests only, so after a squash merge run `gh workflow run ci.yml --ref vx.y.z` first), runs `python scripts/build_installer.py --smoke`, writes `SHA256SUMS.txt` (`scripts/checksums.py`) and the notes (`scripts/release_notes.py`: Features, Fixes and Docs from the Conventional Commits since the previous tag), and creates a **draft** release with the installer, the checksums, `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 4. A maintainer reviews the draft (notes, assets, the licensing items open in `PLAN.md`) and publishes it. Only then do installed apps see it: `releases/latest` never returns drafts or prereleases.
 
 The installer is unsigned for now, so Windows SmartScreen warns on first run.
