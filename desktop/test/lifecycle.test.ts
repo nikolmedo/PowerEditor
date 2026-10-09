@@ -7,6 +7,7 @@ import {
   isInsideDirectory,
   launchInstaller,
   restartApp,
+  SILENT_UPDATE_ARGS,
   type InstallerProcess,
 } from "../src/lifecycle";
 
@@ -81,8 +82,17 @@ describe("launchInstaller", () => {
     child.emit("spawn");
 
     expect(await launched).toEqual({ started: true });
-    expect(spawnInstaller).toHaveBeenCalledWith(fs.realpathSync.native(installer));
+    expect(spawnInstaller).toHaveBeenCalledWith(
+      fs.realpathSync.native(installer),
+      SILENT_UPDATE_ARGS,
+    );
     expect(child.unref).toHaveBeenCalled();
+  });
+
+  it("runs the installer silently as an update that starts the app again", () => {
+    // electron-builder's NSIS installSection.nsh relaunches the app only for ${Silent} plus
+    // --force-run; --updated keeps the user's shortcuts as they are.
+    expect(SILENT_UPDATE_ARGS).toEqual(["--updated", "/S", "--force-run"]);
   });
 
   it("reports a process that fails to start", async () => {

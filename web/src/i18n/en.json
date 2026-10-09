@@ -490,7 +490,7 @@
   "updates.downloading": "Downloading… {percent} %",
   "updates.downloadingUnknown": "Downloading…",
   "updates.verifying": "Checking the download…",
-  "updates.install": "Install and restart",
+  "updates.install": "Restart and update",
   "updates.failed": "The download failed or arrived damaged.",
   "updates.retry": "Try again",
   "updates.dismiss": "Hide until the next version",
