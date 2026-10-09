@@ -10,10 +10,20 @@
 //   {"event":"progress","fraction":0.42}
 //   {"event":"done","path":"...","type":"local-puppeteer-browser"}
 //   {"event":"error","message":"..."}   (then exits with code 1)
+import os from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { ensureBrowser } from "@remotion/renderer";
 
 function emit(event) {
   process.stdout.write(`${JSON.stringify(event)}\n`);
+}
+
+// Remotion refuses to download the browser under an arm64 Node on Windows, although it
+// always fetches the `win64` build there and that build runs emulated on ARM64. Report x64
+// so the download goes through; this script only installs the browser.
+if (process.platform === "win32" && os.arch() === "arm64") {
+  os.arch = () => "x64";
+  syncBuiltinESMExports();
 }
 
 try {
