@@ -1,117 +1,58 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/endpoints";
-import type { UpdateStatus } from "../api/types";
-import { useT, type Translate } from "../i18n";
+import { useT } from "../i18n";
 import { useResource } from "../ui/useResource";
-import { desktopUpdates, type DesktopUpdateState } from "./desktopBridge";
+import { DownloadAction } from "./DownloadAction";
+import { desktopUpdates } from "./desktopBridge";
 import { dismissVersion, dismissedVersion } from "./dismissal";
+
+/** How often an open app asks again; the engine answers from its cache in between. */
+const RECHECK_MS = 6 * 60 * 60 * 1000;
 
 /** A discreet notice when a newer published release exists. It respects the
  * `checkForUpdates` setting (the engine answers `enabled: false`) and stays hidden for a
- * version the user dismissed. */
+ * version the user dismissed. In the desktop app a version found this way is also announced
+ * with a system notification, which the shell shows once per version. */
 export function UpdateBanner() {
+  const t = useT();
   const updates = useResource(useCallback(() => api.updates(), []));
   const [dismissed, setDismissed] = useState(dismissedVersion);
   const update = updates.data;
-  if (!update?.enabled || !update.updateAvailable || !update.latest) return null;
-  if (dismissed === update.latest) return null;
-  const latest = update.latest;
+  const shown =
+    update?.enabled && update.updateAvailable && update.latest && update.latest !== dismissed
+      ? update.latest
+      : null;
+
+  const { reload } = updates;
+  useEffect(() => {
+    const timer = setInterval(() => void reload(), RECHECK_MS);
+    return () => clearInterval(timer);
+  }, [reload]);
+
+  useEffect(() => {
+    const desktop = desktopUpdates();
+    // Best effort: the banner still tells the user when the shell shows nothing.
+    if (shown && desktop) desktop.notifyAvailable(shown).catch(() => undefined);
+  }, [shown]);
+
+  if (!shown) return null;
   const dismiss = () => {
-    dismissVersion(latest);
-    setDismissed(latest);
+    dismissVersion(shown);
+    setDismissed(shown);
   };
-  return <UpdateNotice update={update} version={latest} onDismiss={dismiss} />;
-}
-
-function UpdateNotice({
-  update,
-  version,
-  onDismiss,
-}: {
-  update: UpdateStatus;
-  version: string;
-  onDismiss: () => void;
-}) {
-  const t = useT();
-  const desktop = desktopUpdates();
-  const [download, setDownload] = useState<DesktopUpdateState>({ status: "idle" });
-  useEffect(() => desktop?.onState(setDownload), [desktop]);
-
-  const start = () => {
-    if (!desktop) {
-      if (update.releaseUrl) window.open(update.releaseUrl, "_blank", "noreferrer");
-      return;
-    }
-    desktop.download(version).then(
-      (state) => {
-        if (state) setDownload(state);
-      },
-      // The shell went away mid-call (IPC closed): show the failure so Retry is offered.
-      () => setDownload({ status: "failed", version, error: "download_failed" }),
-    );
-  };
-  const install = () => void desktop?.installAndQuit();
-
+  const releaseUrl = update?.releaseUrl ?? null;
   return (
     <section className="notice notice-ok update-banner" aria-label={t("updates.label")}>
-      <span>{t("updates.available", { version })}</span>
-      {update.releaseUrl && (
-        <a href={update.releaseUrl} target="_blank" rel="noreferrer">
+      <span>{t("updates.available", { version: shown })}</span>
+      {releaseUrl && (
+        <a href={releaseUrl} target="_blank" rel="noreferrer">
           {t("updates.whatsNew")}
         </a>
       )}
-      <DownloadAction state={download} t={t} onStart={start} onInstall={install} />
-      <button type="button" className="quiet" aria-label={t("updates.dismiss")} onClick={onDismiss}>
+      <DownloadAction key={shown} version={shown} releaseUrl={releaseUrl} />
+      <button type="button" className="quiet" aria-label={t("updates.dismiss")} onClick={dismiss}>
         ×
       </button>
     </section>
   );
-}
-
-function DownloadAction({
-  state,
-  t,
-  onStart,
-  onInstall,
-}: {
-  state: DesktopUpdateState;
-  t: Translate;
-  onStart: () => void;
-  onInstall: () => void;
-}) {
-  switch (state.status) {
-    case "downloading":
-      return (
-        <span role="status">
-          {state.total
-            ? t("updates.downloading", {
-                percent: Math.floor((state.received / state.total) * 100),
-              })
-            : t("updates.downloadingUnknown")}
-        </span>
-      );
-    case "verifying":
-      return <span role="status">{t("updates.verifying")}</span>;
-    case "ready":
-      return (
-        <button type="button" className="primary" onClick={onInstall}>
-          {t("updates.install")}
-        </button>
-      );
-    case "failed":
-      return (
-        <>
-          <span role="alert">{t("updates.failed")}</span>
-          <button type="button" onClick={onStart}>
-            {t("updates.retry")}
-          </button>
-        </>
-      );
-    default:
-      return (
-        <button type="button" className="primary" onClick={onStart}>
-          {t("updates.download")}
-        </button>
-      );
-  }
 }

@@ -37,6 +37,7 @@ function fakeDesktop(
   return {
     download: vi.fn(() => Promise.resolve(final)),
     installAndQuit: vi.fn(() => Promise.resolve(true)),
+    notifyAvailable: vi.fn(() => Promise.resolve(true)),
     onState: (next) => {
       listener = next;
       return () => (listener = null);
@@ -56,6 +57,7 @@ beforeEach(() => {
 afterEach(() => {
   delete window.powereditor;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("UpdateBanner", () => {
@@ -169,6 +171,52 @@ describe("UpdateBanner", () => {
     expect(await screen.findByText(t("updates.failed"))).toBeTruthy();
     expect(screen.getByRole("button", { name: t("updates.retry") })).toBeTruthy();
   });
+
+  it("asks the desktop app for a system notification once for a version it found", async () => {
+    vi.mocked(api.updates).mockResolvedValue(status());
+    const desktop = fakeDesktop({ status: "ready", version: "0.2.0" });
+    window.powereditor = { updates: desktop };
+    const { rerender } = render(<UpdateBanner />);
+    await screen.findByRole("region", { name: t("updates.label") });
+
+    rerender(<UpdateBanner />);
+
+    expect(api.updates).toHaveBeenCalledWith();
+    expect(desktop.notifyAvailable).toHaveBeenCalledTimes(1);
+    expect(desktop.notifyAvailable).toHaveBeenCalledWith("0.2.0");
+  });
+
+  it.each([
+    ["a dismissed version", status(), "0.2.0"],
+    ["no newer version", status({ updateAvailable: false, latest: "0.1.0" }), null],
+    ["checks turned off", status({ updateAvailable: false, latest: null, enabled: false }), null],
+  ])("does not notify for %s", async (_name, answer, dismissed) => {
+    if (dismissed) localStorage.setItem("powereditor.dismissedUpdate", dismissed);
+    vi.mocked(api.updates).mockResolvedValue(answer);
+    const desktop = fakeDesktop({ status: "ready", version: "0.2.0" });
+    window.powereditor = { updates: desktop };
+    render(<UpdateBanner />);
+
+    await vi.waitFor(() => expect(api.updates).toHaveBeenCalled());
+    await act(() => Promise.resolve());
+    expect(desktop.notifyAvailable).not.toHaveBeenCalled();
+  });
+
+  it("checks again every six hours while the app is open and notifies a new find", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vi.mocked(api.updates).mockResolvedValue(status({ updateAvailable: false, latest: "0.1.0" }));
+    const desktop = fakeDesktop({ status: "ready", version: "0.2.0" });
+    window.powereditor = { updates: desktop };
+    render(<UpdateBanner />);
+    await vi.waitFor(() => expect(api.updates).toHaveBeenCalledTimes(1));
+
+    vi.mocked(api.updates).mockResolvedValue(status({ latest: "0.3.0" }));
+    act(() => vi.advanceTimersByTime(6 * 60 * 60 * 1000));
+
+    expect(await screen.findByText(t("updates.available", { version: "0.3.0" }))).toBeTruthy();
+    expect(vi.mocked(api.updates).mock.calls).toEqual([[], []]);
+    expect(desktop.notifyAvailable).toHaveBeenCalledWith("0.3.0");
+  });
 });
 
 describe("About updates", () => {
@@ -185,6 +233,34 @@ describe("About updates", () => {
 
     expect(await screen.findByText(t("updates.available", { version: "0.2.0" }))).toBeTruthy();
     expect(vi.mocked(api.updates).mock.calls).toEqual([[false], [true]]);
+  });
+
+  it("downloads and installs a newer version in the desktop app", async () => {
+    vi.mocked(api.updates).mockResolvedValueOnce(
+      status({ updateAvailable: false, latest: "0.1.0" }),
+    );
+    vi.mocked(api.updates).mockResolvedValueOnce(status());
+    const desktop = fakeDesktop({ status: "ready", version: "0.2.0" });
+    window.powereditor = { updates: desktop };
+    render(<About />);
+    await screen.findByText(t("about.upToDate"));
+    expect(screen.queryByRole("button", { name: t("updates.download") })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: t("about.checkNow") }));
+    await userEvent.click(await screen.findByRole("button", { name: t("updates.download") }));
+    expect(desktop.download).toHaveBeenCalledWith("0.2.0");
+    await userEvent.click(await screen.findByRole("button", { name: t("updates.install") }));
+
+    expect(desktop.installAndQuit).toHaveBeenCalled();
+    expect(desktop.notifyAvailable).not.toHaveBeenCalled();
+  });
+
+  it("only links to what's new outside the desktop app", async () => {
+    vi.mocked(api.updates).mockResolvedValue(status());
+    render(<About />);
+
+    expect(await screen.findByRole("link", { name: t("updates.whatsNew") })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: t("updates.download") })).toBeNull();
   });
 
   it("says when no release has been published yet", async () => {
