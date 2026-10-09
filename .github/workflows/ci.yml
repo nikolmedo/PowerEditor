@@ -1,9 +1,11 @@
 name: CI
 
+# Runs once per pull request; a merge to main is not re-tested. The release workflow
+# checks that CI passed for the tagged commit. `workflow_dispatch` tests a ref by hand,
+# e.g. `gh workflow run ci.yml --ref main` before tagging a squash merge.
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

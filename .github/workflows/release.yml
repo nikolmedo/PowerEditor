@@ -19,6 +19,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: read # the CI runs of the tagged commit
 
 jobs:
   release:
@@ -43,6 +44,28 @@ jobs:
 
       - name: Tag matches VERSION
         run: python scripts/version.py check --tag "$TAG"
+
+      # The suites run once, in CI on the pull request; this job does not repeat them. A merge
+      # commit is never tested itself, so it counts when its PR head (second parent) passed.
+      - name: CI passed for the tagged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sha=$(git rev-parse "$TAG^{commit}")
+          candidates="$sha"
+          if pr_head=$(git rev-parse --verify --quiet "$sha^2"); then
+            candidates="$candidates $pr_head"
+          fi
+          for candidate in $candidates; do
+            run=$(gh run list --workflow ci.yml --commit "$candidate" --status success \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [ -n "$run" ]; then
+              echo "CI run $run passed for $candidate."
+              exit 0
+            fi
+          done
+          echo "::error::No successful CI run for $TAG ($candidates). Run \`gh workflow run ci.yml --ref $TAG\`, wait for it to pass, then re-run this workflow."
+          exit 1
 
       - name: Install ffmpeg
         uses: FedericoCarboni/setup-ffmpeg@v3
@@ -75,14 +98,6 @@ jobs:
         run: |
           (cd backend && uv sync --locked)
           corepack pnpm install --frozen-lockfile
-
-      # CI runs on pull requests and main only, so the release job runs the suites itself.
-      - name: Backend tests
-        working-directory: backend
-        run: uv run pytest -q -m "not slow"
-
-      - name: Composition, web and desktop tests
-        run: corepack pnpm -r test
 
       - name: Build the installer
         run: python scripts/build_installer.py --smoke
