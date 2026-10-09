@@ -124,9 +124,12 @@ def source_gains_db(loudness_lufs: Mapping[str, float]) -> dict[str, float]:
 
 
 def _source_factors(project: Project) -> dict[str, float]:
-    """Linear voice gain per source: the voice track's volume and the optional normalization."""
+    """Linear voice gain per source: the voice track's volume and the optional normalization.
+
+    A muted voice track gives every source zero gain; its clips still fill their slots.
+    """
     track = next((t for t in project.audio_tracks if t.kind == "voice"), None)
-    volume = track.volume if track is not None else 1.0
+    volume = 1.0 if track is None else 0.0 if track.muted else track.volume
     gains = (
         source_gains_db({source.id: source.loudness_lufs for source in project.sources})
         if project.normalize_sources

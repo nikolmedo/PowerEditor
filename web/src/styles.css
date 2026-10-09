@@ -1385,17 +1385,84 @@ textarea {
   padding: 8px 12px 12px;
 }
 
-.timeline-ruler {
+.timeline-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  margin-left: var(--label-width);
-  color: var(--muted);
-  font-size: 12px;
-  padding-bottom: 4px;
+  gap: 12px;
+  padding-bottom: 6px;
 }
 
-.timeline-ruler span:first-child {
+.timeline-time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.timeline-time span {
   color: var(--accent);
+}
+
+.timeline-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.timeline-zoom button {
+  height: 24px;
+  padding: 0 8px;
+}
+
+.timeline-zoom .mono {
+  min-width: 48px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* The lanes are `--zoom` times as wide as the visible area right of the labels, so every
+   position stays a percentage of the lane; the labels stay put while the lanes scroll. */
+.timeline-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.timeline-content {
+  width: calc(var(--label-width) + (100% - var(--label-width)) * var(--zoom, 1));
+}
+
+/* Rows are flex, not grid: a sticky grid item could only travel within its own column. */
+.timeline-ruler {
+  display: flex;
+  height: 20px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ruler-corner {
+  flex: 0 0 var(--label-width);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+
+.ruler-lane {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  cursor: text;
+}
+
+.ruler-tick {
+  position: absolute;
+  bottom: 0;
+  height: 100%;
+  padding-left: 3px;
+  border-left: 1px solid var(--line);
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .tracks {
@@ -1403,8 +1470,7 @@ textarea {
 }
 
 .track {
-  display: grid;
-  grid-template-columns: var(--label-width) 1fr;
+  display: flex;
   align-items: center;
   height: 30px;
   border-top: 1px solid var(--line);
@@ -1421,14 +1487,27 @@ textarea {
 }
 
 .track-label {
+  flex: 0 0 var(--label-width);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  background: var(--surface);
   color: var(--muted);
   font-size: 12px;
 }
 
 .lane {
+  flex: 1;
+  min-width: 0;
   position: relative;
   height: 100%;
   cursor: text;
+  /* A bar with a minimum width at the very end must not widen the scroller. */
+  overflow-x: clip;
 }
 
 .clip,
@@ -1513,7 +1592,104 @@ textarea {
 }
 
 .bar-music {
-  border-left-color: var(--ok);
+  height: auto;
+  padding: 0 6px;
+  border: 0;
+  border-left: 2px solid var(--ok);
+  border-radius: 2px;
+  display: block;
+  text-align: left;
+}
+
+.bar-music:hover:not(:disabled) {
+  border-color: var(--ok);
+  filter: brightness(1.15);
+}
+
+.bar-music[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--text);
+}
+
+/* The clips' own audio: the clip's hue, toned down, over a waveform-like stripe. */
+.voice-segment {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--clip) 70%, transparent) 0 1px,
+      transparent 1px 3px
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 25%,
+      color-mix(in srgb, var(--clip) 35%, transparent) 25% 75%,
+      transparent 75%
+    ),
+    color-mix(in srgb, var(--clip) 22%, var(--surface));
+  box-shadow: inset -1px 0 0 rgb(0 0 0 / 0.35);
+}
+
+.voice-segment:hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+
+.voice-segment[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+/* A segment at level 0 or a muted voice track is silent: flat and striped. */
+.voice-segment[data-silent],
+.track[data-muted] .voice-segment {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--clip) 30%, transparent) 0 4px,
+      transparent 4px 8px
+    ),
+    var(--surface-2);
+  opacity: 0.55;
+}
+
+.track[data-muted] .bar-music {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.track[data-selected] .track-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.track[data-selected] .lane {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.track-mute {
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.track-mute[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.audio-section[data-focused] {
+  margin: -6px;
+  padding: 6px;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* Overlays on the Graphics track: the body drags, the edges resize. */
@@ -1576,6 +1752,7 @@ textarea {
 
 .playhead-layer {
   position: absolute;
+  z-index: 1;
   inset: 0 0 0 var(--label-width);
   pointer-events: none;
 }

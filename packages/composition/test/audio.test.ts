@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   duckFraction,
   musicGain,
+  musicTrack,
   sourceGainsDb,
   speechIntervals,
   voiceGains,
@@ -72,5 +73,50 @@ describe("voiceGains", () => {
     const normalized = voiceGains({ ...project, normalizeSources: true });
     expect(normalized.get("a")).toBeCloseTo(0.5 * 10 ** (3 / 20), 9);
     expect(normalized.get("b")).toBeCloseTo(0.5 * 10 ** (-3 / 20), 9);
+  });
+
+  it("is zero for every source when the voice track is muted", () => {
+    const muted: Project = {
+      ...project,
+      normalizeSources: true,
+      audioTracks: [
+        { id: "voice", kind: "voice", volume: 0.5, duckingEnabled: false, muted: true },
+      ],
+    };
+    expect(voiceGains(muted)).toEqual(
+      new Map([
+        ["a", 0],
+        ["b", 0],
+      ]),
+    );
+  });
+});
+
+describe("musicTrack", () => {
+  const base = projectFixture.project as Project;
+  const voice = { id: "voice", kind: "voice", volume: 1, duckingEnabled: false } as const;
+  const music = {
+    id: "music",
+    kind: "music",
+    sourcePath: "music-1.mp3",
+    volume: 0.5,
+    duckingEnabled: true,
+  } as const;
+
+  it("is the first music track with a file", () => {
+    expect(musicTrack({ ...base, audioTracks: [voice, music] })).toEqual(music);
+    expect(
+      musicTrack({ ...base, audioTracks: [voice, { ...music, sourcePath: null }] }),
+    ).toBeUndefined();
+  });
+
+  it("is absent when the music track is muted, so the preview plays no music", () => {
+    expect(
+      musicTrack({ ...base, audioTracks: [voice, { ...music, muted: true }] }),
+    ).toBeUndefined();
+    expect(musicTrack({ ...base, audioTracks: [voice, { ...music, muted: false }] })).toEqual({
+      ...music,
+      muted: false,
+    });
   });
 });

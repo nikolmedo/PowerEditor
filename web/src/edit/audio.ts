@@ -1,7 +1,7 @@
 import type { AudioTrack, Project } from "@powereditor/composition";
 
 /**
- * Pure audio edits (see `operations.ts` for the conventions): track volume, ducking, the
+ * Pure audio edits (see `operations.ts` for the conventions): track volume and mute, ducking, the
  * music track and source loudness matching. Values are clamped to the backend's ranges.
  */
 
@@ -37,6 +37,13 @@ export function setTrackVolume(project: Project, trackId: string, volume: number
     ...track,
     volume: clamp(volume, TRACK_VOLUME_RANGE),
   }));
+}
+
+/** A muted track keeps its volume; unmuting brings it back at the same level. */
+export function setTrackMuted(project: Project, trackId: string, muted: boolean): Project {
+  return updateTrack(project, trackId, (track) =>
+    (track.muted ?? false) === muted ? track : { ...track, muted },
+  );
 }
 
 export function setDucking(

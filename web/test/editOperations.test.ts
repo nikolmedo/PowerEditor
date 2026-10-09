@@ -52,6 +52,13 @@ describe("swapTake", () => {
     expect(clip(swapped, "k1").decisionConfidence).toBeNull();
   });
 
+  it("keeps the slot's volume, so a level set on the segment survives a take change", () => {
+    const levelled = setClipVolume(setClipVolume(PROJECT, "k1", 0.4), "r1", 1.5);
+    const result = swapTake(levelled, "k1", "r1");
+    expect(clip(result, "r1").volume).toBe(0.4);
+    expect(clip(result, "k1").volume).toBe(1.5);
+  });
+
   it("ignores a clip that is not one of the take's alternatives", () => {
     expect(swapTake(PROJECT, "k1", "k2")).toBe(PROJECT);
   });

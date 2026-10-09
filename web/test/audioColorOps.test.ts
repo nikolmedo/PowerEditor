@@ -6,6 +6,7 @@ import {
   setDucking,
   setMusic,
   setNormalizeSources,
+  setTrackMuted,
   setTrackVolume,
 } from "../src/edit/audio";
 import {
@@ -67,6 +68,16 @@ describe("audio edits", () => {
   it("removes the music track and nothing else", () => {
     expect(removeMusic(PROJECT).audioTracks.map((t) => t.id)).toEqual(["voice"]);
     expect(removeMusic(WITHOUT_MUSIC)).toBe(WITHOUT_MUSIC);
+  });
+
+  it("mutes and unmutes a track, and leaves the project untouched when nothing changes", () => {
+    const muted = setTrackMuted(PROJECT, "voice", true);
+    expect(track(muted, "voice")?.muted).toBe(true);
+    expect(track(muted, "m1")).toBe(track(PROJECT, "m1"));
+    expect(track(setTrackMuted(muted, "voice", false), "voice")?.muted).toBe(false);
+    expect(setTrackMuted(PROJECT, "voice", false)).toBe(PROJECT);
+    expect(setTrackMuted(muted, "voice", true)).toBe(muted);
+    expect(setTrackMuted(PROJECT, "missing", true)).toBe(PROJECT);
   });
 
   it("turns source loudness matching on and off", () => {

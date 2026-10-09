@@ -161,6 +161,19 @@ def test_clip_gain_includes_the_voice_track_and_optional_source_normalization() 
     assert _clip_volumes(normalized) == pytest.approx([0.5 * 10 ** (3 / 20), 0.5 * 10 ** (-3 / 20)])
 
 
+def test_a_muted_voice_track_keeps_every_clip_at_zero_gain() -> None:
+    project = _project([("c1", "a", 0.0, 1.0, 1.0), ("c2", "b", 0.0, 1.0, 0.5)])
+    project.audio_tracks[0].muted = True
+    media = {"a": Path("a.wav"), "b": Path("b.wav")}
+
+    graph = build_voice_filtergraph(
+        project.model_copy(update={"normalize_sources": True}), 15, media
+    )
+
+    assert _clip_volumes(graph) == [0.0, 0.0]
+    assert [segment.samples for segment in graph.segments] == [RATE, 2 * RATE]
+
+
 @pytest.mark.parametrize(
     ("speed", "stages"),
     [(1.0, []), (0.75, [0.75]), (2.0, [2.0]), (3.0, [2.0, 1.5]), (0.25, [0.5, 0.5])],
