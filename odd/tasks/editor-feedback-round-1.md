@@ -77,6 +77,7 @@ T1 is split into four commits.
   - One advisory finding was not blocking: `segmentation.py:101` drops a phrase made only of zero-duration words, and no test covers that case. Add a test in T1c.
 
 ## Next step
+0. `.github/FUNDING.yml` (copied from nikolmedo/ClaudePulse; `github: [nikolmedo]`) sits uncommitted in the tree. The user asked to ship it inside the next change commit (T1b), not in a commit of its own.
 1. Do T1b, then T1c and T1d.
 2. Then T2, then T3.
 
