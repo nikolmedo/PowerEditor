@@ -1506,6 +1506,8 @@ textarea {
   position: relative;
   height: 100%;
   cursor: text;
+  /* A bar with a minimum width at the very end must not widen the scroller. */
+  overflow-x: clip;
 }
 
 .clip,
