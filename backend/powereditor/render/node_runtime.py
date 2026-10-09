@@ -1,9 +1,11 @@
 """Locate a Node.js binary able to run Remotion's native compositor.
 
-Remotion publishes a compositor for win32-x64 but not win32-arm64, so on Windows
-the renderer needs an x64 Node (it runs under emulation on ARM64 hosts). The host
-architecture cannot be read from Python here: an emulated x64 Python reports AMD64.
-Each candidate is therefore asked for its own `process.arch`.
+Remotion publishes a compositor for win32-x64 but not win32-arm64. On Windows the
+renderer therefore accepts an x64 Node or a native arm64 one: under arm64, the render
+script points Remotion at the x64 compositor (`binariesDirectory`), which runs as its own
+process that Windows emulates. The host architecture cannot be read from Python here: an
+emulated x64 Python reports AMD64. Each candidate is therefore asked for its own
+`process.arch`.
 """
 
 import shutil
@@ -16,6 +18,8 @@ from powereditor.process import hidden_console_flags
 from powereditor.resources import tool_candidates
 
 PROBE_TIMEOUT_S = 15
+# Node architectures that can drive the win32-x64 compositor.
+WINDOWS_ARCHES = frozenset({"x64", "arm64"})
 
 ArchProbe = Callable[[str], str | None]
 
@@ -54,16 +58,16 @@ def resolve_render_node(
     runtime_dir: Path | None = None,
 ) -> str:
     """First usable Node, in the order of `resources.tool_candidates`, checked for its arch."""
-    required = "x64" if platform == "win32" else None
+    accepted = WINDOWS_ARCHES if platform == "win32" else None
     candidates = tool_candidates("node", configured, bin_dir, runtime_dir, which)
     for candidate in candidates:
         arch = probe_arch(candidate)
-        if arch is not None and (required is None or arch == required):
+        if arch is not None and (accepted is None or arch in accepted):
             return candidate
-    if required is None:
+    if accepted is None:
         raise NodeRuntimeError("Node.js not found; configure nodePath in settings", "missing_node")
     raise NodeRuntimeError(
-        f"rendering on {platform} needs an {required} Node.js (Remotion has no compositor for "
-        f"other architectures); set nodePath or run `powereditor runtime install node`",
-        f"missing_node_{required}",
+        f"rendering on {platform} needs an x64 or arm64 Node.js (Remotion has no compositor "
+        f"for other architectures); set nodePath or run `powereditor runtime install node`",
+        "missing_node_x64",
     )

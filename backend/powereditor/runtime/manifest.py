@@ -1,8 +1,9 @@
 """Pinned runtimes the app downloads into `<data dir>/bin/<name>-<version>[-<arch>]/` at first run.
 
 The packaged app is x64 and runs emulated on Windows ARM64. FFmpeg also has a native ARM64
-build, chosen from the real host architecture (`runtime.host`); Node stays x64 because
-Remotion has no win32-arm64 compositor.
+build, chosen from the real host architecture (`runtime.host`); the downloaded Node stays
+x64, which runs everywhere (Remotion has no win32-arm64 compositor). A native arm64 Node
+the user already has renders too (`render.node_runtime`).
 
 - **ffmpeg**: BtbN FFmpeg-Builds, LGPL variant (no GPL code, so no libx264; ingest uses
   hardware encoders or Media Foundation, then libopenh264). Pinned to a month-end autobuild
