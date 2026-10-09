@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { APP_USER_MODEL_ID } from "../src/updater";
 
 interface Manifest {
-  build: { extraResources: { from: string; to: string }[] };
+  build: { appId: string; extraResources: { from: string; to: string }[] };
 }
 
 const desktop = path.join(__dirname, "..");
@@ -23,5 +24,11 @@ describe("installer resources", () => {
     const text = fs.readFileSync(path.join(desktop, gpl?.from ?? ""), "utf-8");
     expect(text).toContain("GNU GENERAL PUBLIC LICENSE");
     expect(text).toContain("Version 2, June 1991");
+  });
+});
+
+describe("app identity", () => {
+  it("names the app with the installer's AppUserModelID, so its notifications reach Windows", () => {
+    expect(APP_USER_MODEL_ID).toBe(manifest.build.appId);
   });
 });

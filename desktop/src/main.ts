@@ -10,6 +10,7 @@ import {
   ipcMain,
   Menu,
   net,
+  Notification,
   session,
   shell,
   type IpcMainInvokeEvent,
@@ -33,7 +34,7 @@ import {
   type Ready,
 } from "./sidecar";
 import { showSplash } from "./splash";
-import { UpdateDownloader } from "./updater";
+import { APP_USER_MODEL_ID, UpdateAnnouncements, UpdateDownloader } from "./updater";
 import { rememberWindowState, savedWindowOptions } from "./windowState";
 
 const READY_TIMEOUT_S = 90;
@@ -42,6 +43,8 @@ const ALLOWED_PERMISSIONS = new Set(["fullscreen", "clipboard-sanitized-write"])
 
 app.setName(APP_NAME);
 app.setPath("userData", path.join(app.getPath("appData"), APP_NAME));
+// Windows attributes notifications to the shortcut with this ID; without it they are dropped.
+if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
 const logDir = path.join(app.getPath("userData"), "logs");
 const repoRoot = path.resolve(__dirname, "..", "..");
 
@@ -163,8 +166,18 @@ function fromApp(event: IpcMainInvokeEvent): boolean {
   return appOrigin !== null && isAppUrl(event.senderFrame?.url ?? "", appOrigin);
 }
 
+/** Bring the main window to the front (from a second instance or a notification click). */
+function showMainWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 /** IPC for the web app's "Download" button: fetch and verify a release installer, then run
- * it and quit, so the per-user NSIS installer upgrades this installation in place. */
+ * it silently and quit; the per-user NSIS installer upgrades this installation in place and
+ * starts the new version. Also announces an update the web app found on its own with a
+ * system notification (the renderer's own notification permission stays denied). */
 function registerUpdater(t: Translate): void {
   const directory = path.join(app.getPath("temp"), "PowerEditor-update");
   const updates = new UpdateDownloader({
@@ -187,8 +200,8 @@ function registerUpdater(t: Translate): void {
     const installer = updates.installerPath();
     if (!fromApp(event) || !installer) return false;
     log(`running installer ${installer}`);
-    const launch = await launchInstaller(installer, directory, (file) =>
-      spawn(file, [], { detached: true, stdio: "ignore", windowsHide: true }),
+    const launch = await launchInstaller(installer, directory, (file, args) =>
+      spawn(file, args, { detached: true, stdio: "ignore", windowsHide: true }),
     );
     if (launch.started) {
       app.quit();
@@ -200,6 +213,24 @@ function registerUpdater(t: Translate): void {
       `${t("update.installFailed", { message: launch.detail })}\n\n${t("error.logHint", { path: logDir })}`,
     );
     return false;
+  });
+  const announcements = new UpdateAnnouncements();
+  // Held until dismissed: a notification that is garbage collected loses its click handler.
+  const shown = new Set<Notification>();
+  ipcMain.handle("updates:notify", (event, version: unknown) => {
+    if (!fromApp(event) || !Notification.isSupported() || !announcements.claim(version)) {
+      return false;
+    }
+    log(`announcing update ${version}`);
+    const notification = new Notification({
+      title: t("update.availableTitle", { version }),
+      body: t("update.availableBody"),
+    });
+    notification.on("click", showMainWindow);
+    notification.on("close", () => shown.delete(notification));
+    shown.add(notification);
+    notification.show();
+    return true;
   });
 }
 
@@ -269,11 +300,7 @@ async function start(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  });
+  app.on("second-instance", showMainWindow);
   app.on("window-all-closed", () => app.quit());
   app.on("will-quit", (event) => {
     if (!sidecar || !isAlive(sidecar)) return;

@@ -23,6 +23,29 @@ const ASSET_STORAGE_HOSTS: ReadonlySet<string> = new Set([
 ]);
 const PROGRESS_INTERVAL_MS = 250;
 
+/** The Windows AppUserModelID of the app. It must equal `build.appId` in package.json: the
+ * installer stamps that ID on the Start menu shortcut, and Windows shows a notification only
+ * for an ID that a shortcut carries. */
+export const APP_USER_MODEL_ID = "io.github.nikolmedo.powereditor";
+
+/** True for a release version the updater accepts ("1.2.3": no prefix, no pre-release). */
+export function isReleaseVersion(value: unknown): value is string {
+  return typeof value === "string" && SEMVER.test(value);
+}
+
+/** The versions announced with a system notification in this run, so the web app can ask on
+ * every check without the user getting the same notification twice. */
+export class UpdateAnnouncements {
+  private readonly announced = new Set<string>();
+
+  /** True, once, for a release version not announced yet; false for anything else. */
+  claim(version: unknown): version is string {
+    if (!isReleaseVersion(version) || this.announced.has(version)) return false;
+    this.announced.add(version);
+    return true;
+  }
+}
+
 export interface DownloadTimeouts {
   /** The whole download, checksum file included. */
   totalMs: number;
@@ -89,7 +112,7 @@ export function isAllowedRedirect(url: string): boolean {
 /** The installer electron-builder names `PowerEditor-Setup-<version>-x64.exe`, and the
  * checksum file, of release `v<version>`; null unless `version` is plain semver. */
 export function releaseAssets(version: string): ReleaseAssets | null {
-  if (!SEMVER.test(version)) return null;
+  if (!isReleaseVersion(version)) return null;
   const base = `https://github.com${RELEASES_PATH}v${version}/`;
   const installerName = `PowerEditor-Setup-${version}-x64.exe`;
   return {

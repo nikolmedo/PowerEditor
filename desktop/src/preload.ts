@@ -19,8 +19,13 @@ contextBridge.exposeInMainWorld(
        * state (null when the shell refused the call). */
       download: (version: string): Promise<UpdateState | null> =>
         ipcRenderer.invoke("updates:download", version),
-      /** Run the verified installer and quit; false when there is none ready. */
+      /** Quit and install the verified installer silently; the new version starts on its
+       * own. False when there is none ready. */
       installAndQuit: (): Promise<boolean> => ipcRenderer.invoke("updates:installAndQuit"),
+      /** Announce that `version` is available with a system notification, once per version
+       * and run; false when nothing was shown. */
+      notifyAvailable: (version: string): Promise<boolean> =>
+        ipcRenderer.invoke("updates:notify", version),
       /** Follow download progress; returns a function that stops listening. */
       onState: (listener: (state: UpdateState) => void): (() => void) => {
         const forward = (_event: IpcRendererEvent, state: UpdateState) => listener(state);

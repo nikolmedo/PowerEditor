@@ -11,5 +11,7 @@
   "action.restart": "Restart",
   "action.quit": "Quit",
   "update.installTitle": "The update could not be installed",
-  "update.installFailed": "The installer could not be started: {message}"
+  "update.installFailed": "The installer could not be started: {message}",
+  "update.availableTitle": "PowerEditor {version} is available",
+  "update.availableBody": "Open PowerEditor to download the update and restart into it."
 }

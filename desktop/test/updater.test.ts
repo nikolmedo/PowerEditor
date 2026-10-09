@@ -5,6 +5,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   isAllowedRedirect,
+  isReleaseVersion,
+  UpdateAnnouncements,
   isAllowedReleaseAsset,
   parseSha256Sums,
   releaseAssets,
@@ -349,5 +351,33 @@ describe("UpdateDownloader", () => {
     vi.useRealTimers();
 
     expect(await updates.download("0.2.0")).toEqual({ status: "ready", version: "0.2.0" });
+  });
+});
+
+describe("isReleaseVersion", () => {
+  it("accepts plain semantic versions only", () => {
+    expect(isReleaseVersion("0.2.0")).toBe(true);
+    expect(isReleaseVersion("10.20.30")).toBe(true);
+    for (const value of ["v0.2.0", "0.2", "0.2.0-beta", "01.2.3", "", 2, null, undefined]) {
+      expect(isReleaseVersion(value)).toBe(false);
+    }
+  });
+});
+
+describe("UpdateAnnouncements", () => {
+  it("announces each version once per run", () => {
+    const announcements = new UpdateAnnouncements();
+
+    expect(announcements.claim("0.2.0")).toBe(true);
+    expect(announcements.claim("0.2.0")).toBe(false);
+    expect(announcements.claim("0.3.0")).toBe(true);
+  });
+
+  it("never announces something that is not a release version", () => {
+    const announcements = new UpdateAnnouncements();
+
+    expect(announcements.claim("../0.2.0")).toBe(false);
+    expect(announcements.claim({ version: "0.2.0" })).toBe(false);
+    expect(announcements.claim("0.2.0")).toBe(true);
   });
 });
