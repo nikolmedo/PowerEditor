@@ -23,6 +23,7 @@ export interface AudioTrack {
   duckingEnabled: boolean;
   id: string;
   kind: "voice" | "music" | "sfx";
+  muted?: boolean;
   sourcePath?: string | null;
   volume: number;
 }

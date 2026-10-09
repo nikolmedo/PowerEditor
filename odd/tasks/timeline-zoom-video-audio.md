@@ -28,7 +28,7 @@ Make the review timeline navigable on small screens and long videos with zoom an
 
 ## Tasks
 - [x] T1 Timeline zoom + horizontal scroll. Route: delegated writer (3+ non-trivial files). RED: 9 failing (timelineModel zoom/ruler, editorKeys zoom keys), then green. Zoom ×1.5 per step, cap min(200 px/s, 64×); Ctrl/Cmd+wheel and pinch zoom about the pointer; Shift+wheel scrolls; `=`/`+`/`-`/`\` keys; playhead follow pages the view when the frame moves; ruler ticks at round intervals ≥ 75 px apart. Sticky labels need flex rows (a sticky grid item stays in its grid area).
-- [ ] T2 `AudioTrack.muted` in model, preview and render. Route: delegated writer (backend + composition).
+- [x] T2 `AudioTrack.muted` in model, preview and render. Route: delegated writer (backend + composition). RED: 6 backend + 3 composition failing, then green. Voice muted → every clip gain 0 (filtergraph unchanged, timing intact); music muted → `music_track` (Python) / `musicTrack` (TS) return nothing, so preview and render skip it and a missing file never raises. T1 review: consented, approved (reliability lens, one informational warning: wheel/follow wiring not covered by tests), acknowledged.
 - [ ] T3 Voice lane, track selection and mute UI; `swapTake` keeps volume. Route: delegated writer (3+ non-trivial files).
 
 ## Acceptance criteria
@@ -39,3 +39,4 @@ Make the review timeline navigable on small screens and long videos with zoom an
 ## Progress
 - Exploration done (timeline is percent-based; voice audio is each clip's own media with gain = voice track volume × normalize gain × clip volume; no mute anywhere; ClipPanel already edits clip volume).
 - T1 verification (worktree root): `corepack pnpm typecheck` pass; `corepack pnpm lint` pass; web tests 208 pass; web build pass; `format:check` pass. Not yet checked in a real browser.
+- T2 verification: ruff, ruff format, mypy, schema_gen --check pass; pytest 741 passed; typecheck, lint, composition tests 97, check:types, format:check pass.

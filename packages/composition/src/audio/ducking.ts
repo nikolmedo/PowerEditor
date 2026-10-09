@@ -1,4 +1,4 @@
-import type { Project } from "../types";
+import type { AudioTrack, Project } from "../types";
 
 /**
  * Music ducking and voice gains for the Player preview, mirroring the backend
@@ -88,11 +88,21 @@ export function sourceGainsDb(loudness: Readonly<Record<string, number>>): Recor
   );
 }
 
-/** Linear voice gain per source id: the voice track's volume and the optional source match. */
+/**
+ * Linear voice gain per source id: the voice track's volume and the optional source match.
+ * A muted voice track gives every source zero gain.
+ */
 export function voiceGains(project: Project): Map<string, number> {
-  const volume = project.audioTracks.find((track) => track.kind === "voice")?.volume ?? 1;
+  const voice = project.audioTracks.find((track) => track.kind === "voice");
+  const volume = voice?.muted ? 0 : (voice?.volume ?? 1);
   const gains = project.normalizeSources
     ? sourceGainsDb(Object.fromEntries(project.sources.map((s) => [s.id, s.loudnessLufs])))
     : {};
   return new Map(project.sources.map((s) => [s.id, volume * dbToGain(gains[s.id] ?? 0)]));
+}
+
+/** The music track the preview plays: the first one with a file, unless it is muted. */
+export function musicTrack(project: Project): AudioTrack | undefined {
+  const track = project.audioTracks.find((t) => t.kind === "music" && t.sourcePath);
+  return track?.muted ? undefined : track;
 }

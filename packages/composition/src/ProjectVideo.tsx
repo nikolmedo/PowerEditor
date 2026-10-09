@@ -1,7 +1,7 @@
 import { useContext } from "react";
 import { AbsoluteFill, Series } from "remotion";
 
-import { speechIntervals, voiceGains } from "./audio/ducking";
+import { musicTrack, speechIntervals, voiceGains } from "./audio/ducking";
 import { Music } from "./audio/Music";
 import { ClipVideo } from "./clips/ClipVideo";
 import { edgeFadeFrames } from "./clips/edgeFade";
@@ -46,7 +46,7 @@ export const ProjectVideo: React.FC<ProjectVideoProps> = ({
   const sources = new Map<string, Source>(project.sources.map((source) => [source.id, source]));
   const fadeFrames = edgeFadeFrames(audioCrossfadeMs, project.fps);
   const gains = voiceGains(project);
-  const music = project.audioTracks.find((track) => track.kind === "music" && track.sourcePath);
+  const music = musicTrack(project);
   const layout = timelineLayout(project);
   // Zero-length clips still count toward the layout but cannot become sequences.
   const placements = layout.clips.filter((placement) => placement.durationInFrames > 0);
