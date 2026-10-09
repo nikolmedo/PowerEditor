@@ -359,9 +359,17 @@ CI (`.github/workflows/ci.yml`) runs the same commands on Windows and Linux.
 
 `VERSION` (semver `x.y.z`) is the single version source. `python scripts/version.py set x.y.z` writes it into `backend/pyproject.toml`, `backend/powereditor/__init__.py`, `backend/uv.lock` and the `package.json` of `packages/composition`, `web` and `desktop` (electron-builder names the installer from the desktop one); `show` prints it and `check` fails on any disagreement (CI runs it).
 
+**Before every `git push`, an agent checks whether the branch needs a version bump and, when it does, makes it on its own without asking:**
+
+1. Find the last released version: `git fetch --tags` and `git tag --list "v*" --sort=-v:refname` (first entry), and the current one: `python scripts/version.py show`.
+2. Read the Conventional Commit types in `<last tag>..HEAD`. The required bump is the largest of: a breaking change (`type!:` or a `BREAKING CHANGE:` footer) → major (minor while the major is `0`); `feat` → minor; `fix` or `perf` → patch. `docs`, `test`, `ci`, `build`, `chore`, `refactor` and `style` alone need no bump.
+3. When a bump is required and `VERSION` is not already at or above that version, run `python scripts/version.py set x.y.z`, then `python scripts/version.py check`, and commit the result on the same branch as `chore: release x.y.z` before pushing. Never edit the version by hand, and never bump twice for one release (a branch that already carries the bump is left alone).
+4. The version lives in exactly these places, all written by `version.py set`: `VERSION`, `backend/pyproject.toml` (`[project] version`), `backend/powereditor/__init__.py` (`__version__`), `backend/uv.lock` (the `powereditor` package entry), `packages/composition/package.json`, `web/package.json` and `desktop/package.json` (`"version"`, which also names the installer). A new file that carries the version must be added to `SPOTS` in `scripts/version.py`, never updated separately.
+5. After the branch is merged, tag and release it as below (steps 2–4).
+
 To cut a release:
 
-1. `python scripts/version.py set x.y.z`, then commit (`chore: release x.y.z`) and merge to `main`.
+1. `python scripts/version.py set x.y.z`, then commit (`chore: release x.y.z`) and merge to `main` (already done when the bump went in before the push, as above).
 2. `git tag vx.y.z` on that commit and `git push origin vx.y.z`.
 3. `.github/workflows/release.yml` (windows-latest x64; also `workflow_dispatch` with a `tag`) checks the tag against `VERSION`, runs the backend and pnpm test suites, runs `python scripts/build_installer.py --smoke`, writes `SHA256SUMS.txt` (`scripts/checksums.py`) and the notes (`scripts/release_notes.py`: Features, Fixes and Docs from the Conventional Commits since the previous tag), and creates a **draft** release with the installer, the checksums, `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 4. A maintainer reviews the draft (notes, assets, the licensing items open in `PLAN.md`) and publishes it. Only then do installed apps see it: `releases/latest` never returns drafts or prereleases.
