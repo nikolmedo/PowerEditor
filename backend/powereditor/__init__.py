@@ -2,7 +2,7 @@
 
 from importlib import metadata
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 """Kept equal to `version` in pyproject.toml (a test checks it); used when the installed
 package metadata cannot be read, as can happen in a frozen build."""
 
