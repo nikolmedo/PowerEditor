@@ -50,7 +50,7 @@
   "setup.optional": "Opcional",
   "setup.hint.ffmpeg": "Instala FFmpeg 7 o posterior, o indica su ruta en Configuración › General.",
   "setup.hint.ffprobe": "ffprobe viene con FFmpeg; indica su ruta si no está en PATH.",
-  "setup.hint.node": "Instala Node.js 24. En Windows ARM64 el render necesita un Node x64 (ruta en General).",
+  "setup.hint.node": "Instala Node.js 24 (x64 o ARM64; ruta en General).",
   "setup.hint.pnpm": "pnpm se activa con Corepack, incluido en Node.js 24.",
   "setup.hint.cuda": "Sin GPU NVIDIA, Whisper transcribe con el procesador (más lento).",
   "setup.transcription": "Transcripción",

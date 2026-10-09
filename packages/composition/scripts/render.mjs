@@ -17,8 +17,11 @@
 //   {"event":"done","ms":...,"frames":...}
 //   {"event":"error","message":"..."}   (then exits with code 1)
 // The output is video only: the backend rebuilds the audio sample-accurately with ffmpeg.
-// Run it with the Node binary that matches the installed Remotion compositor (x64 on Windows).
+// On Windows run it with an x64 or arm64 Node. Remotion only ships a win32-x64 compositor:
+// under arm64 the script points Remotion at it (`binariesDirectory`) and Windows emulates it
+// as a separate process. Every other platform and arch uses Remotion's own lookup.
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -48,6 +51,23 @@ if (!values.props || !values.output) {
     "usage: render.mjs --props <props.json> --output <file.mp4> [--concurrency <n>]\n",
   );
   process.exit(2);
+}
+
+/**
+ * `binariesDirectory` for Remotion on a Windows arm64 Node: the x64 compositor's folder,
+ * resolved from `@remotion/renderer` the way Remotion itself does under x64. Empty anywhere
+ * else, so those renders keep Remotion's defaults.
+ */
+function compositorOptions() {
+  if (process.platform !== "win32" || process.arch !== "arm64") return {};
+  const compositor = "@remotion/compositor-win32-x64-msvc";
+  try {
+    const renderer = createRequire(import.meta.url).resolve("@remotion/renderer");
+    return { binariesDirectory: createRequire(renderer)(compositor).dir };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`rendering on Windows arm64 needs ${compositor} installed: ${reason}`);
+  }
 }
 
 /** Remotion options for the flags given, as numbers; absent flags are left out. */
@@ -91,7 +111,13 @@ async function render() {
   });
 
   const renderStart = performance.now();
-  const composition = await selectComposition({ serveUrl, id: compositionId, inputProps });
+  const compositor = compositorOptions();
+  const composition = await selectComposition({
+    serveUrl,
+    id: compositionId,
+    inputProps,
+    ...compositor,
+  });
   let lastReported = -1;
   await renderMedia({
     composition,
@@ -103,6 +129,7 @@ async function render() {
     // Remotion changes volume only per video frame, which clicks at cuts.
     muted: true,
     ...qualityOptions(),
+    ...compositor,
     onProgress: ({ progress }) => {
       const percent = Math.floor(progress * 100);
       if (percent !== lastReported) {

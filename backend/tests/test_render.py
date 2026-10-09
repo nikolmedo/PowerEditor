@@ -208,13 +208,18 @@ def test_render_node_prefers_the_configured_binary(tmp_path: Path) -> None:
     assert node == configured
 
 
-def test_render_node_skips_arm64_and_falls_back_to_bundled_x64(tmp_path: Path) -> None:
+def test_render_node_keeps_an_earlier_x64_candidate_over_a_system_arm64_one(
+    tmp_path: Path,
+) -> None:
     bundled = str(_file(tmp_path / "bin" / "node-x64" / "node.exe"))
     probe = ArchProbe({"/usr/node": "arm64", bundled: "x64"})
 
-    node = resolve_render_node(None, tmp_path / "bin", probe, which=lambda _: "/usr/node")
+    node = resolve_render_node(
+        None, tmp_path / "bin", probe, which=lambda _: "/usr/node", platform="win32"
+    )
 
     assert node == bundled
+    assert probe.probed == [bundled]
 
 
 def test_render_node_prefers_the_downloaded_runtime_then_the_bundled_one(tmp_path: Path) -> None:
@@ -234,8 +239,40 @@ def test_render_node_prefers_the_downloaded_runtime_then_the_bundled_one(tmp_pat
     assert node == downloaded
 
 
-def test_render_node_rejects_a_system_arm64_node_on_windows(tmp_path: Path) -> None:
+def test_render_node_accepts_a_system_arm64_node_on_windows(tmp_path: Path) -> None:
     probe = ArchProbe({"/usr/node": "arm64"})
+
+    node = resolve_render_node(
+        None, tmp_path / "bin", probe, which=lambda _: "/usr/node", platform="win32"
+    )
+
+    assert node == "/usr/node"
+
+
+def test_render_node_accepts_an_x64_node_on_windows(tmp_path: Path) -> None:
+    probe = ArchProbe({"/usr/node": "x64"})
+
+    node = resolve_render_node(
+        None, tmp_path / "bin", probe, which=lambda _: "/usr/node", platform="win32"
+    )
+
+    assert node == "/usr/node"
+
+
+def test_render_node_skips_other_arches_on_windows(tmp_path: Path) -> None:
+    configured = str(_file(tmp_path / "custom" / "node.exe"))
+    probe = ArchProbe({configured: "ia32", "/usr/node": "arm64"})
+
+    node = resolve_render_node(
+        configured, tmp_path / "bin", probe, which=lambda _: "/usr/node", platform="win32"
+    )
+
+    assert node == "/usr/node"
+    assert probe.probed == [configured, "/usr/node"]
+
+
+def test_render_node_rejects_an_unsupported_arch_on_windows(tmp_path: Path) -> None:
+    probe = ArchProbe({"/usr/node": "ia32"})
 
     with pytest.raises(NodeRuntimeError) as excinfo:
         resolve_render_node(
@@ -254,6 +291,25 @@ def test_render_node_accepts_any_arch_outside_windows(tmp_path: Path) -> None:
     )
 
     assert node == "/usr/bin/node"
+
+
+def test_render_node_accepts_any_arch_on_linux(tmp_path: Path) -> None:
+    probe = ArchProbe({"/usr/bin/node": "ia32"})
+
+    node = resolve_render_node(
+        None, tmp_path / "bin", probe, which=lambda _: "/usr/bin/node", platform="linux"
+    )
+
+    assert node == "/usr/bin/node"
+
+
+def test_render_node_reports_missing_node_outside_windows(tmp_path: Path) -> None:
+    with pytest.raises(NodeRuntimeError) as excinfo:
+        resolve_render_node(
+            None, tmp_path / "bin", ArchProbe({}), which=lambda _: None, platform="linux"
+        )
+
+    assert excinfo.value.code == "missing_node"
 
 
 # --- media server ---------------------------------------------------------------------
