@@ -44,6 +44,16 @@ def test_text_similarity_compares_short_phrases_by_whole_words() -> None:
     assert similarity("Gracias.", "gracias") == 1.0
 
 
+def test_text_similarity_matches_a_fragment_said_inside_a_line() -> None:
+    similarity = TextSimilarity(language="es")
+    line = "Me hubiera gustado saber esto antes de empezar a correr"
+
+    assert similarity("antes", line) == 1.0
+    assert similarity(line, "eh, a correr") == 1.0
+    assert similarity("correr antes", line) < 0.5
+    assert similarity("de", line) < 0.5
+
+
 def test_cluster_takes_groups_retakes_and_keeps_script_order() -> None:
     takes = [
         _take(0, "Hola a todos, hoy vamos a hablar de"),
@@ -111,3 +121,49 @@ def test_grey_zone_is_resolved_by_the_engine(value: float, groups: int) -> None:
     clusters = cluster_takes(takes, _FixedSimilarity(value), HeuristicEngine())
 
     assert len(clusters) == groups
+
+
+# SYNTHETIC: modeled on a real retake-heavy recording (fragments around a line, a partial
+# attempt before the full one, fragments between two attempts), with invented text.
+RETAKE_SESSION = [
+    "Me hubiera gustado saber esto antes de empezar a correr",
+    "Eh, me hubiera gustado saber esto antes de empezar a correr",
+    "Me hubiera gustado",
+    "antes",
+    "a correr",
+    "Ojalá alguien me hubiera contado esto antes de empezar a correr",
+    "Me hubiera",
+    "Antes de cada carrera conviene estirar bien las piernas",
+    "Entrenando para una maratón",
+    "una maratón tenés que reorganizar toda tu semana pensar tus horarios pensar tus comidas",
+    "Entrenando para una maratón con un trabajo full time tenés que reorganizar tu semana "
+    "cambiar los horarios las comidas y dormir más de lo normal",
+    "Como corredor principiante es muy difícil saber qué ritmo es bueno y qué ritmo es demasiado",
+    "mirá",
+    "che",
+    "listo",
+    "dale",
+    "vamos",
+    "ufa",
+    "pará",
+    "Como corredor principiante es muy difícil entender qué ritmo es bueno y cuál es demasiado",
+    "El calzado es lo más importante cuando empezás a correr",
+    "Elegir bien el calzado te ahorra lesiones",
+]
+
+
+def test_cluster_takes_absorbs_fragments_and_partial_attempts_of_a_line() -> None:
+    takes = [_take(index, text) for index, text in enumerate(RETAKE_SESSION)]
+
+    clusters = cluster_takes(takes, TextSimilarity(language="es"), HeuristicEngine())
+
+    indices = [[int(take.id.rsplit("-", 1)[1]) for take in cluster] for cluster in clusters]
+    assert indices == [
+        [0, 1, 2, 3, 4, 5, 6],
+        [7],
+        [8, 9, 10],
+        [11, 19],
+        *([index] for index in range(12, 19)),
+        [20],
+        [21],
+    ]

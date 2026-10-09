@@ -4,18 +4,20 @@ import importlib.util
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import accumulate
 from typing import Any, Protocol
 
 from rapidfuzz import fuzz
 
 from powereditor.decide.base import DecisionEngine
 from powereditor.models import Take
-from powereditor.pipeline.take_text import content_tokens
+from powereditor.pipeline.take_text import content_tokens, function_words_for
 
 logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
-# Below this many words, character similarity confuses different short phrases.
+# Below this many words, character similarity confuses different short phrases, so a
+# take this short is a fragment: it matches a line only by being said inside it.
 MIN_FUZZY_WORDS = 3
 
 
@@ -32,7 +34,8 @@ class TextSimilarity:
     """rapidfuzz similarity on filler-free, accent-free text.
 
     `partial_ratio` and `token_set_ratio` both score a cut-off attempt as a match of
-    the complete one. Short phrases compare whole words instead.
+    the complete one. Short phrases compare whole words instead: a fragment said word
+    for word inside the other text is a full match, unless it is only function words.
     """
 
     name = "text"
@@ -46,9 +49,21 @@ class TextSimilarity:
         if not a or not b:
             return 0.0
         if min(len(a), len(b)) < MIN_FUZZY_WORDS:
+            short, other = sorted((a, b), key=len)
+            if _contains(other, short) and set(short) - function_words_for(self.language):
+                return 1.0
             return len(set(a) & set(b)) / len(set(a) | set(b))
         left, right = " ".join(a), " ".join(b)
         return max(fuzz.token_set_ratio(left, right), fuzz.partial_ratio(left, right)) / 100
+
+
+def _contains(words: list[str], run: list[str]) -> bool:
+    size = len(run)
+    return any(words[start : start + size] == run for start in range(len(words) - size + 1))
+
+
+def _is_fragment(take: Take) -> bool:
+    return len(content_tokens(take.text, None)) < MIN_FUZZY_WORDS
 
 
 class EmbeddingSimilarity:
@@ -106,30 +121,53 @@ def cluster_takes(
     engine: DecisionEngine,
     params: ClusterParams | None = None,
 ) -> list[list[Take]]:
-    """Greedy grouping of `takes` (in recording order); groups keep that order.
+    """Grouping of `takes` (in recording order); groups and their takes keep that order.
 
-    Each take joins the most similar earlier group whose last take is inside the
-    window: directly at `same_threshold` or above, through `engine.same_take` in the
-    grey zone. Otherwise it starts a new group.
+    Each take is compared with the earlier groups whose last take is inside the window,
+    which counts full takes only, so a run of fragments does not push a retake out of it.
+    A group matches directly at `same_threshold` or above, through `engine.same_take` in
+    the grey zone. A full take joins its best match and also merges every other group it
+    matches, so an earlier partial attempt is absorbed once the complete line arrives;
+    merging two groups of several takes needs `same_threshold`, a lone take the usual
+    rule. A fragment joins only its best match. Against a full take a group is scored by
+    its full takes only, so a one-word fragment it absorbed does not attract other lines.
     """
     params = params or ClusterParams()
-    groups: list[list[Take]] = []
-    last_index: list[int] = []
+    fragment = [_is_fragment(take) for take in takes]
+    full_seen = list(accumulate(not flag for flag in fragment))
+    groups: list[list[int]] = []
     for index, take in enumerate(takes):
-        best: tuple[float, int] | None = None
+        candidates: list[tuple[float, int, int]] = []
         for group_index, group in enumerate(groups):
-            if not _within_window(group[-1], take, index - last_index[group_index], params):
+            last = group[-1]
+            if not _within_window(takes[last], take, full_seen[index] - full_seen[last], params):
                 continue
-            score = max(similarity(member.text, take.text) for member in group)
-            if best is None or score > best[0]:
-                best = (score, group_index)
-        if best is not None and _joins(best[0], groups[best[1]][-1], take, engine, params):
-            groups[best[1]].append(take)
-            last_index[best[1]] = index
-        else:
-            groups.append([take])
-            last_index.append(index)
-    return groups
+            members = group if fragment[index] else [m for m in group if not fragment[m]]
+            score, anchor = max((similarity(takes[m].text, take.text), m) for m in members or group)
+            candidates.append((score, anchor, group_index))
+        candidates.sort(reverse=True)
+        if fragment[index]:
+            candidates = candidates[:1]
+        matched = {
+            group_index
+            for rank, (score, anchor, group_index) in enumerate(candidates)
+            if score >= params.same_threshold
+            or (
+                (rank == 0 or len(groups[group_index]) == 1)
+                and _joins(score, takes[anchor], take, engine, params)
+            )
+        }
+        if not matched:
+            groups.append([index])
+            continue
+        merged = sorted([index, *(m for g in matched for m in groups[g])])
+        target = min(matched)
+        groups = [
+            merged if g == target else group
+            for g, group in enumerate(groups)
+            if g == target or g not in matched
+        ]
+    return [[takes[m] for m in group] for group in groups]
 
 
 def _joins(

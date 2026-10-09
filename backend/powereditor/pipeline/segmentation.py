@@ -7,7 +7,7 @@ from powereditor.models import CamelModel, Segment, Word
 from powereditor.pipeline.runner import ProgressCallback, ProjectLayout, no_progress, run_stage
 from powereditor.pipeline.vad import Range
 
-SEGMENT_STAGE_VERSION = 1
+SEGMENT_STAGE_VERSION = 2
 DEFAULT_PAUSE_S = 0.6
 SENTENCE_END = (".", "?", "!", "…")
 
@@ -74,7 +74,11 @@ def segment_words(
     duration: float,
     pause_s: float = DEFAULT_PAUSE_S,
 ) -> list[Segment]:
-    """Group words into phrases; split on pauses, sentence ends and long VAD silences."""
+    """Group words into phrases; split on pauses, sentence ends and long VAD silences.
+
+    A phrase whose span, once trimmed to speech, overlaps none of its words is dropped:
+    it would be a clip with nothing said in it. Ids keep the phrase's index either way.
+    """
     gaps = silences(speech, duration)
     groups: list[_Group] = []
     for word in words:
@@ -91,12 +95,13 @@ def segment_words(
         else:
             groups[-1].words.append(word)
     segments: list[Segment] = []
-    for group in groups:
+    for index, group in enumerate(groups):
         first, last = group.words[0], group.words[-1]
         start = max(first.start, group.floor_start)
         end = max(min(last.end, group.cap_end), start)
         start, end = _trim(start, end, speech)
-        segments.append(_segment(source_id, len(segments), start, end, group.words))
+        if end > start and any(w.start < end and w.end > start for w in group.words):
+            segments.append(_segment(source_id, index, start, end, group.words))
     return segments
 
 
