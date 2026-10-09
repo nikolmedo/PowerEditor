@@ -16,6 +16,7 @@ import {
   rulerTicks,
   type TimelineClip,
   type TimelineModel,
+  type VoiceSegment,
 } from "./timelineModel";
 import { useTimelineZoom } from "./useTimelineZoom";
 
@@ -36,6 +37,13 @@ interface TimelineProps extends OverlayBlockHandlers {
   onSwapNext: (clip: TimelineClip) => void;
   /** The "N takes" badge: show the clip's takes. */
   onOpenTakes: (clip: TimelineClip) => void;
+  /** The audio track the user picked on the timeline, shown in the Audio tab. */
+  selectedTrackId: "voice" | "music" | null;
+  /** A voice segment: select its clip and the voice track. */
+  onSelectVoice: (segment: VoiceSegment) => void;
+  /** The music bar: select the music track. */
+  onSelectMusic: (trackId: string) => void;
+  onToggleMute: (trackId: string, muted: boolean) => void;
   ref?: Ref<TimelineHandle>;
 }
 
@@ -93,11 +101,52 @@ const Ruler = memo(function Ruler({
   );
 });
 
+/** A speaker, crossed out while muted. */
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor" />
+      {muted ? (
+        <path d="M11 6l4 4m0-4l-4 4" stroke="currentColor" strokeWidth="1.5" />
+      ) : (
+        <path d="M11 5.5a3.5 3.5 0 0 1 0 5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      )}
+    </svg>
+  );
+}
+
+function MuteButton({
+  muted,
+  label,
+  onToggle,
+}: {
+  muted: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="track-mute"
+      aria-pressed={muted}
+      aria-label={label}
+      title={label}
+      onClick={onToggle}
+    >
+      <SpeakerIcon muted={muted} />
+    </button>
+  );
+}
+
 function Track({
   label,
   onSeek,
   total,
   lanes,
+  track,
+  selected,
+  muted,
+  control,
   children,
 }: {
   label: MessageKey;
@@ -105,6 +154,12 @@ function Track({
   total: number;
   /** Stacked rows for overlapping items; a track without it has a single row. */
   lanes?: number;
+  /** An audio track the user can select and mute. */
+  track?: "voice" | "music";
+  selected?: boolean;
+  muted?: boolean | undefined;
+  /** A control next to the label (the mute button). */
+  control?: ReactNode;
   children: ReactNode;
 }) {
   const t = useT();
@@ -112,9 +167,15 @@ function Track({
     <div
       className="track"
       data-lanes={lanes}
+      data-track={track}
+      data-selected={selected || undefined}
+      data-muted={muted || undefined}
       style={lanes ? ({ "--lanes": lanes } as CSSProperties) : undefined}
     >
-      <span className="track-label">{t(label)}</span>
+      <div className="track-label">
+        <span>{t(label)}</span>
+        {control}
+      </div>
       {/* Clicking the lane seeks; every clip is also a button, so this is mouse-only sugar. */}
       <div className="lane" onClick={(event) => seekAt(event, total, onSeek)} role="presentation">
         {children}
@@ -124,7 +185,8 @@ function Track({
 }
 
 /** The edit timeline: kept clips in their source color, removed clips as dimmed marks at their
- * cut (selectable, to restore them), subtitle lines, graphics and music, with a playhead
+ * cut (selectable, to restore them), the clips' own audio on the Voice track (derived from the
+ * kept clips, so it follows takes and trims), subtitle lines, graphics and music, with a playhead
  * synced to the player. It zooms and scrolls horizontally (`useTimelineZoom`). */
 export function Timeline({
   model,
@@ -134,6 +196,10 @@ export function Timeline({
   onSelect,
   onSwapNext,
   onOpenTakes,
+  selectedTrackId,
+  onSelectVoice,
+  onSelectMusic,
+  onToggleMute,
   selectedOverlayId,
   ref,
   ...overlayHandlers
@@ -148,6 +214,8 @@ export function Timeline({
   );
   useImperativeHandle(ref, () => ({ zoom: zoomBy, fit }), [zoomBy, fit]);
   const pxPerSecond = (viewWidth * zoom * model.fps) / Math.max(total, 1);
+  const voiceTrack = model.voiceTrack;
+  const music = model.music[0];
 
   return (
     <div className="timeline" aria-label={t("review.timeline")}>
@@ -251,6 +319,50 @@ export function Timeline({
                 />
               ))}
             </Track>
+            <Track
+              label="track.voice"
+              onSeek={onSeek}
+              total={total}
+              track="voice"
+              selected={selectedTrackId === "voice"}
+              muted={voiceTrack?.muted}
+              control={
+                voiceTrack && (
+                  <MuteButton
+                    muted={voiceTrack.muted}
+                    label={t(voiceTrack.muted ? "track.unmuteVoice" : "track.muteVoice")}
+                    onToggle={() => onToggleMute(voiceTrack.id, !voiceTrack.muted)}
+                  />
+                )
+              }
+            >
+              {model.voice.map((segment) => (
+                <button
+                  key={segment.clipId}
+                  type="button"
+                  className="voice-segment"
+                  style={
+                    {
+                      ...span(
+                        segment.startFrame,
+                        segment.startFrame + segment.durationInFrames,
+                        total,
+                      ),
+                      "--clip": segment.color,
+                    } as CSSProperties
+                  }
+                  data-silent={segment.volume === 0 || undefined}
+                  aria-pressed={selectedTrackId === "voice" && segment.clipId === selectedId}
+                  aria-label={t("review.voiceAt", {
+                    time: timecode(segment.startFrame, model.fps),
+                  })}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectVoice(segment);
+                  }}
+                />
+              ))}
+            </Track>
             <Track label="track.subtitles" onSeek={onSeek} total={total}>
               {model.subtitles.map((line) => (
                 <span
@@ -278,11 +390,37 @@ export function Timeline({
                 />
               ))}
             </Track>
-            <Track label="track.music" onSeek={onSeek} total={total}>
+            <Track
+              label="track.music"
+              onSeek={onSeek}
+              total={total}
+              track="music"
+              selected={selectedTrackId === "music"}
+              muted={music?.muted}
+              control={
+                music && (
+                  <MuteButton
+                    muted={music.muted}
+                    label={t(music.muted ? "track.unmuteMusic" : "track.muteMusic")}
+                    onToggle={() => onToggleMute(music.id, !music.muted)}
+                  />
+                )
+              }
+            >
               {model.music.map((track) => (
-                <span key={track.id} className="bar bar-music" style={span(0, total, total)}>
+                <button
+                  key={track.id}
+                  type="button"
+                  className="bar bar-music"
+                  style={span(0, total, total)}
+                  aria-pressed={selectedTrackId === "music"}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectMusic(track.id);
+                  }}
+                >
                   {track.label}
-                </span>
+                </button>
               ))}
             </Track>
             <div className="playhead-layer" aria-hidden="true">

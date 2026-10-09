@@ -14,6 +14,21 @@ import { useProjectStore } from "../store/project";
 import { Slider } from "../ui/primitives";
 import { fileLabel } from "./timelineModel";
 
+/** A clip's own audio level; the Audio tab shows the same control for the selected clip. */
+export function ClipVolume({ clip, label }: { clip: Clip; label: string }) {
+  const edit = useProjectStore((state) => state.edit);
+  return (
+    <Slider
+      label={label}
+      value={clip.volume}
+      min={0}
+      max={2}
+      format={(volume) => `${Math.round(volume * 100)} %`}
+      onChange={(volume) => edit((p) => setClipVolume(p, clip.id, volume), `volume:${clip.id}`)}
+    />
+  );
+}
+
 function TrimRow({ clip, edge }: { clip: Clip; edge: Edge }) {
   const t = useT();
   const edit = useProjectStore((state) => state.edit);
@@ -116,14 +131,7 @@ export function ClipPanel({ project, clip, onSelect }: ClipPanelProps) {
         format={(speed) => `${speed.toFixed(2)}×`}
         onChange={(speed) => edit((p) => setClipSpeed(p, clip.id, speed), `speed:${clip.id}`)}
       />
-      <Slider
-        label={t("edit.volume")}
-        value={clip.volume}
-        min={0}
-        max={2}
-        format={(volume) => `${Math.round(volume * 100)} %`}
-        onChange={(volume) => edit((p) => setClipVolume(p, clip.id, volume), `volume:${clip.id}`)}
-      />
+      <ClipVolume clip={clip} label={t("edit.volume")} />
       <button type="button" onClick={() => edit((p) => setRemoved(p, clip.id, !clip.removed))}>
         {clip.removed ? t("edit.restore") : t("edit.remove")}
       </button>

@@ -23,6 +23,10 @@ function renderTimeline() {
       onSelect={vi.fn()}
       onSwapNext={vi.fn()}
       onOpenTakes={vi.fn()}
+      selectedTrackId={null}
+      onSelectVoice={vi.fn()}
+      onSelectMusic={vi.fn()}
+      onToggleMute={vi.fn()}
       onSelectOverlay={vi.fn()}
       onOverlaySpan={vi.fn()}
       onNudgeOverlay={vi.fn()}
