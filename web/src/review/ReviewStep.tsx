@@ -19,7 +19,7 @@ import { editorCommand, ownsKeys } from "./editorKeys";
 import { GraphicsPanel } from "./GraphicsPanel";
 import { PreviewVideo, projectMediaBase } from "./PreviewVideo";
 import { SubtitlesPanel } from "./SubtitlesPanel";
-import { Timeline } from "./Timeline";
+import { Timeline, type TimelineHandle } from "./Timeline";
 import { buildTimeline, neighbourClip, type TimelineClip } from "./timelineModel";
 import { TransitionsPanel } from "./TransitionsPanel";
 import { useAutosave, type AutosaveState } from "./useAutosave";
@@ -92,6 +92,7 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
   const preview = settings.data?.settings ?? PREVIEW_DEFAULTS;
   const { edit, undo, redo } = useProjectStore();
   const playerRef = useRef<PlayerRef>(null);
+  const timelineRef = useRef<TimelineHandle>(null);
   const [frame, setFrame] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
@@ -155,6 +156,8 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         if (target) select(target);
         return;
       }
+      if (command.type === "zoom") return timelineRef.current?.zoom(command.direction);
+      if (command.type === "zoomFit") return timelineRef.current?.fit();
       if (!selectedId) return;
       if (command.type === "toggleRemoved") {
         const removed = project.clips.find((clip) => clip.id === selectedId)?.removed ?? false;
@@ -218,6 +221,7 @@ function Editor({ projectId, project }: { projectId: string; project: Project })
         )}
       </aside>
       <Timeline
+        ref={timelineRef}
         model={model}
         frame={frame}
         selectedId={selectedId}

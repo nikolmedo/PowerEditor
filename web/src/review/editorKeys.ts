@@ -5,7 +5,9 @@ export type EditorCommand =
   | { type: "redo" }
   | { type: "move"; step: -1 | 1 }
   | { type: "toggleRemoved" }
-  | { type: "trim"; edge: Edge; deltaSec: number };
+  | { type: "trim"; edge: Edge; deltaSec: number }
+  | { type: "zoom"; direction: -1 | 1 }
+  | { type: "zoomFit" };
 
 type KeyInput = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">;
 
@@ -17,9 +19,18 @@ const TRIM_KEYS: Record<string, { edge: Edge; deltaSec: number }> = {
   "}": { edge: "end", deltaSec: TRIM_STEP_SECONDS },
 };
 
+/** `=` / `+` zoom the timeline in, `-` out and `\` fits the whole video, as in Premiere. */
+const ZOOM_KEYS: Record<string, EditorCommand> = {
+  "=": { type: "zoom", direction: 1 },
+  "+": { type: "zoom", direction: 1 },
+  "-": { type: "zoom", direction: -1 },
+  "\\": { type: "zoomFit" },
+};
+
 /** The editor command for a key press, if it is one of the review step's shortcuts. */
 export function editorCommand(event: KeyInput): EditorCommand | null {
   const key = event.key.toLowerCase();
+  // Ctrl / Cmd with `=` or `-` stays the browser's page zoom.
   if (event.ctrlKey || event.metaKey) {
     if (key === "z") return event.shiftKey ? { type: "redo" } : { type: "undo" };
     if (key === "y") return { type: "redo" };
@@ -30,7 +41,8 @@ export function editorCommand(event: KeyInput): EditorCommand | null {
   if (key === "arrowright") return { type: "move", step: 1 };
   if (key === "delete" || key === "backspace") return { type: "toggleRemoved" };
   const trim = TRIM_KEYS[event.key];
-  return trim ? { type: "trim", ...trim } : null;
+  if (trim) return { type: "trim", ...trim };
+  return ZOOM_KEYS[event.key] ?? null;
 }
 
 /** Keys typed into a form control, or handled by the player's own controls, are not ours. */

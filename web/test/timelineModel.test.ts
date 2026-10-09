@@ -2,11 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   assignLanes,
   buildTimeline,
+  clampZoom,
   clipAt,
   fileLabel,
+  followScrollLeft,
   frameAtRatio,
+  maxZoom,
   neighbourClip,
+  rulerInterval,
+  rulerTicks,
   visibleSpan,
+  wheelZoomRatio,
+  zoomedScrollLeft,
+  zoomStep,
 } from "../src/review/timelineModel";
 import { PROJECT } from "./fixtures/reviewProject";
 
@@ -141,5 +149,81 @@ describe("graphics lanes", () => {
       endFrame: 237,
       continues: true,
     });
+  });
+});
+
+describe("timeline zoom", () => {
+  it("keeps the zoom between the whole video and the cap", () => {
+    expect(clampZoom(0.5, 8)).toBe(1);
+    expect(clampZoom(3, 8)).toBe(3);
+    expect(clampZoom(20, 8)).toBe(8);
+  });
+
+  it("zooms in and out by a fixed factor, within the limits", () => {
+    expect(zoomStep(1, 1, 64)).toBe(1.5);
+    expect(zoomStep(3, -1, 64)).toBe(2);
+    expect(zoomStep(1, -1, 64)).toBe(1);
+    expect(zoomStep(60, 1, 64)).toBe(64);
+  });
+
+  it("caps the zoom at 200 px per second, never past 64x", () => {
+    // 10 s on a 1000 px lane: 1x is 100 px/s, so 2x reaches 200 px/s.
+    expect(maxZoom(10, 1000)).toBe(2);
+    expect(maxZoom(2, 1000)).toBe(1);
+    expect(maxZoom(3600, 1000)).toBe(64);
+    // An unmeasured lane allows the full range.
+    expect(maxZoom(10, 0)).toBe(64);
+  });
+
+  it("keeps the point under the anchor fixed while zooming", () => {
+    // The anchor sits 100 px into the lane with the view at its start: doubling moves it to 200.
+    expect(zoomedScrollLeft(0, 100, 2)).toBe(100);
+    // Halving about a point 400 px in, with the view scrolled 300 px.
+    expect(zoomedScrollLeft(300, 400, 0.5)).toBe(100);
+  });
+
+  it("turns a wheel or pinch delta into a zoom ratio", () => {
+    expect(wheelZoomRatio(-100, 0)).toBeCloseTo(1.5);
+    expect(wheelZoomRatio(100, 0)).toBeCloseTo(1 / 1.5);
+    // Line-based deltas (Firefox) count as 16 px each.
+    expect(wheelZoomRatio(-6.25, 1)).toBeCloseTo(1.5);
+    expect(wheelZoomRatio(0, 0)).toBe(1);
+  });
+
+  it("pages the view to the playhead only when it leaves the window", () => {
+    expect(followScrollLeft(0, 500, 250)).toBeNull();
+    expect(followScrollLeft(0, 500, 620)).toBe(620);
+    expect(followScrollLeft(800, 500, 100)).toBe(100);
+  });
+});
+
+describe("ruler", () => {
+  it("picks the shortest round interval that leaves room for a label", () => {
+    expect(rulerInterval(200)).toBe(0.5);
+    expect(rulerInterval(60)).toBe(2);
+    expect(rulerInterval(10)).toBe(10);
+    expect(rulerInterval(1)).toBe(120);
+    expect(rulerInterval(0.01)).toBe(600);
+    expect(rulerInterval(0)).toBe(600);
+  });
+
+  it("places labelled ticks on frames up to the end of the timeline", () => {
+    expect(rulerTicks(105, 30, 1)).toEqual([
+      { frame: 0, label: "0:00" },
+      { frame: 30, label: "0:01" },
+      { frame: 60, label: "0:02" },
+      { frame: 90, label: "0:03" },
+    ]);
+    expect(rulerTicks(45, 30, 0.5).map((tick) => tick.label)).toEqual([
+      "0:00.0",
+      "0:00.5",
+      "0:01.0",
+    ]);
+    expect(rulerTicks(30 * 125, 30, 60).map((tick) => tick.label)).toEqual([
+      "0:00",
+      "1:00",
+      "2:00",
+    ]);
+    expect(rulerTicks(0, 30, 1)).toEqual([{ frame: 0, label: "0:00" }]);
   });
 });
